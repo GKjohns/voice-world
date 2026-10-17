@@ -501,7 +501,7 @@ export class People {
         const place = block.place === 'home' ? this.homeOf(l, ents) : resolvePlace(block.place, ents, l.home, l.id)
         if (place) {
           const fp = (this.state!.kinds[place.kind] ?? KIT[place.kind])?.footprint ?? 1
-          const sp = standPoint(place, fp, [l.x, l.z], hash(l.id, 'sp'))
+          const sp = this.freeStandPoint(place, fp, l)
           l.goal = { ...this.safeSpot(sp.x, sp.z, l), yaw: sp.yaw, activity: block.activity, doing: block.doing, inside: sleeping && /house|storefront|tent|cabin|home/.test(place.kind), key }
           l.arrived = false
           l.doing = `on the way: ${block.doing}`
@@ -524,6 +524,17 @@ export class People {
         l.linger = 6 + hash(l.id, String(Math.floor(now / 1000))) * 10
       }
     }
+  }
+
+  /** A stand point at a place that nobody else is already heading for (two people never share one bench seat). */
+  private freeStandPoint(place: PlaceEntity, fp: number, l: Live) {
+    let sp = standPoint(place, fp, [l.x, l.z], hash(l.id, 'sp'))
+    for (let k = 1; k <= 5; k++) {
+      const taken = [...this.live.values()].some(o => o.id !== l.id && o.goal && Math.hypot(o.goal.x - sp.x, o.goal.z - sp.z) < 0.75)
+      if (!taken) break
+      sp = standPoint(place, fp, [l.x, l.z], (hash(l.id, 'sp') + k * 0.37) % 1)
+    }
+    return sp
   }
 
   /** Keep a couple of metres off your shoulder (behind and to one side, so they're in view when you turn); hurry to catch up. */

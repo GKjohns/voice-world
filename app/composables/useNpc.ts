@@ -17,6 +17,7 @@
  * Minds persist in localStorage, keyed by the person's id and name (ids can be reused after an undo).
  */
 import { shallowRef, watch } from 'vue'
+import type { WatchStopHandle } from 'vue'
 import { addEvent, addFact, addTurn, emptyMemory, fallbackPersona, naiveSummary } from '#shared/npc/persona'
 import type { CastEntry, Memory, Persona, PersonSeed, Turn } from '#shared/npc/persona'
 import { cleanSpoken, parseReply, speakableCut, spokenSoFar } from '#shared/npc/reply'
@@ -108,6 +109,7 @@ let convoLastAt = 0
 let lastSpoken: { id: string, text: string, at: number } | null = null
 let abortTalk: AbortController | null = null
 let checkT = 0
+let stopWatch: WatchStopHandle | null = null
 
 function sigOf(e: Entity): string {
   return `${e.id}|${e.props.name ?? ''}`
@@ -260,8 +262,31 @@ function distToPlayer(id: string): number {
 
 // ---------- what they witness ----------
 
+/**
+ * People who just left the world (undo, remove, a teleport to somewhere new): whatever they were saying stops,
+ * their bubble goes, and a conversation with them ends. Their mind stays (keyed by id and name) for a redo.
+ */
+function forget(goneIds: Set<string>) {
+  if (!goneIds.size) return
+  const gone = (id: string | null | undefined) => !!id && goneIds.has(id)
+  if (gone(conversation.value) || gone(busy.value) || gone(bubble.value?.id) || gone(speakingId.value)) {
+    abortTalk?.abort()
+    abortTalk = null
+    voiceQ?.stop()
+    voiceQ = null
+    if (gone(busy.value)) busy.value = null
+    if (gone(speakingId.value)) speakingId.value = null
+    if (gone(bubble.value?.id)) bubble.value = null
+    if (gone(conversation.value)) endConversation('they are gone')
+  }
+  if (gone(banterSpeaking.value) || gone(sideBubble.value?.id) || banterBusy) stopBanter()
+  if (lastSpoken && gone(lastSpoken.id)) lastSpoken = null
+}
+
 function onWorld(next: WorldState, prev: WorldState | undefined) {
   if (!prev) return
+  const nextPeople = new Set(next.entities.filter(e => e.kind === 'person').map(e => e.id))
+  forget(new Set(prev.entities.filter(e => e.kind === 'person' && !nextPeople.has(e.id)).map(e => e.id)))
   const before = new Set(prev.entities.map(e => e.id))
   const spawned = next.entities.filter(e => !before.has(e.id))
   const newPeople = spawned.filter(e => e.kind === 'person')
@@ -523,6 +548,17 @@ function onFollowEnd(id: string, why: 'quiet' | 'far') {
 
 interface Segment { text: string, audio: Promise<HTMLAudioElement | null> }
 
+/** Let a line's audio go: detach the element from its blob first (revoking a loaded src logs a load error). */
+function release(a: HTMLAudioElement | null) {
+  if (!a) return
+  const src = a.src
+  a.pause()
+  a.onerror = null
+  a.removeAttribute('src')
+  a.load()
+  URL.revokeObjectURL(src)
+}
+
 class VoiceQueue {
   private queue: Segment[] = []
   private playing = false
@@ -576,7 +612,10 @@ class VoiceQueue {
     }
     this.playing = true
     const audio = await seg.audio
-    if (this.stopped) return
+    if (this.stopped) {
+      release(audio)
+      return
+    }
     if (audio) {
       this.current = audio
       audio.volume = this.volume()
@@ -617,8 +656,10 @@ class VoiceQueue {
   stop() {
     if (this.stopped) return
     this.stopped = true
+    // Lines fetched but never played: let their audio go.
+    for (const seg of this.queue) void seg.audio.then(release)
     this.queue = []
-    this.current?.pause()
+    release(this.current)
     if (typeof speechSynthesis !== 'undefined') speechSynthesis.cancel()
     this.playing = false
     this.onIdle?.()
@@ -973,16 +1014,26 @@ function attach(r: WorldRenderer) {
     tick(dt)
   }
   r.onThunder = d => people?.thunder(d)
-  watch(world.state, (next, prev) => onWorld(next, prev))
+  stopWatch?.()
+  stopWatch = watch(world.state, (next, prev) => onWorld(next, prev))
   // Everyone standing here when the page opens gets their mind back (or a fresh one).
   for (const e of world.state.value.entities) if (e.kind === 'person') mindOf(e)
   expose()
 }
 
 function detach() {
+  stopWatch?.()
+  stopWatch = null
   stopBanter()
   voiceQ?.stop()
+  voiceQ = null
   abortTalk?.abort()
+  abortTalk = null
+  busy.value = null
+  speakingId.value = null
+  bubble.value = null
+  conversation.value = null
+  clearTimeout(bubbleTimer)
   if (renderer) {
     renderer.onFrame = undefined
     renderer.onThunder = undefined

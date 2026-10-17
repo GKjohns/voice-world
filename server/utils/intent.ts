@@ -360,6 +360,10 @@ Context: last batch: person ×14 (g4, "a crowd") · people: Hugo (villager) 6 m 
 "make them all dance"
 {"ops":[{"op":"modify","target":{"tag":"person"},"set":{"act":"dance"}},{"op":"say","text":"Music! Let them dance."}]}
 
+Context: place: pool hall · world: pool_table ×3 [table] · bar_counter ×1 · floor ×1
+"two guys playing pool at the far table"
+{"ops":[{"op":"spawn","kind":"person","count":2,"arrange":"cluster","at":{"anchor":"target","of":{"kind":"pool_table","sort":"distance"},"side":"front"},"radius":1.5,"set":{"role":"villager","persona":"here to play pool"}},{"op":"say","text":"Two players, cues in hand."}]}
+
 Context: people: Mara (fisherman) 5 m ahead · Tomas (villager) 8 m left
 "make Tomas follow me"
 {"ops":[{"op":"modify","target":{"kind":"tomas"},"set":{"act":"follow"}},{"op":"say","text":"Tomas walks with you."}]}

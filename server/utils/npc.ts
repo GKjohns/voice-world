@@ -47,7 +47,7 @@ name: ${seed.name ?? '(choose one)'} · role: ${seed.role ?? 'villager'}${job}${
 ${others.length ? `Other people living here (make this one clearly different from them, with their own job and story): ${others.slice(0, 14).join('; ')}\n` : ''}
 ## Write this JSON (every field; each text field under 25 words; concrete, a little surprising; no clichés like "mysterious past")
 {"name": "${seed.name ?? '…'}", "age": 0, "occupation": "1 to 3 words", "voice": "f" or "m",
- "personality": "one line", "speech": "how they talk: rhythm, word choice, one habit used rarely (never a fixed way of addressing people, never 'stranger')",
+ "personality": "one line", "speech": "how they talk: rhythm, word choice, one habit used rarely (never a fixed way of addressing people, never 'stranger', never answering questions with questions or repeating what was said back)",
  "backstory": "one or two sentences tied to THIS place: only things listed in the world above exist (never invent a lake, sea, dock or river that isn't listed)",
  "secret": "a secret or a want they'd only tell a friend",
  "routine": [ {"when": "dawn|morning|midday|afternoon|evening|night", "doing": "a short phrase", "place": "<a kind or tag from the world above, or a person's name, or home, or wander>", "activity": "stand|sit|work|fish|sweep|chat|sleep|patrol|wander|read|cast|tend|play|serve"} ]}

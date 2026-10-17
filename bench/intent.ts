@@ -85,7 +85,8 @@ const SCENES = {
     ['a few houses', [{ op: 'spawn', kind: 'house', count: 3, arrange: 'cluster', at: { anchor: 'player', dir: 'left', dist: 16 } }]],
     ['some villagers', [{ op: 'spawn', kind: 'person', count: 4, arrange: 'cluster', at: { anchor: 'gaze' }, radius: 4, set: { role: 'villager' } }]],
     ['a fisherman', [{ op: 'spawn', kind: 'person', at: { anchor: 'player', dir: 'right', dist: 7 }, set: { role: 'fisherman', name: 'Mara' } }]]
-  )
+  ),
+  poolHall: () => build(['a pool hall', [{ op: 'spawn', kind: 'floor', at: { anchor: 'player', dist: 0 }, set: { length: 30, width: 30 } }, { op: 'spawn', kind: 'pool_table', count: 3, arrange: 'line', at: { anchor: 'player', dist: 10 } }, { op: 'atmosphere', time: 'interior' }]])
 } satisfies Record<string, () => WorldState>
 
 /** Look straight at an entity (the gaze ray hit it at speech start). */
@@ -385,6 +386,10 @@ const CASES: Case[] = [
     const dog = added(o).find(e => /dog|puppy/.test(e.kind))
     const mara = o.after.entities.find(e => e.props.name === 'Mara')!
     return expect(!!dog && distXZ(dog.pos, mara.pos) < 5, `added ${kinds(added(o))}${dog ? ` dist ${distXZ(dog.pos, mara.pos).toFixed(1)}` : ''}`)
+  } },
+  { name: 'people: two guys playing pool', text: 'two guys playing pool at the far table', scene: 'poolHall', check: (o) => {
+    const p = added(o).filter(e => e.kind === 'person')
+    return expect(p.length === 2, `${p.length} people, ops ${o.ops.map(x => x.op).join(',')}`)
   } },
   { name: 'people: Mara follow me', text: 'make Mara follow me', scene: 'town', check: (o) => {
     const mara = o.after.entities.find(e => e.props.name === 'Mara')!

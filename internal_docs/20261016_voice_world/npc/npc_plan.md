@@ -101,3 +101,34 @@ One pure function serves typed text, the browser mic and realtime voice: `shared
 - **Undo:** after an undo, a reused id with a different name gets a fresh mind, by design. Minds of removed people stay in storage (the 60 most recently spoken to).
 
 Screenshots: `build/` (webp): fisherman on the dock, a greeting bubble, the whole town waving, dancing, "give her a dog", and a voice conversation. `build/npc_timings.json` holds the last typed run's timings and log.
+
+## Final cleanup (Oct 17, 2026)
+
+Bugs only; no new behaviour.
+
+**Fixed:**
+- **Removing a person mid-reply** (undo, remove, or a teleport that replaces the world): their reply kept streaming and their voice kept playing, the bubble hung for up to 14 s, and `busy` stayed set to the removed id, which blocked greetings and idle banter until someone else was spoken to. `useNpc` `forget()` now runs on every world change. It aborts the talk, stops the voice, clears the bubble, `busy` and `speakingId`, and ends the conversation. Banter involving the removed person is stopped, and the echo guard forgets their last line. Their mind stays in storage, so a redo brings them back.
+- **Duplicate world watcher:** `attach()` registered a `watch(world.state)` that `detach()` never stopped. On a remount (HMR, or a route back to the scene), every wish was witnessed twice, which doubled the wish-shout banter calls. The watcher is now stopped on detach, and detach also clears the conversation and bubble state.
+- **Blob-URL leak in the voice queue:** lines that were fetched but never played after a barge-in (and the line playing when it was cut off) never had their object URLs revoked. A `release()` helper now detaches the element first and then revokes, which avoids an `ERR_FILE_NOT_FOUND` console error.
+- **Two people on one bench spot:** a routine stand point that another person is already heading for (within 0.75 m) is re-jittered, up to 5 tries (`People.freeStandPoint`).
+- **"two guys playing pool at the far table" was answered with only a say:** I added one worked example to the intent digest, plus the bench case `people: two guys playing pool` with a `poolHall` scene.
+- **Echo-question openers:** the persona writer's `speech` field now forbids the "answers questions with questions, repeats what was said" habit at the source.
+
+**Checks:**
+- `npm test`: 132/132. Typecheck and lint are clean.
+- Intent bench, Haiku: 76/76 ($0.03).
+- Headless smoke on the real GPU covered:
+  1. spawn three people through the genie
+  2. a greeting, then a typed talk
+  3. undo the speaker while their reply is still pending: the bubble, the conversation and `busy` all clear, with no late reply
+  4. talk to another person
+  5. "take me to a quiet beach": everything clears, and there were 0 console errors
+
+**Still known (not fixed, out of scope):**
+- The voice split-wish still uses a fixed 3.5 s delay.
+- There's no pathfinding across water.
+- Placement next to a person uses their spawn spot.
+- Mood overwrite and the simple faces are unchanged.
+- Names recur across worlds.
+- The `casts` map and in-session `minds` grow with every person spawned in a session. They're small, and storage keeps only 60.
+- `VoiceQueue.stop()` calls `speechSynthesis.cancel()`, which also cuts the other channel's browser-fallback voice. That only matters when gateway TTS is down.
