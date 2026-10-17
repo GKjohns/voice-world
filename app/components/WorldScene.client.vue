@@ -39,6 +39,7 @@ onMounted(async () => {
   if (!hostEl.value) return
   renderer = new WorldRenderer(hostEl.value)
   world.attach(renderer)
+  useNpc().attach(renderer)
   world.restore()
   restoreView()
   // A handle for the Playwright shoot script (and for poking at the world from devtools).
@@ -56,6 +57,8 @@ onMounted(async () => {
     state: () => world.state.value,
     // Natural language through the real model, with the gaze snapshot taken now (as the text bar does).
     ask: (text: string) => intent.build(text, intent.capture(), 'text'),
+    // Through the router (a person you face answers; world commands go to the genie), as the text field does.
+    say: (text: string) => useNpc().say(text, intent.capture(), 'text'),
     phase: () => intent.phase.value,
     lastEntry: () => world.history.value[world.history.value.length - 1],
     // Teleport mode: the Director's current/last run (status, timings, op count).
@@ -70,6 +73,7 @@ onBeforeUnmount(() => {
   saveView()
   window.removeEventListener('keydown', onKey)
   window.removeEventListener('pagehide', saveView)
+  useNpc().detach()
   world.detach()
   renderer?.dispose()
   renderer = null

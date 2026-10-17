@@ -14,6 +14,7 @@ import type { Op } from '../shared/world/ops.ts'
 import type { Entity, OpContext, WorldState } from '../shared/world/types.ts'
 import { interpret } from '../server/utils/intent.ts'
 import { KIT } from '../shared/world/kinds.ts'
+import { rolePreset } from '../shared/npc/people.ts'
 
 // ---------- scenes ----------
 
@@ -77,6 +78,13 @@ const SCENES = {
     ['some trees', [{ op: 'spawn', kind: 'pine', count: 6, arrange: 'cluster', at: { anchor: 'player', dir: 'right', dist: 18 } }]],
     ['a castle', [{ op: 'define', kind: 'castle', tags: ['castle', 'building', 'structure'], parts: BLOCKY }, { op: 'spawn', kind: 'castle', at: { anchor: 'gaze' } }]],
     ['make it night', [{ op: 'atmosphere', time: 'night' }]]
+  ),
+  // People (NPC): a lake with a dock, and a little town with people in it.
+  lake: () => build(['a lake with a dock', [{ op: 'spawn', kind: 'water', at: { anchor: 'player', dist: 30 }, set: { length: 40, width: 40 } }, { op: 'spawn', kind: 'dock', at: { anchor: 'player', dist: 6 }, facing: 'player' }]]),
+  town: () => build(
+    ['a few houses', [{ op: 'spawn', kind: 'house', count: 3, arrange: 'cluster', at: { anchor: 'player', dir: 'left', dist: 16 } }]],
+    ['some villagers', [{ op: 'spawn', kind: 'person', count: 4, arrange: 'cluster', at: { anchor: 'gaze' }, radius: 4, set: { role: 'villager' } }]],
+    ['a fisherman', [{ op: 'spawn', kind: 'person', at: { anchor: 'player', dir: 'right', dist: 7 }, set: { role: 'fisherman', name: 'Mara' } }]]
   )
 } satisfies Record<string, () => WorldState>
 
@@ -348,6 +356,39 @@ const CASES: Case[] = [
     const t = added(o).filter(isTree)
     const behind = t.filter(e => e.pos[2] > 5).length
     return expect(t.length >= 30 && behind >= 8, `${t.length} trees, ${behind} behind`)
+  } },
+
+  // people (NPC)
+  { name: 'people: a fisherman on the dock', text: 'put a fisherman on the dock', scene: 'lake', check: (o) => {
+    const p = added(o).filter(e => e.kind === 'person')
+    const dock = o.after.entities.find(e => e.kind === 'dock')!
+    return expect(p.length === 1 && rolePreset(p[0]!.props.role) === 'fisherman' && distXZ(p[0]!.pos, dock.pos) < 12, `people ${p.length} roles ${p.map(e => e.props.role).join(',')} dist ${p.map(e => distXZ(e.pos, dock.pos).toFixed(1)).join(' ')}`)
+  } },
+  { name: 'people: a few villagers', text: 'a few villagers over there', scene: 'empty', check: (o) => {
+    const p = added(o).filter(e => e.kind === 'person')
+    return expect(p.length >= 2 && p.length <= 5 && !has(o, 'define'), `${p.length} people, define ${has(o, 'define')}`)
+  } },
+  { name: 'people: a crowd', text: 'a crowd of people', scene: 'empty', check: o => expect(added(o).filter(e => e.kind === 'person').length >= 8, `${added(o).filter(e => e.kind === 'person').length} people`) },
+  { name: 'people: a fisherman who knows the lake', text: 'make a fisherman who knows everything about this lake', scene: 'lake', check: (o) => {
+    const p = added(o).find(e => e.kind === 'person')
+    return expect(!!p && rolePreset(p.props.role) === 'fisherman' && /lake/i.test(p.props.persona ?? ''), `person ${p ? `${p.props.role} / ${p.props.persona}` : 'none'}`)
+  } },
+  { name: 'people: everyone wave at me', text: 'make everyone in town wave at me', scene: 'town', check: (o) => {
+    const p = o.after.entities.filter(e => e.kind === 'person')
+    return expect(p.length === 5 && p.every(e => e.props.act === 'wave'), `acts ${p.map(e => e.props.act ?? '-').join(',')}`)
+  } },
+  { name: 'people: make them all dance', text: 'make them all dance', scene: 'town', check: (o) => {
+    const p = o.after.entities.filter(e => e.kind === 'person')
+    return expect(p.filter(e => e.props.act === 'dance').length >= 4, `acts ${p.map(e => e.props.act ?? '-').join(',')}`)
+  } },
+  { name: 'people: give her a dog', text: 'give her a dog', scene: 'town', ctx: s => lookAt(s, e => e.props.name === 'Mara'), check: (o) => {
+    const dog = added(o).find(e => /dog|puppy/.test(e.kind))
+    const mara = o.after.entities.find(e => e.props.name === 'Mara')!
+    return expect(!!dog && distXZ(dog.pos, mara.pos) < 5, `added ${kinds(added(o))}${dog ? ` dist ${distXZ(dog.pos, mara.pos).toFixed(1)}` : ''}`)
+  } },
+  { name: 'people: Mara follow me', text: 'make Mara follow me', scene: 'town', check: (o) => {
+    const mara = o.after.entities.find(e => e.props.name === 'Mara')!
+    return expect(mara.props.act === 'follow' && o.after.entities.filter(e => e.props.act === 'follow').length === 1, `acts ${o.after.entities.filter(e => e.kind === 'person').map(e => `${e.props.name}:${e.props.act ?? '-'}`).join(',')}`)
   } }
 ]
 

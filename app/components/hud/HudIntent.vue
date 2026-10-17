@@ -86,7 +86,8 @@ async function send() {
   if (!request) return
   const ctx = intent.takeSnapshot()
   text.value = ''
-  await intent.build(request, ctx, 'text')
+  // A person you're facing gets the sentence; world commands still go to the genie (shared/npc/routing.ts).
+  await useNpc().say(request, ctx, 'text')
 }
 
 function onKey(e: KeyboardEvent) {

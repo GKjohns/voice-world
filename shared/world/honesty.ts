@@ -22,11 +22,13 @@ const moving = (ops: Op[], state: WorldState, kinds?: RegExp) => ops.some(o => (
 const airborne = (ops: Op[], state: WorldState) => ops.some(o => (o.op === 'spawn' || o.op === 'modify') && o.set?.altitude !== undefined) && state.entities.some(e => e.pos[1] > 1)
 const weather = (ops: Op[], state: WorldState, w: RegExp) => ops.some(o => o.op === 'atmosphere' && ((o.weather && w.test(o.weather) && !!state.atmosphere.weather) || (o.event && w.test(o.event))))
 
+const acting = (ops: Op[], act: RegExp) => ops.some(o => (o.op === 'spawn' || o.op === 'modify') && !!o.set?.act && act.test(o.set.act))
+
 const CLAIMS: Claim[] = [
   { words: /\b(fl(y|ies|ying|ew|ight)|soar\w*|wing\w*|circl\w*|orbit\w*|wheel\w*|swoop\w*)\b/i, holds: (o, s) => moving(o, s, /orbit|fly|drift|hover/) },
   { words: /\b(drift\w*|float\w*|bob\w*|hover\w*|ascend\w*|aloft|sail\w*)\b/i, holds: (o, s) => moving(o, s) || airborne(o, s) },
   { words: /\b(gallop\w*|run|runs|running|race[sd]?|racing|stamped\w*|wander\w*|roam\w*|prowl\w*|trot\w*)\b/i, holds: (o, s) => moving(o, s, /gallop|wander|orbit|fly/) },
-  { words: /\b(spin\w*|twirl\w*|whirl\w*|sway\w*|danc\w*)\b/i, holds: (o, s) => moving(o, s) },
+  { words: /\b(spin\w*|twirl\w*|whirl\w*|sway\w*|danc\w*)\b/i, holds: (o, s) => moving(o, s) || acting(o, /dance/) },
   { words: /\b(rain\w*|drizzl\w*|downpour)\b/i, holds: (o, s) => weather(o, s, /rain|storm/) },
   { words: /\b(snow\w*|flake\w*|blizzard)\b/i, holds: (o, s) => weather(o, s, /snow/) },
   { words: /\b(thunder\w*|lightning|storm\w*|tempest)\b/i, holds: (o, s) => weather(o, s, /storm|lightning/) },

@@ -25,6 +25,14 @@ export const AROUNDS = ['self', 'player', 'gaze'] as const
 /** Persistent weather (atmosphere.weather) and one-shot sky events (atmosphere.event). */
 export const WEATHERS = ['clear', 'rain', 'snow', 'storm', 'fog', 'aurora'] as const
 export const SKY_EVENTS = ['lightning', 'meteors', 'eclipse', 'sunrise'] as const
+/** People (NPC): the role presets the canonical person rig dresses for. */
+export const ROLES = ['villager', 'fisherman', 'shopkeeper', 'child', 'elder', 'guard', 'wizard', 'farmer'] as const
+/**
+ * What a person does when the genie tells them to ("make everyone wave at me", "make them all dance").
+ * wave, bow and cheer are one-shots (they play once, then the person goes back to their day); dance, sit
+ * and follow last until changed; none stops whatever they were told to do.
+ */
+export const ACTS = ['wave', 'bow', 'cheer', 'dance', 'sit', 'follow', 'none'] as const
 
 export type Material = typeof MATERIALS[number]
 export type Shape = typeof SHAPES[number]
@@ -38,6 +46,8 @@ export type Motion = typeof MOTIONS[number]
 export type Around = typeof AROUNDS[number]
 export type Weather = typeof WEATHERS[number]
 export type SkyEvent = typeof SKY_EVENTS[number]
+export type Role = typeof ROLES[number]
+export type Act = typeof ACTS[number]
 
 // Hard caps keep a confused model from planting ten thousand trees or a 500-part clock.
 export const MAX_COUNT = 80
@@ -65,7 +75,15 @@ export const PropsSchema = z.object({
   speed: z.number().positive().max(5).optional(), // motion speed multiplier (1 = natural)
   around: z.enum(AROUNDS).optional(), // what orbit / gallop / fly circles
   range: z.number().positive().max(150).optional(), // motion radius in metres (orbit, gallop loop, flight, wander)
-  light: z.number().min(0).max(10).optional() // casts real light (0 = off); glow is how bright it looks
+  light: z.number().min(0).max(10).optional(), // casts real light (0 = off); glow is how bright it looks
+  // People (NPC): a role preset, a name, a persona hint the mind is grounded in, and something to do now.
+  // Free text (a "baker" is fine): the rig dresses the nearest preset (shared/npc/people.ts rolePreset).
+  role: z.string().trim().min(1).max(32).transform(r => r.toLowerCase()).optional(),
+  name: z.string().trim().min(1).max(32).optional(),
+  persona: z.string().trim().min(1).max(240).optional(),
+  act: z.string().trim().transform(toAct).optional(),
+  /** Set by the kernel on every act (the sentence's seed), so "wave again" replays even when act is unchanged. */
+  actId: z.number().optional()
 })
 export type Props = z.infer<typeof PropsSchema>
 
@@ -384,6 +402,19 @@ function leadingJsonArray(text: string): unknown[] | null {
     }
   }
   return null
+}
+
+const ACT_ALIASES: Record<string, Act> = {
+  waving: 'wave', greet: 'wave', hello: 'wave', bowing: 'bow', curtsy: 'bow', clap: 'cheer', clapping: 'cheer', cheering: 'cheer', celebrate: 'cheer',
+  dancing: 'dance', party: 'dance', sitting: 'sit', sit_down: 'sit', following: 'follow', follow_me: 'follow', come: 'follow',
+  stop: 'none', idle: 'none', stand: 'none', normal: 'none'
+}
+
+/** An act word → one of ACTS ("dancing" → dance, "stop" → none). Unknown words become 'none' rather than failing the op. */
+export function toAct(word: string): Act {
+  const w = word.toLowerCase().replace(/[\s-]+/g, '_')
+  if ((ACTS as readonly string[]).includes(w)) return w as Act
+  return ACT_ALIASES[w] ?? 'none'
 }
 
 /** 'Grandfather Clock' → 'grandfather_clock'. Kinds are ids, so they get one spelling. */

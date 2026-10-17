@@ -22,6 +22,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
+  <HudNpc />
   <HudPresence />
   <template v-if="hud.devMode.value">
     <HudStatus />

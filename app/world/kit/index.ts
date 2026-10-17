@@ -8,7 +8,8 @@ import { bar_counter, bookshelf, ceiling, cue_rack, fireplace, floor, hanging_la
 import { dust_motes, embers, fireflies } from './life'
 import { bush, oak, pine, rock } from './nature'
 import { boat, campfire, dock, reeds, shore, tent, water } from './outdoor'
-import { butterflies, bird, deer, dragon, fish_school, horse, whale } from './creatures'
+import { butterflies, bird, deer, dog, dragon, fish_school, horse, whale } from './creatures'
+import { person } from './people'
 import { lantern } from './sky'
 import { bench, fence, lamp, road } from './street'
 import { canyon, cliff, giant_moon, hill, island, mountain, mountain_range, planet, river, volcano, waterfall } from './terrain'
@@ -20,7 +21,8 @@ export const KIT_BUILDERS: Record<string, Build> = {
   storefront, car,
   fireflies, dust_motes, embers,
   lantern, bird,
-  dragon, whale, horse, deer, fish_school, butterflies,
+  dragon, whale, horse, deer, dog, fish_school, butterflies,
+  person,
   mountain, mountain_range, hill, cliff, volcano, waterfall, river, island, canyon, giant_moon, planet
 }
 

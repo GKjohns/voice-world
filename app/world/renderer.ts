@@ -106,6 +106,12 @@ export class WorldRenderer {
   yaw = 0
   pitch = -0.12
   onGaze?: (g: GazeInfo) => void
+  /** Called every frame after motion (the People runtime walks and poses the NPCs here). */
+  onFrame?: (dt: number, now: number) => void
+  /** A thunderclap (distance m): people flinch. */
+  onThunder?: (dist: number) => void
+  /** This frame's gaze (what the crosshair is on), so per-frame readers don't each cast their own ray. */
+  gazeNow: (GazeSnapshot & { info: GazeInfo }) | null = null
 
   private host: HTMLElement
   private items = new Map<string, Item>()
@@ -153,6 +159,7 @@ export class WorldRenderer {
   private wallRay = new THREE.Raycaster()
   private downRay = new THREE.Raycaster()
   private upN = new THREE.Vector3()
+  private tmpV = new THREE.Vector3()
   /** The terrain under your feet, smoothed (the camera rides on it). */
   private groundY = 0
   private lastInput = 0
@@ -267,7 +274,10 @@ export class WorldRenderer {
     this.scene.add(this.reticle, this.highlight, this.ghost)
     this.scene.add(this.vortex.obj, this.gathering.obj, this.forming.obj)
     this.scene.add(this.weather.obj, this.lightPool.obj)
-    this.weather.onThunder = (d, ms) => this.sound.sfxThunder(d, ms)
+    this.weather.onThunder = (d, ms) => {
+      this.sound.sfxThunder(d, ms)
+      setTimeout(() => this.onThunder?.(d), Math.max(0, ms))
+    }
     this.weather.onStar = () => this.sound.sfxStar()
 
     this.scene.fog = new THREE.Fog(0x2a3550, 20, 140)
@@ -740,7 +750,7 @@ export class WorldRenderer {
     const desc = this.desc(e)
     const kit = KIT_BUILDERS[e.kind]
     let body: THREE.Group
-    if (kit) body = kit({ floors: e.props.floors ?? desc.defaults.floors, text: e.props.text ?? desc.defaults.text, length: e.props.length ?? desc.defaults.length, width: e.props.width ?? desc.defaults.width, color: e.props.color ?? desc.defaults.color })
+    if (kit) body = kit({ floors: e.props.floors ?? desc.defaults.floors, text: e.props.text ?? desc.defaults.text, length: e.props.length ?? desc.defaults.length, width: e.props.width ?? desc.defaults.width, color: e.props.color ?? desc.defaults.color, role: e.props.role, seed: e.id, name: e.props.name })
     else if (desc.learned && desc.parts) body = buildFromParts(desc.parts)
     else body = blob({ text: (e.props.text ?? desc.label ?? e.kind).replace(/_/g, ' ') })
     return { body, key: this.buildKeyOnly(e) }
@@ -1017,7 +1027,7 @@ export class WorldRenderer {
     const desc = this.desc(e)
     if (KIT_BUILDERS[e.kind]) {
       const p = e.props
-      return `${e.kind}|${p.floors ?? desc.defaults.floors ?? ''}|${p.length ?? ''}|${p.width ?? ''}|${p.text ?? ''}${BUILD_READS_COLOR.has(e.kind) ? `|${p.color ?? ''}` : ''}`
+      return `${e.kind}|${p.floors ?? desc.defaults.floors ?? ''}|${p.length ?? ''}|${p.width ?? ''}|${p.text ?? ''}${BUILD_READS_COLOR.has(e.kind) ? `|${p.color ?? ''}` : ''}${e.kind === 'person' ? `|${p.role ?? ''}|${p.name ?? ''}` : ''}`
     }
     if (desc.learned && desc.parts) return `${e.kind}|learned|${hashParts(desc)}`
     return `${e.kind}|blob|${e.props.text ?? desc.label ?? e.kind}`
@@ -1286,6 +1296,55 @@ export class WorldRenderer {
     this.sunGlow.material.opacity = this.atmos.sunGlow * clear
   }
 
+  // ---------- people (NPC): what the People runtime needs from the scene ----------
+
+  /** Every person's item (entity, holder, stretch, body), for the People runtime to walk and pose. */
+  * people(): Generator<{ entity: Entity, holder: THREE.Group, stretch: THREE.Group, body: THREE.Group, leaving: boolean }> {
+    for (const item of this.items.values()) if (item.body.userData.person) yield item
+  }
+
+  /**
+   * Where a person's feet go at (x, z): the terrain, or the deck of something walkable under them (a dock,
+   * a floor) within a step of `footY`. The same down-ray the camera rides on, from the feet, not the eye.
+   */
+  feetAt(x: number, z: number, footY: number): number {
+    const terrain = this.groundAt(x, z)
+    const top = Math.max(terrain, footY) + STEP_UP
+    let best = terrain
+    for (const item of this.items.values()) {
+      const e = item.entity
+      if (!WALKABLE_KIND.test(e.kind) && !e.tags.some(t => WALKABLE_TAGS.has(t))) continue
+      if (Math.abs(item.holder.position.x - x) + Math.abs(item.holder.position.z - z) > 90) continue
+      const targets: THREE.Object3D[] = []
+      item.holder.traverseVisible((o) => {
+        if ((o as THREE.Mesh).isMesh) targets.push(o)
+      })
+      this.downRay.set(new THREE.Vector3(x, top, z), DOWN)
+      this.downRay.far = top - terrain + 0.05
+      for (const h of safeHits(this.downRay, targets)) {
+        if (h.face && this.upN.copy(h.face.normal).transformDirection(h.object.matrixWorld).y > 0.6) {
+          best = Math.max(best, h.point.y)
+          break
+        }
+      }
+    }
+    return best
+  }
+
+  /** Terrain height at (x, z) (public for the People runtime). */
+  terrainAt(x: number, z: number): number {
+    return this.groundAt(x, z)
+  }
+
+  /** A world point → CSS pixels on the canvas, and whether it's in front of the camera and on screen. */
+  toScreen(p: Vec3): { x: number, y: number, visible: boolean } {
+    const v = new THREE.Vector3(p[0], p[1], p[2]).project(this.camera)
+    const el = this.renderer.domElement
+    const w = el.clientWidth
+    const h = el.clientHeight
+    return { x: (v.x * 0.5 + 0.5) * w, y: (-v.y * 0.5 + 0.5) * h, visible: v.z < 1 && v.z > -1 && Math.abs(v.x) < 1.1 && Math.abs(v.y) < 1.1 }
+  }
+
   // ---------- gaze, ghost, player ----------
 
   /** Snapshot what the crosshair is on. Deictics ("there", "that") resolve against this. */
@@ -1410,12 +1469,15 @@ export class WorldRenderer {
     this.sun.target.position.set(cp.x, 0, cp.z)
 
     const g = this.gaze()
+    this.gazeNow = g
     const hovered = g.info.kind === 'entity' && g.entity ? this.items.get(g.entity) : undefined
     this.highlight.visible = !!hovered
     this.reticle.visible = !hovered
     if (hovered) {
       const rr = Math.max(0.5, this.desc(hovered.entity).footprint * (hovered.entity.props.scale ?? 1) + 0.25)
-      this.highlight.position.set(hovered.holder.position.x, 0.04, hovered.holder.position.z)
+      // Where it really is now (a walking person, a wandering horse), not where it was spawned.
+      const wp = hovered.stretch.getWorldPosition(this.tmpV)
+      this.highlight.position.set(wp.x, (hovered.body.userData.person ? wp.y : 0) + 0.04, wp.z)
       this.highlight.scale.setScalar(rr)
     } else {
       this.reticle.position.set(g.point[0], 0.04, g.point[2])
@@ -1433,6 +1495,7 @@ export class WorldRenderer {
     for (const item of this.items.values()) item.body.traverse(animate)
     for (const item of this.leaving) item.body.traverse(animate)
     this.moveItems(now)
+    this.onFrame?.(dt, now)
 
     // The teleport vortex: full while the place is summoned, gone once the fog has pulled back ~14 m.
     // It spins up within ~300 ms of the wish (so the screen is never an empty wall of fog) and fades as the
@@ -1529,6 +1592,8 @@ export class WorldRenderer {
   private moveItems(now: number): void {
     for (const item of this.items.values()) {
       const e = item.entity
+      // People (NPC) are walked and posed by the People runtime (onFrame), not by motion props.
+      if (item.body.userData.person) continue
       const m = e.props.motion
       // Creatures (Loop 3) are posed every frame, moving or not: wings, legs, tail and head follow the drive.
       const drive = item.body.userData.drive as ((d: Drive) => void) | undefined
