@@ -46,8 +46,42 @@ export function lookTargets(root: THREE.Object3D, props: Props, hue = 0): LookTa
   return out
 }
 
-/** Glow and material presets apply instantly; colour goes through lookTargets so it can wipe. */
-export function applyMaterialProps(root: THREE.Object3D, props: Props): void {
+/**
+ * Glow and material presets apply instantly; colour goes through lookTargets so it can wipe.
+ * Loop 2: `glow` works on everything. A kind with no glow parts (a tree, a rock) or a learned kind (a castle
+ * someone wished for) glows with its body: primary and trim turn emissive in their own colour (via
+ * `emissiveFollows`, which the colour wipe honours). `bodyGlow` is recorded for the renderer's halo.
+ */
+export function applyMaterialProps(root: THREE.Object3D, props: Props, learned = false): void {
+  let glowParts = false
+  root.traverse((o) => {
+    if ((o as THREE.Mesh).isMesh && o.userData.slot === 'glow') glowParts = true
+  })
+  const body = (learned || !glowParts) && (props.glow ?? 0) > 0
+  root.userData.bodyGlow = body
+  root.traverse((o) => {
+    const m = o as THREE.Mesh
+    if (!m.isMesh || (m.userData.slot !== 'primary' && m.userData.slot !== 'trim')) return
+    const mat = m.material as THREE.MeshStandardMaterial
+    if (!mat.emissive) return
+    if (body) {
+      if (m.userData.glowOwned === undefined) m.userData.glowOwned = m.userData.emissiveFollows ?? null
+      m.userData.emissiveFollows = Math.min(1.1, 0.24 * props.glow!) * (m.userData.slot === 'trim' ? 0.6 : 1)
+      // Without an asked-for colour the glow is mostly warm light; with one ("glow gold") it keeps that hue.
+      m.userData.glowTint = props.color ? 0.15 : 0.5
+      mat.emissiveIntensity = 1
+    } else if (m.userData.glowOwned !== undefined) {
+      // Glow taken away (or undone): back to the builder's own emissive behaviour.
+      if (m.userData.glowOwned === null) {
+        delete m.userData.emissiveFollows
+        mat.emissive.setRGB(0, 0, 0)
+      } else {
+        m.userData.emissiveFollows = m.userData.glowOwned
+      }
+      delete m.userData.glowOwned
+      delete m.userData.glowTint
+    }
+  })
   root.traverse((o) => {
     const m = o as THREE.Mesh
     if (!m.isMesh) return
@@ -63,7 +97,7 @@ export function applyMaterialProps(root: THREE.Object3D, props: Props): void {
   })
   root.traverse((o) => {
     const light = o as THREE.PointLight
-    if (light.isPointLight) light.intensity = (light.userData.baseIntensity ?? 10) * (props.glow ?? 1)
+    if (light.isPointLight && !light.userData.cast) light.intensity = (light.userData.baseIntensity ?? 10) * (props.glow ?? 1)
   })
 }
 

@@ -18,6 +18,13 @@ export const TIMES = ['dawn', 'day', 'golden', 'dusk', 'night', 'interior'] as c
 export const OP_NAMES = ['spawn', 'define', 'modify', 'move', 'remove', 'undo', 'atmosphere', 'teleport', 'say'] as const
 /** Ambient noise beds (synthesized, no files). Director-only: the intent model never sets them. */
 export const AMBIENTS = ['none', 'water', 'wind', 'room', 'city', 'fire'] as const
+/** Loop 2: how a thing moves (rendered per frame by app/world/fx/motion.ts, never stored as positions). */
+export const MOTIONS = ['none', 'hover', 'drift', 'orbit', 'fly', 'wander', 'gallop', 'spin', 'sway'] as const
+/** What an orbit, gallop loop or flight circles: its own group's centre, the player, or the gaze point. */
+export const AROUNDS = ['self', 'player', 'gaze'] as const
+/** Persistent weather (atmosphere.weather) and one-shot sky events (atmosphere.event). */
+export const WEATHERS = ['clear', 'rain', 'snow', 'storm', 'fog', 'aurora'] as const
+export const SKY_EVENTS = ['lightning', 'meteors', 'eclipse', 'sunrise'] as const
 
 export type Material = typeof MATERIALS[number]
 export type Shape = typeof SHAPES[number]
@@ -27,6 +34,10 @@ export type Facing = typeof FACINGS[number]
 export type TimeOfDay = typeof TIMES[number]
 export type OpName = typeof OP_NAMES[number]
 export type Ambient = typeof AMBIENTS[number]
+export type Motion = typeof MOTIONS[number]
+export type Around = typeof AROUNDS[number]
+export type Weather = typeof WEATHERS[number]
+export type SkyEvent = typeof SKY_EVENTS[number]
 
 // Hard caps keep a confused model from planting ten thousand trees or a 500-part clock.
 export const MAX_COUNT = 80
@@ -47,7 +58,14 @@ export const PropsSchema = z.object({
   text: z.string().max(40).optional(),
   // Dimensions in metres for sized kinds (floor, wall, rug, water): length along local x, width along z.
   length: z.number().positive().max(200).optional(),
-  width: z.number().positive().max(200).optional()
+  width: z.number().positive().max(200).optional(),
+  // Loop 2: the sky and motion. altitude = metres above the ground, or 'sky' (a spread 15–45 m up).
+  altitude: z.union([z.number().min(0).max(150), z.literal('sky')]).optional(),
+  motion: z.enum(MOTIONS).optional(),
+  speed: z.number().positive().max(5).optional(), // motion speed multiplier (1 = natural)
+  around: z.enum(AROUNDS).optional(), // what orbit / gallop / fly circles
+  range: z.number().positive().max(150).optional(), // motion radius in metres (orbit, gallop loop, flight, wander)
+  light: z.number().min(0).max(10).optional() // casts real light (0 = off); glow is how bright it looks
 })
 export type Props = z.infer<typeof PropsSchema>
 
@@ -74,11 +92,12 @@ export const SelectorSchema = z.object({
 export type Selector = z.infer<typeof SelectorSchema>
 
 export const PlacementSchema = z.object({
-  anchor: z.enum(['gaze', 'player', 'target']),
+  anchor: z.enum(['gaze', 'player', 'target', 'horizon']),
   of: SelectorSchema.optional(),
-  dir: z.enum(['ahead', 'left', 'right', 'behind']).optional(),
+  // 'around' (with anchor player or horizon) spreads the spawn 360° around the player.
+  dir: z.enum(['ahead', 'left', 'right', 'behind', 'around']).optional(),
   side: z.enum(['left', 'right', 'front', 'behind', 'on_top', 'around']).optional(),
-  dist: z.number().min(0).max(200).optional(),
+  dist: z.number().min(0).max(1500).optional(),
   gap: z.number().min(0).max(50).optional()
 })
 export type Placement = z.infer<typeof PlacementSchema>
@@ -124,6 +143,9 @@ export const LooseOpSchema = z.object({
   relative: z.boolean().optional(),
   time: z.enum(TIMES).optional(),
   fog: z.number().optional(),
+  weather: z.enum(WEATHERS).optional(),
+  event: z.enum(SKY_EVENTS).optional(),
+  playerScale: z.number().optional(),
   world: z.string().optional(),
   brief: z.string().optional(),
   text: z.string().optional()
@@ -151,6 +173,7 @@ export const DirectorOpSchema = z.object({
   time: z.string().optional(),
   fog: z.number().optional(),
   ambient: z.string().optional(),
+  weather: z.string().optional(),
   kind: z.string().optional(),
   xz: z.array(z.number()).optional(),
   yaw: z.number().optional(),
@@ -160,6 +183,8 @@ export const DirectorOpSchema = z.object({
   size: z.array(z.number()).optional(),
   scale: z.number().optional(),
   color: z.string().optional(),
+  altitude: z.union([z.number(), z.string()]).optional(),
+  motion: z.string().optional(),
   text: z.string().optional()
 })
 export type DirectorOp = z.infer<typeof DirectorOpSchema>
@@ -177,6 +202,7 @@ export function directorToOp(raw: unknown): unknown {
     if (d.time !== undefined) out.time = d.time
     if (typeof d.fog === 'number') out.fog = Math.min(1, Math.max(0, d.fog))
     if (d.ambient !== undefined) out.ambient = d.ambient
+    if (typeof d.weather === 'string' && (WEATHERS as readonly string[]).includes(d.weather)) out.weather = d.weather
     return out
   }
   if (d.op !== 'spawn') return raw
@@ -184,6 +210,8 @@ export function directorToOp(raw: unknown): unknown {
   if (d.color) set.color = d.color
   if (d.text) set.text = String(d.text).slice(0, 40)
   if (typeof d.scale === 'number' && d.scale > 0) set.scale = d.scale
+  if (d.altitude === 'sky' || (typeof d.altitude === 'number' && d.altitude >= 0)) set.altitude = typeof d.altitude === 'number' ? Math.min(150, d.altitude) : 'sky'
+  if (typeof d.motion === 'string' && (MOTIONS as readonly string[]).includes(d.motion)) set.motion = d.motion
   if (Array.isArray(d.size)) {
     if (typeof d.size[0] === 'number' && d.size[0] > 0) set.length = d.size[0]
     if (typeof d.size[1] === 'number' && d.size[1] > 0) set.width = d.size[1]
@@ -213,7 +241,7 @@ const SpawnOp = z.object({
   facing: z.enum(FACINGS).optional(),
   set: PropsSchema.optional(),
   // Director-only room placement (see DirectorOpSchema). Overrides `at`; skips de-overlap.
-  xz: z.array(z.number().min(-300).max(300)).length(2).optional(),
+  xz: z.array(z.number().min(-1500).max(1500)).length(2).optional(),
   yaw: z.number().min(-720).max(720).optional()
 })
 
@@ -248,8 +276,12 @@ const AtmosphereOp = z.object({
   op: z.literal('atmosphere'),
   time: z.enum(TIMES).optional(),
   fog: z.number().min(0).max(1).optional(),
-  ambient: z.enum(AMBIENTS).optional()
-}).refine(a => a.time !== undefined || a.fog !== undefined || a.ambient !== undefined, 'atmosphere needs time, fog or ambient')
+  ambient: z.enum(AMBIENTS).optional(),
+  weather: z.enum(WEATHERS).optional(),
+  event: z.enum(SKY_EVENTS).optional(),
+  // "Make me tiny" / "make everything ten times bigger": the player's size (eye height, stride). 1 = normal.
+  playerScale: z.number().min(0.02).max(10).optional()
+}).refine(a => a.time !== undefined || a.fog !== undefined || a.ambient !== undefined || a.weather !== undefined || a.event !== undefined || a.playerScale !== undefined, 'atmosphere needs time, fog, ambient, weather, event or playerScale')
 
 const TeleportOp = z.object({ op: z.literal('teleport'), world: z.string().trim().min(1).max(80), brief: z.string().max(400).optional() })
 const SayOp = z.object({ op: z.literal('say'), text: z.string().trim().min(1).max(280) })

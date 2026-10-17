@@ -2,10 +2,11 @@
  * The placement resolver: anchor + count + arrangement → ground positions, with jitter, footprint
  * de-overlap and facing. The model says "nine pines, clustered, over there"; this does all the coordinate math.
  */
-import { kindHeight } from './kinds.ts'
+import { isTerrain, kindHeight } from './kinds.ts'
 import type { KindDescriptor } from './kinds.ts'
 import type { Arrangement, Facing, Placement, Props, Vec3 } from './ops.ts'
 import { distXZ, entityHeight, entityRadius, kindOf, select } from './select.ts'
+import { groundHeight, groundUnder } from './terrain.ts'
 import type { Entity, OpContext, WorldState } from './types.ts'
 
 export interface Placed {
@@ -167,8 +168,18 @@ export function layout(state: WorldState, spec: LayoutSpec, ctx: OpContext, rand
   const tall = kindHeight(desc, spec.props ?? {})
   const notes: string[] = []
   const room = spec.xz && spec.xz.length >= 2
-  const anchor: Anchor = room ? { center: roomToWorld(spec.xz!, ctx.player) } : resolveAnchor(state, spec.at, ctx, r)
+  const terrain = isTerrain(desc)
+  const horizon = !room && spec.at?.anchor === 'horizon'
+  // "Around me": anchor player (or horizon) with dir around spreads the spawn 360° around the viewer.
+  const around = !room && spec.at?.dir === 'around' && (spec.at.anchor === 'player' || horizon)
+  const anchor: Anchor = room
+    ? { center: roomToWorld(spec.xz!, ctx.player) }
+    : horizon || around ? { center: [ctx.player.pos[0], 0, ctx.player.pos[2]] } : resolveAnchor(state, spec.at, ctx, r)
   if (anchor.note) notes.push(anchor.note)
+  // Loop 2: things with an altitude live in the air. They never collide with the ground's things, never
+  // need pushing back to fit foot-to-top, and a scattered flock spreads wide.
+  const alt = spec.props?.altitude
+  const airborne = alt !== undefined && alt !== 0 && !anchor.onTop
   const vary = spec.vary ?? (n > 1 ? (desc.randomYaw ? 0.3 : 0.15) : 0)
   let arrange: Arrangement | 'single' = spec.arrange ?? (anchor.ringRadius ? 'ring' : 'cluster')
   if (n === 1 && arrange !== 'along') arrange = 'single'
@@ -183,7 +194,7 @@ export function layout(state: WorldState, spec: LayoutSpec, ctx: OpContext, rand
   const R = arrange === 'cluster'
     ? spec.radius ?? Math.max(2 * r, r * Math.sqrt(n) * 1.6)
     : arrange === 'scatter'
-      ? spec.radius ?? Math.max(8, Math.max(r, 1) * Math.sqrt(n) * 3.5)
+      ? spec.radius ?? (airborne ? Math.max(30, Math.sqrt(n) * 6) : Math.max(8, Math.max(r, 1) * Math.sqrt(n) * 3.5))
       : arrange === 'ring' ? spec.radius ?? anchor.ringRadius ?? Math.max(spacing * n / TAU, 2 * r + 1) : 0
 
   // "Over there" must never swallow the viewer. Big things need more room before they stop looming
@@ -192,15 +203,16 @@ export function layout(state: WorldState, spec: LayoutSpec, ctx: OpContext, rand
   // Tall things also get pushed back until foot-to-top fits the view: "a giant tower right there" lands
   // far enough off that you see all of it, not a wall 3 m away with its top cut off.
   const anchorKind = spec.at?.anchor ?? 'gaze'
-  const gazeAnchored = !room && (anchorKind === 'gaze' || (anchorKind === 'player' && spec.at?.dist === undefined))
-  const clear = r + PLAYER_CLEAR + 1.5 * r
+  const gazeAnchored = !room && !horizon && !around && (anchorKind === 'gaze' || (anchorKind === 'player' && spec.at?.dist === undefined))
+  // Terrain is big by nature: it only needs its edge clear of you, not 1.5 footprints of breathing room.
+  const clear = terrain ? r + PLAYER_CLEAR + 4 : r + PLAYER_CLEAR + 1.5 * r
   const extent = arrange === 'single'
     ? (desc.length ? desc.length / 2 : 0)
     : arrange === 'grid' ? Math.hypot(cols, rows) * spacing / 2 : arrange === 'ring' ? R : 0
   const c: Vec3 = [...anchor.center]
   if (gazeAnchored && r + extent > 0) {
     const d = distXZ(c, ctx.player.pos)
-    const need = Math.max(extent + clear, extent + r + fitDistance(tall, ctx.player.pos[1] || 1.6))
+    const need = airborne ? extent + clear : Math.max(extent + clear, extent + r + fitDistance(tall, Math.max(0.3, (ctx.player.pos[1] || 1.6) - groundHeight(state, ctx.player.pos[0], ctx.player.pos[2]))))
     if (d < need) {
       const dir = d > 1e-3 ? norm2(c[0] - ctx.player.pos[0], c[2] - ctx.player.pos[2]) : forward(yaw)
       c[0] = ctx.player.pos[0] + dir[0] * need
@@ -210,7 +222,11 @@ export function layout(state: WorldState, spec: LayoutSpec, ctx: OpContext, rand
   let pts: Vec3[] = []
   let faceAxis: { origin: Vec3, dir: [number, number] } | undefined
 
-  if (arrange === 'single') {
+  if (horizon) {
+    pts = horizonPoints(spec, ctx, n, r, tall, around, rand)
+  } else if (around && arrange !== 'ring') {
+    pts = annulusPoints(ctx.player.pos, n, r, spacing, spec, rand)
+  } else if (arrange === 'single') {
     pts = [[c[0], c[1], c[2]]]
   } else if (arrange === 'cluster' || arrange === 'scatter') {
     const minSep = arrange === 'cluster' ? 2 * r * 1.05 : 2 * r * 1.6
@@ -238,7 +254,9 @@ export function layout(state: WorldState, spec: LayoutSpec, ctx: OpContext, rand
     pts = along.pts
     faceAxis = along.axis
   }
-  if (anchor.onTop) pts = pts.map(p => [p[0], c[1], p[2]])
+  // On top of a hill or mountain means on its surface (the terrain snap below), not at one flat height.
+  const onSurface = !!(anchor.onTop && anchor.target && kindOf(state, anchor.target.kind).surface)
+  if (anchor.onTop) pts = pts.map(p => [p[0], onSurface ? 0 : c[1], p[2]])
 
   // Room placements face the room frame's +z unless told otherwise (an explicit yaw always wins).
   const roomYaw = room ? yaw + ((spec.yaw ?? 0) * Math.PI) / 180 : undefined
@@ -264,9 +282,150 @@ export function layout(state: WorldState, spec: LayoutSpec, ctx: OpContext, rand
   })
 
   // The Director lays rooms out by hand (a lamp hangs over its table on purpose), so room placements never get pushed.
-  if (!room && !anchor.onTop && r > 0) deOverlap(state, placed, r, ctx, new Set(), rand)
+  if (!room && !anchor.onTop && !terrain && !airborne && r > 0) deOverlap(state, placed, r, ctx, new Set(), rand)
+  if (airborne) {
+    // Indoors (a ceiling over the anchor, or over you), the "sky" is the room: lanterns fill it under the lid.
+    const lid = horizon ? null : ceilingOver(state, c[0], c[2]) ?? ceilingOver(state, ctx.player.pos[0], ctx.player.pos[2])
+    for (const p of placed) {
+      if (lid && !underLid(lid, p.pos[0], p.pos[2])) p.pos = insideLid(lid, rand)
+      const y = altitudeY(alt, rand, n)
+      p.pos = [p.pos[0], p.pos[1] + capAltitude(state, p.pos[0], p.pos[2], y, tall, rand), p.pos[2]]
+    }
+  }
+  // Terrain snap: anything spawned over a hill, mountain or cliff stands on its surface.
+  if (!terrain && !(anchor.onTop && !onSurface)) {
+    for (const p of placed) p.pos = [p.pos[0], p.pos[1] + groundUnder(state, p.pos[0], p.pos[2], r * p.scale), p.pos[2]]
+  }
   for (const p of placed) p.pos = [round(p.pos[0], 3), round(p.pos[1], 3), round(p.pos[2], 3)]
   return { placed, notes }
+}
+
+const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v))
+
+/** The sky band: 'sky' spreads a flock 15–45 m up (one thing floats at ~24 m); a number jitters ±20% (≤ 6 m) in a group. */
+export const SKY_BAND: [number, number] = [15, 45]
+
+/** Height above the ground for one instance of a spawn (or modify) with `altitude`. Seeded by `rand`. */
+export function altitudeY(alt: number | 'sky' | undefined, rand: () => number, n: number): number {
+  if (alt === undefined || alt === 0) return 0
+  if (alt === 'sky') return round(n > 1 ? SKY_BAND[0] + rand() * (SKY_BAND[1] - SKY_BAND[0]) : 24, 2)
+  if (n <= 1) return alt
+  return round(Math.max(0.3, alt + (rand() * 2 - 1) * Math.min(alt * 0.2, 6)), 2)
+}
+
+/** An interior's lid: a ceiling (or roof) entity, the height of its underside and its half-extents. */
+export interface Lid { e: Entity, y: number, hx: number, hz: number }
+
+/** The lowest ceiling or roof over (x, z), else null. Interiors have a low "sky". */
+export function ceilingOver(state: WorldState, x: number, z: number): Lid | null {
+  let best: Lid | null = null
+  for (const e of state.entities) {
+    const d = kindOf(state, e.kind)
+    if (!d.tags.includes('ceiling') && !d.tags.includes('roof')) continue
+    const s = e.props.scale ?? 1
+    const lid: Lid = {
+      e,
+      y: e.pos[1] + kindHeight(d, e.props) * 0.9, // the beams hang ~10% below the slab
+      hx: ((e.props.length ?? d.defaults.length ?? 16) * s) / 2,
+      hz: ((e.props.width ?? d.defaults.width ?? 16) * s) / 2
+    }
+    if (underLid(lid, x, z) && (!best || lid.y < best.y)) best = lid
+  }
+  return best
+}
+
+function lidLocal(lid: Lid, x: number, z: number): [number, number] {
+  const c = Math.cos(lid.e.rotY)
+  const sn = Math.sin(lid.e.rotY)
+  const dx = x - lid.e.pos[0]
+  const dz = z - lid.e.pos[2]
+  return [dx * c - dz * sn, dx * sn + dz * c]
+}
+
+function underLid(lid: Lid, x: number, z: number): boolean {
+  const [lx, lz] = lidLocal(lid, x, z)
+  return Math.abs(lx) <= lid.hx && Math.abs(lz) <= lid.hz
+}
+
+/** A random spot inside the room under `lid`, 0.6 m in from its walls. */
+function insideLid(lid: Lid, rand: () => number): Vec3 {
+  const lx = (rand() * 2 - 1) * Math.max(0, lid.hx - 0.6)
+  const lz = (rand() * 2 - 1) * Math.max(0, lid.hz - 0.6)
+  const c = Math.cos(lid.e.rotY)
+  const sn = Math.sin(lid.e.rotY)
+  return [lid.e.pos[0] + lx * c + lz * sn, 0, lid.e.pos[2] - lx * sn + lz * c]
+}
+
+/**
+ * Keep a floating thing of height `tall` under any ceiling over (x, z): an altitude that would poke through
+ * is re-spread between head height and just under the lid, so "fill the room with lanterns" fills the room.
+ */
+export function capAltitude(state: WorldState, x: number, z: number, y: number, tall: number, rand: () => number): number {
+  if (y <= 0) return y
+  const lid = ceilingOver(state, x, z)
+  if (!lid) return y
+  const hi = Math.max(0.3, lid.y - tall - 0.25)
+  if (y <= hi) return y
+  const lo = Math.min(hi, 1.9)
+  return round(lo + rand() * (hi - lo), 2)
+}
+
+/** The horizon distance for a thing this big: far enough to read whole, near enough to tower. */
+export function horizonDistance(r: number, tall: number, dist?: number): number {
+  return clamp(dist ?? Math.max(380, r + fitDistance(tall) * 1.15), 250, 1400)
+}
+
+/**
+ * anchor horizon: 300–1200 m out in the facing direction (dir turns it), spread over 120° of view for a
+ * count, or a full ring with dir around. Nearer and farther by ±15% so a ring of peaks doesn't look drawn
+ * with a compass.
+ */
+function horizonPoints(spec: LayoutSpec, ctx: OpContext, n: number, r: number, tall: number, around: boolean, rand: () => number): Vec3[] {
+  const D = horizonDistance(r, tall, spec.at?.dist)
+  const turn = { ahead: 0, left: Math.PI / 2, right: -Math.PI / 2, behind: Math.PI, around: 0 }[spec.at?.dir ?? 'ahead']
+  const base = ctx.player.yaw + turn
+  const spread = around ? TAU : Math.min(TAU / 3, n > 1 ? (n * 2.2 * r) / D : 0)
+  const start = around ? rand() * TAU : 0
+  const pts: Vec3[] = []
+  for (let i = 0; i < n; i++) {
+    const off = around ? start + (i / n) * TAU : n === 1 ? 0 : (i / (n - 1) - 0.5) * spread
+    const jitter = n === 1 ? 0 : (rand() * 2 - 1) * (around ? TAU / n : spread / Math.max(1, n - 1)) * 0.2
+    const d = D * (n === 1 ? 1 : 0.85 + 0.3 * rand())
+    const f = forward(base + off + jitter)
+    pts.push([ctx.player.pos[0] + f[0] * d, 0, ctx.player.pos[2] + f[1] * d])
+  }
+  return pts
+}
+
+/**
+ * anchor player + dir around: fill an annulus around the viewer (a city, a forest, a crowd), nearest
+ * first, so the build radiates outward from where you stand.
+ */
+function annulusPoints(center: Vec3, n: number, r: number, spacing: number, spec: LayoutSpec, rand: () => number): Vec3[] {
+  const rin = Math.max(spec.at?.dist ?? 0, r + PLAYER_CLEAR + 2)
+  const rout = spec.radius ? Math.max(rin + spacing, spec.radius) : Math.sqrt(rin * rin + (n * (spacing * 1.5) ** 2) / Math.PI)
+  const minSep = 2 * r * 1.05
+  const pts: Vec3[] = []
+  for (let i = 0; i < n; i++) {
+    let best: Vec3 = [center[0], 0, center[2]]
+    let bestSep = -Infinity
+    for (let k = 0; k < 40; k++) {
+      const rr = Math.sqrt(rin * rin + (rout * rout - rin * rin) * rand())
+      const a = rand() * TAU
+      const p: Vec3 = [center[0] + Math.cos(a) * rr, 0, center[2] + Math.sin(a) * rr]
+      const sep = pts.reduce((m, q) => Math.min(m, distXZ(p, q)), Infinity)
+      if (sep >= minSep) {
+        best = p
+        break
+      }
+      if (sep > bestSep) {
+        best = p
+        bestSep = sep
+      }
+    }
+    pts.push(best)
+  }
+  return pts.sort((a, b) => distXZ(a, center) - distXZ(b, center))
 }
 
 /** Instances along a long thing (a road): both sides, evenly spaced, set back from its edge. */
@@ -357,7 +516,7 @@ interface Obstacle { pos: Vec3, r: number }
  */
 export function deOverlap(state: WorldState, placed: Placed[], baseRadius: number, ctx: OpContext, ignore: Set<string>, rand: () => number): void {
   const obstacles: Obstacle[] = state.entities
-    .filter(e => !ignore.has(e.id))
+    .filter(e => !ignore.has(e.id) && !kindOf(state, e.kind).surface)
     .map(e => ({ pos: e.pos, r: entityRadius(state, e) }))
     .filter(o => o.r > 0)
   obstacles.push({ pos: ctx.player.pos, r: PLAYER_RADIUS })

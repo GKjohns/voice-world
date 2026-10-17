@@ -30,6 +30,12 @@ const CLOCK = [
   { shape: 'cylinder', size: [0.4, 0.04, 0.4], at: [0, 1.6, 0.21], rot: [1.571, 0, 0], color: '#f2ead8' }
 ]
 
+const BLOCKY = [
+  { shape: 'box', size: [1.2, 1.4, 2.6], at: [0, 1.4, 0], color: '#4f8a3c', slot: 'primary' },
+  { shape: 'box', size: [0.5, 0.6, 0.8], at: [0, 2.2, 1.4], color: '#4f8a3c', slot: 'primary' },
+  { shape: 'box', size: [0.3, 0.8, 0.3], at: [0.4, 0.4, 0.9], color: '#3a2618', slot: 'trim' }
+]
+
 const SCENES = {
   empty: () => createWorld(),
   grove: () => build(
@@ -52,7 +58,25 @@ const SCENES = {
     ['some trees', [{ op: 'spawn', kind: 'pine', count: 7, arrange: 'cluster', at: { anchor: 'player', dir: 'left', dist: 14 } }]],
     ['a grandfather clock here', [{ op: 'define', kind: 'grandfather_clock', tags: ['clock', 'furniture'], parts: CLOCK }, { op: 'spawn', kind: 'grandfather_clock', at: { anchor: 'gaze' } }]]
   ),
-  placeholder: () => build(['a pinball machine', [{ op: 'spawn', kind: 'pinball_machine', at: { anchor: 'gaze' } }]])
+  placeholder: () => build(['a pinball machine', [{ op: 'spawn', kind: 'pinball_machine', at: { anchor: 'gaze' } }]]),
+  hill: () => build(['a hill', [{ op: 'spawn', kind: 'hill', at: { anchor: 'player', dist: 55 } }]]),
+  cliff: () => build(['a cliff', [{ op: 'spawn', kind: 'cliff', at: { anchor: 'player', dist: 90 } }]]),
+  city: () => build(['shops', [{ op: 'spawn', kind: 'storefront', count: 6, arrange: 'line', at: { anchor: 'gaze' } }]]),
+  // Loop 2 (sky): a night grove, and learned creatures and a castle to make fly, gallop and glow.
+  night: () => build(
+    ['make a bunch of trees', [{ op: 'spawn', kind: 'pine', count: 9, arrange: 'cluster', at: { anchor: 'gaze' }, radius: 6 }]],
+    ['make it night', [{ op: 'atmosphere', time: 'night' }]]
+  ),
+  dragon: () => build(['a dragon', [{ op: 'define', kind: 'dragon', tags: ['dragon', 'animal', 'creature'], parts: BLOCKY }, { op: 'spawn', kind: 'dragon', at: { anchor: 'gaze' } }]]),
+  horses: () => build(
+    ['some trees', [{ op: 'spawn', kind: 'pine', count: 6, arrange: 'cluster', at: { anchor: 'player', dir: 'left', dist: 18 } }]],
+    ['a herd of horses', [{ op: 'define', kind: 'horse', tags: ['horse', 'animal'], parts: BLOCKY }, { op: 'spawn', kind: 'horse', count: 6, arrange: 'cluster', at: { anchor: 'gaze' } }]]
+  ),
+  castle: () => build(
+    ['some trees', [{ op: 'spawn', kind: 'pine', count: 6, arrange: 'cluster', at: { anchor: 'player', dir: 'right', dist: 18 } }]],
+    ['a castle', [{ op: 'define', kind: 'castle', tags: ['castle', 'building', 'structure'], parts: BLOCKY }, { op: 'spawn', kind: 'castle', at: { anchor: 'gaze' } }]],
+    ['make it night', [{ op: 'atmosphere', time: 'night' }]]
+  )
 } satisfies Record<string, () => WorldState>
 
 /** Look straight at an entity (the gaze ray hit it at speech start). */
@@ -96,7 +120,7 @@ const whitish = (c?: string) => {
 
 // ---------- cases ----------
 
-interface Outcome { before: WorldState, after: WorldState, ops: Op[], ctx: OpContext, notes: string[] }
+interface Outcome { before: WorldState, after: WorldState, ops: Op[], ctx: OpContext, notes: string[], say: string[] }
 interface Case {
   name: string
   text: string
@@ -225,7 +249,75 @@ const CASES: Case[] = [
   // Sprint 4: the teleport carries a brief good enough for the Director to build from.
   { name: 'teleport: I want to relax', text: 'I want to relax', scene: 'grove', check: o => teleportTo(o, /./, 30) },
   { name: 'teleport: a scene, not an object', text: 'a neon city street at night', scene: 'empty', check: o => teleportTo(o, /street|city|neon/i, 30, /night/i) },
-  { name: 'teleport: go to a cabin', text: 'go to a cozy cabin in the woods', scene: 'village', check: o => teleportTo(o, /cabin/i, 30) }
+  { name: 'teleport: go to a cabin', text: 'go to a cozy cabin in the woods', scene: 'village', check: o => teleportTo(o, /cabin/i, 30) },
+
+  // the sky, motion, weather, glow and the player's size (Loop 2)
+  { name: 'sky: fill the sky with lanterns', text: 'fill the sky with floating lanterns', scene: 'night', check: (o) => {
+    const l = added(o).filter(e => e.kind === 'lantern')
+    const high = l.filter(e => e.pos[1] >= 10).length
+    return expect(l.length >= 20 && high === l.length && l.every(e => e.props.motion === 'drift' || e.props.motion === 'hover'), `${l.length} lanterns, ${high} high, motion ${[...new Set(l.map(e => e.props.motion))].join(',')}, spawned ${kinds(added(o))}`)
+  } },
+  { name: 'sky: night and lanterns (voice)', text: 'now make it night, and fill the sky with lanterns', scene: 'grove', check: (o) => {
+    const l = added(o).filter(e => e.kind === 'lantern')
+    return expect(o.after.atmosphere.time === 'night' && l.length >= 20 && l.every(e => e.pos[1] >= 10) && !added(o).some(e => e.kind === 'lamp'), `time ${o.after.atmosphere.time}, ${l.length} lanterns, spawned ${kinds(added(o))}`)
+  } },
+  { name: 'sky: birds circling', text: 'a flock of birds circling overhead', scene: 'empty', check: (o) => {
+    const b = added(o).filter(e => e.kind === 'bird')
+    return expect(b.length >= 4 && b.every(e => e.pos[1] >= 8 && (e.props.motion === 'orbit' || e.props.motion === 'fly')), `${b.length} birds, y ${b.map(e => e.pos[1]).join(' ')}, motion ${b[0]?.props.motion}`)
+  } },
+  { name: 'motion: dragon flies around me', text: 'make the dragon fly around me', scene: 'dragon', check: (o) => {
+    const d = o.after.entities.find(e => e.kind === 'dragon')!
+    return expect((d.props.motion === 'orbit' || d.props.motion === 'fly') && d.pos[1] >= 5 && d.props.around === 'player' && added(o).length === 0, `motion ${d.props.motion}, y ${d.pos[1]}, around ${d.props.around}, added ${added(o).length}`)
+  } },
+  { name: 'motion: horses gallop', text: 'make the horses gallop around the field', scene: 'horses', check: (o) => {
+    const h = o.after.entities.filter(e => e.kind === 'horse')
+    return expect(h.length === 6 && h.every(e => e.props.motion === 'gallop' && e.pos[1] < 1 && !!e.path), `motions ${[...new Set(h.map(e => e.props.motion))].join(',')}, y ${h[0]?.pos[1]}`)
+  } },
+  { name: 'motion: no dragon to fly (honest)', text: 'make the dragon fly in circles', scene: 'grove', check: (o) => {
+    const line = o.say.join(' ')
+    const claim = line.split(/[.!?…,;]/).filter(c => !/\b(cannot|can't|not|no|alas|yet|shall)\b/i.test(c)).join(' ')
+    return expect(!o.after.entities.some(e => e.props.motion) && !/\b(soar|circl|fl(y|ies|ying))/i.test(claim), `say "${line}", moving ${o.after.entities.filter(e => e.props.motion).length}`)
+  } },
+  { name: 'weather: let it snow', text: 'let it snow', scene: 'grove', check: o => expect(o.after.atmosphere.weather === 'snow', `weather ${o.after.atmosphere.weather}`) },
+  { name: 'weather: thunderstorm', text: 'summon a thunderstorm', scene: 'grove', check: o => expect(o.after.atmosphere.weather === 'storm', `weather ${o.after.atmosphere.weather}`) },
+  { name: 'weather: make it rain', text: 'make it rain', scene: 'village', check: o => expect(o.after.atmosphere.weather === 'rain' || o.after.atmosphere.weather === 'storm', `weather ${o.after.atmosphere.weather}`) },
+  { name: 'weather: northern lights', text: 'show me the northern lights', scene: 'grove', check: o => expect(o.after.atmosphere.weather === 'aurora' && o.after.atmosphere.time === 'night' && !has(o, 'teleport'), `weather ${o.after.atmosphere.weather}, time ${o.after.atmosphere.time}`) },
+  { name: 'weather: shooting stars', text: 'a meteor shower', scene: 'night', check: o => expect(o.ops.some(op => op.op === 'atmosphere' && op.event === 'meteors'), `ops ${opsBrief(o.ops)}`) },
+  { name: 'glow: the castle glows', text: 'make the castle glow', scene: 'castle', check: (o) => {
+    const c = o.after.entities.find(e => e.kind === 'castle')!
+    return expect((c.props.glow ?? 0) >= 1.5, `castle props ${JSON.stringify(c.props)}`)
+  } },
+  { name: 'glow: trees glow gold', text: 'make the trees glow gold', scene: 'night', check: (o) => {
+    const t = o.after.entities.filter(isTree)
+    return expect(t.every(e => (e.props.glow ?? 0) >= 1.5), `glow ${[...new Set(t.map(e => e.props.glow ?? 'none'))].join(',')}`)
+  } },
+  { name: 'player: make me tiny', text: 'make me tiny', scene: 'grove', check: o => expect((o.after.atmosphere.playerScale ?? 1) <= 0.25 && o.after.entities.every(e => !e.props.scale || e.props.scale < 2), `playerScale ${o.after.atmosphere.playerScale}`) },
+  { name: 'player: everything ten times bigger', text: 'make everything ten times bigger', scene: 'grove', check: (o) => {
+    const scaled = o.after.entities.filter(e => (e.props.scale ?? 1) >= 3).length
+    return expect((o.after.atmosphere.playerScale ?? 1) <= 0.2 && scaled === 0, `playerScale ${o.after.atmosphere.playerScale}, ${scaled} scaled up`)
+  } },
+  // terrain and scale (Loop 2)
+  { name: 'terrain: range on the horizon', text: 'put a mountain range on the horizon', scene: 'city', check: (o) => {
+    const m = added(o).filter(e => e.tags.includes('mountain'))
+    return expect(m.length >= 1 && m.every(e => distXZ(e.pos, CTX.player.pos) >= 250), `mountains ${m.map(e => `${e.kind}@${Math.round(distXZ(e.pos, CTX.player.pos))}m`).join(',') || 'none'}`)
+  } },
+  { name: 'terrain: volcano over there', text: 'raise a volcano over there', scene: 'empty', check: o => expect(added(o).some(e => e.kind === 'volcano' && distXZ(e.pos, CTX.player.pos) >= 200), `spawned ${kinds(added(o))}`) },
+  { name: 'terrain: castle on that hill', text: 'put a castle on that hill', scene: 'hill', ctx: s => lookAt(s, e => e.kind === 'hill'), check: (o) => {
+    const c = added(o).find(e => /castle|fort/.test(e.kind))
+    const hills = o.after.entities.filter(e => e.kind === 'hill').length
+    return expect(!!c && c.pos[1] > 8 && hills === 1, `castle ${c ? `${c.kind} y=${c.pos[1]}` : 'none'}, hills ${hills}`)
+  } },
+  { name: 'terrain: castle on a hill that isn\'t there', text: 'put a castle on that hill', scene: 'grove', check: (o) => {
+    const c = added(o).find(e => /castle|fort/.test(e.kind))
+    const at = o.ops.find(op => op.op === 'spawn' && /castle|fort/.test(op.kind))
+    return expect(added(o).some(e => e.kind === 'hill') && !!c && c.pos[1] > 8, `added ${kinds(added(o))}${c ? ` castle y=${c.pos[1]}` : ''} at ${JSON.stringify(at && 'at' in at ? at.at : null)}`)
+  } },
+  { name: 'terrain: waterfall off that cliff', text: 'a waterfall off that cliff', scene: 'cliff', ctx: s => lookAt(s, e => e.kind === 'cliff'), check: o => expect(added(o).some(e => e.kind === 'waterfall'), `added ${kinds(added(o))}`) },
+  { name: 'terrain: forest around me', text: 'plant a forest all around me', scene: 'empty', check: (o) => {
+    const t = added(o).filter(isTree)
+    const behind = t.filter(e => e.pos[2] > 5).length
+    return expect(t.length >= 30 && behind >= 8, `${t.length} trees, ${behind} behind`)
+  } }
 ]
 
 function teleportTo(o: Outcome, world: RegExp, minBrief: number, briefHas?: RegExp): true | string {
@@ -263,7 +355,7 @@ async function runCase(model: string, c: Case): Promise<Row> {
   const applied = applyBatch(before, { ops: res.ops }, ctx, c.text, 0)
   let verdict: true | string
   try {
-    verdict = c.check({ before, after: applied.state, ops: res.ops, ctx, notes: applied.effects.notes })
+    verdict = c.check({ before, after: applied.state, ops: res.ops, ctx, notes: applied.effects.notes, say: applied.effects.say })
   } catch (err) {
     verdict = `check threw: ${(err as Error).message}`
   }
@@ -291,11 +383,12 @@ function pct(xs: number[], p: number): number {
 
 function opsBrief(ops: Op[]): string {
   return ops.filter(o => o.op !== 'say').map((o) => {
+    if (o.op === 'spawn' && (o.set?.altitude !== undefined || o.set?.motion)) return `spawn ${o.kind}×${o.count ?? 1}${o.arrange ? ` ${o.arrange}` : ''} alt ${o.set?.altitude ?? 0} ${o.set?.motion ?? ''}`
     if (o.op === 'spawn') return `spawn ${o.kind}×${o.count ?? 1}${o.arrange ? ` ${o.arrange}` : ''}`
     if (o.op === 'define') return `define ${o.kind}(${o.parts.length})`
     if (o.op === 'modify') return `modify ${JSON.stringify(o.target)}→${JSON.stringify(o.set)}${o.relative ? 'rel' : ''}`
     if (o.op === 'remove') return `remove ${JSON.stringify(o.target)}`
-    if (o.op === 'atmosphere') return `atmo ${o.time ?? ''}${o.fog !== undefined ? ` fog ${o.fog}` : ''}`
+    if (o.op === 'atmosphere') return `atmo ${o.time ?? ''}${o.fog !== undefined ? ` fog ${o.fog}` : ''}${o.weather ? ` ${o.weather}` : ''}${o.event ? ` !${o.event}` : ''}${o.playerScale !== undefined ? ` player×${o.playerScale}` : ''}`
     if (o.op === 'teleport') return `teleport "${o.world}"`
     return o.op
   }).join(' + ')

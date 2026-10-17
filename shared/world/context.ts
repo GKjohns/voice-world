@@ -9,7 +9,7 @@ import { forward, right } from './layout.ts'
 import type { Props, TimeOfDay, Vec3 } from './ops.ts'
 import { DEFAULT_WITHIN, distXZ, entityHeight, gazeEntity, lastBatch } from './select.ts'
 import { summarizeKinds } from './state.ts'
-import type { Entity, OpContext, WorldState } from './types.ts'
+import type { Atmosphere, Entity, OpContext, WorldState } from './types.ts'
 
 // ---------- the trimmed scene (what the client sends) ----------
 
@@ -26,7 +26,7 @@ export interface Scene {
   entities: SceneEntity[]
   /** Learned kinds only (kit kinds are known to the server); parts stripped, the model only needs names and tags. */
   learned: KindDescriptor[]
-  atmosphere: { time: TimeOfDay, fog?: number }
+  atmosphere: { time: TimeOfDay, fog?: number, weather?: Atmosphere['weather'], playerScale?: number }
   place: string
   lastGroup: string | null
   lastLabel?: string
@@ -156,7 +156,8 @@ export function buildContext(state: WorldState & { lastLabel?: string }, ctx: Op
   const placeholders = [...new Set(state.entities.filter(e => !state.kinds[e.kind]).map(e => e.kind))]
   if (placeholders.length) lines.push(`placeholders waiting for a define: ${placeholders.map(k => placeholderKind(k).label).join(', ')}`)
 
-  lines.push(`atmosphere: ${state.atmosphere.time}${state.atmosphere.fog !== undefined ? `, fog ${state.atmosphere.fog}` : ''} · place: ${state.place}`)
+  const at = state.atmosphere
+  lines.push(`atmosphere: ${at.time}${at.fog !== undefined ? `, fog ${at.fog}` : ''}${at.weather ? ` · weather: ${at.weather}` : ''}${at.playerScale ? ` · player scale ${at.playerScale}` : ''} · place: ${state.place}`)
   return lines.join('\n')
 }
 

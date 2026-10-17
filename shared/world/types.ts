@@ -2,7 +2,7 @@
  * Plain world data. No three.js, no Vue: the engine, the tests and the server context builder all share it.
  */
 import type { KindDescriptor } from './kinds.ts'
-import type { Ambient, DroppedOp, Op, Props, TimeOfDay, Vec3 } from './ops.ts'
+import type { Ambient, DroppedOp, Op, Props, SkyEvent, TimeOfDay, Vec3, Weather } from './ops.ts'
 
 export interface Entity {
   id: string // 'pine#14'
@@ -13,6 +13,8 @@ export interface Entity {
   props: Props
   group: string // the batch that spawned it, so "those" and "undo that" act on the whole batch
   hue?: number // per-instance hue jitter from `vary`, so a cluster never looks copy-pasted
+  /** The circle an orbit / gallop / flight follows ([x, z] centre, radius m), resolved by the kernel from `props.around`. */
+  path?: { c: [number, number], r: number }
 }
 
 /** Where the player was looking when they started talking. Deictics resolve against this, not live gaze. */
@@ -37,6 +39,9 @@ export interface Atmosphere {
   time: TimeOfDay
   fog?: number
   ambient?: Ambient
+  weather?: Exclude<Weather, 'clear'>
+  /** The player's size: 0.1 = ant-sized among giants (eye height and stride scale with it). Absent = 1. */
+  playerScale?: number
 }
 
 export interface Batch {
@@ -70,4 +75,8 @@ export interface Effects {
   say: string[]
   teleport?: { world: string, brief?: string }
   notes: string[] // why an op did nothing ("no entities match {tag:'tree'}"), for the op log
+  /** One-shot sky events to play (lightning at a point, a meteor shower…). Never replayed on load. */
+  events?: { kind: SkyEvent, at?: Vec3 }[]
+  /** What actually happened, in words ("40 lantern in the sky 15–45 m up, drifting"), for honest replies. */
+  facts?: string[]
 }

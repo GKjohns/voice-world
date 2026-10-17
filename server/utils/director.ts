@@ -40,8 +40,9 @@ You build whole places. The player said "take me to …"; you get the place name
 
 ## Output
 A JSON array of ops (25–60 of them). One flat op shape; include only the fields an op uses.
-- atmosphere: { op, time, fog, ambient } — FIRST op, always. time: dawn | day | golden | dusk | night | interior. fog 0..1 (0.15 crisp, 0.4 soft, 0.7 thick mist). ambient (a synthesized sound bed): water | wind | room | city | fire | none.
-- spawn: { op, kind, xz: [x, z], yaw?, count?, arrange?, radius?, size?, scale?, color?, text? } (keys in this order; never put time/fog/ambient on a spawn)
+- atmosphere: { op, time, fog, ambient } — FIRST op, always. time: dawn | day | golden | dusk | night | interior. fog 0..1 (0.15 crisp, 0.4 soft, 0.7 thick mist). ambient (a synthesized sound bed): water | wind | room | city | fire | none. weather? (outdoors only, when the brief asks for it): rain | snow | storm | fog | aurora.
+- spawn: { op, kind, xz: [x, z], yaw?, count?, arrange?, radius?, size?, scale?, color?, altitude?, motion?, text? } (keys in this order; never put time/fog/ambient on a spawn)
+  - altitude = metres above the ground, or "sky" (spread 15–45 m up); motion = hover | drift | orbit | fly | wander | gallop | spin | sway. Life in the air makes a place feel alive: birds circling (bird, count 6–9, altitude 20, motion orbit), lanterns drifting over a festival or lake at night (lantern, count 20–40, scatter, radius 30–40, altitude "sky", motion drift).
   - xz = where it stands, in metres, in the ROOM FRAME (below). Always give xz.
   - yaw = degrees the object turns in the room frame. 0 = its front faces +z (back toward the player's start).
   - count + arrange (cluster | line | ring | grid | scatter) + radius make groups around xz in ONE op: "8 pines, cluster, radius 6" or "6 stools, line" (lines run along room x, spaced automatically; nature gets natural size jitter). Prefer one counted op over many single ones.
@@ -73,6 +74,9 @@ A JSON array of ops (25–60 of them). One flat op shape; include only the field
 - City streets: road straight ahead (xz [0, -16], yaw 0), dark floors as sidewalks either side (x ≈ ±5.5, size [6, 44], color #2a2d34), storefronts shoulder to shoulder every 6.5 m down both sides facing the road (left side yaw 90 at x ≈ -9, right side yaw -90 at x ≈ 9), each with its own text (the sign over its door) and color, towers behind them, 4–6 lamps along the curbs (x ≈ ±3.4, staggered, 10 m apart), 3–5 cars parked at the curbs (x ≈ ±1.8, yaw 0 or 180), and a big neon_sign or two on the far facades. Nothing else stands on the road.
 - Night scenes: give buildings, towers and storefronts dark colours (#1e222c–#3a3e4a) so lit windows, lamps and neon carry the light; daylight scenes use lighter, warmer colours.
 - Use the brief's palette and mood: tint walls, floors and neon with color.
+- Weather and motion when the brief has them: "rainy" / "stormy" / "snowy" / "under the northern lights" → atmosphere weather; a "festival of lights" → drifting lanterns; a beach or harbour → a few circling birds. Never put weather or sky things indoors.
+- "Around me" / "surround me" / "all around" (a city, a forest, a crowd, a ring of mountains): build 360°, not a street ahead. The player must see the place when they turn around: put things on all four sides (+z behind them too), each layer nearest-first so it radiates outward. For a city use a crossroads at [0, 0] (Worked example C). Groups around the player: xz [0, 0] with arrange ring and a radius (they face the centre).
+- Landscapes are real scale. Hills (16 m) at 40–90 m; cliffs, canyons and waterfalls at 60–150 m; mountain, mountain_range, volcano, giant_moon and planet far out on the skyline: xz 400–900 m away (e.g. mountain_range xz [0, -700]; a ring of ranges at [0, -700], [650, 250], [-650, 250]). They rise out of the ground on their own; "anchor horizon" in the notes means exactly this. Anything you place on a hill or cliff stands on its surface automatically.
 
 ## Catalog
 ${catalog()}
@@ -117,6 +121,37 @@ ${catalog()}
 {"op":"spawn","kind":"embers","xz":[0,-5]},
 {"op":"spawn","kind":"fireflies","xz":[0,-10],"size":[30,24]},
 {"op":"say","text":"Fire's lit. Stay as long as you like."}]
+
+## Worked example C — "build a city around me" (brief: "A neon city at night that surrounds the player: a crossroads, shops on every corner, towers all around.")
+[{"op":"atmosphere","time":"night","fog":0.3,"ambient":"city"},
+{"op":"spawn","kind":"road","xz":[0,-22]},
+{"op":"spawn","kind":"road","xz":[0,22]},
+{"op":"spawn","kind":"road","xz":[-22,0],"yaw":90},
+{"op":"spawn","kind":"road","xz":[22,0],"yaw":90},
+{"op":"spawn","kind":"lamp","xz":[-3.6,-3.6]},
+{"op":"spawn","kind":"lamp","xz":[3.6,-3.6]},
+{"op":"spawn","kind":"lamp","xz":[-3.6,3.6]},
+{"op":"spawn","kind":"lamp","xz":[3.6,3.6]},
+{"op":"spawn","kind":"storefront","xz":[-9,-11],"yaw":90,"color":"#2a2f3c","text":"NOODLES"},
+{"op":"spawn","kind":"storefront","xz":[9,-11],"yaw":-90,"color":"#3a2a3c","text":"ARCADE"},
+{"op":"spawn","kind":"storefront","xz":[-9,11],"yaw":90,"color":"#23303a","text":"RAMEN"},
+{"op":"spawn","kind":"storefront","xz":[9,11],"yaw":-90,"color":"#30283a","text":"KARAOKE"},
+{"op":"spawn","kind":"storefront","xz":[-17,-9],"color":"#2c2a36","text":"BAR"},
+{"op":"spawn","kind":"storefront","xz":[17,-9],"color":"#26323a","text":"TATTOO"},
+{"op":"spawn","kind":"storefront","xz":[-17,9],"yaw":180,"color":"#342a30","text":"DINER"},
+{"op":"spawn","kind":"storefront","xz":[17,9],"yaw":180,"color":"#2a3034","text":"HOTEL"},
+{"op":"spawn","kind":"storefront","xz":[-9,-24],"yaw":90,"color":"#2a2d3a","text":"BOOKS"},
+{"op":"spawn","kind":"storefront","xz":[9,-24],"yaw":-90,"color":"#2e2a3a","text":"PHO"},
+{"op":"spawn","kind":"storefront","xz":[-9,24],"yaw":90,"color":"#2a3238","text":"VINYL"},
+{"op":"spawn","kind":"storefront","xz":[9,24],"yaw":-90,"color":"#382a30","text":"SUSHI"},
+{"op":"spawn","kind":"car","xz":[1.8,-14]},
+{"op":"spawn","kind":"car","xz":[-1.8,15],"yaw":180,"color":"#3a6fc0"},
+{"op":"spawn","kind":"car","xz":[14,1.8],"yaw":90,"color":"#e8c547"},
+{"op":"spawn","kind":"tower","xz":[0,0],"count":16,"arrange":"ring","radius":50,"color":"#1e222c"},
+{"op":"spawn","kind":"tower","xz":[0,0],"count":20,"arrange":"ring","radius":78,"scale":1.4,"color":"#1a1d26"},
+{"op":"spawn","kind":"neon_sign","xz":[0,-40],"color":"#ff4fa3","text":"TOKYO 9"},
+{"op":"say","text":"Turn around. It's all yours."}]
+(Lamps stand on the four corners, never on a road. Four arms of road meet under the player; shops line both sides of every arm; two rings of towers close the skyline in every direction.)
 `
 
 export interface DirectorRequest {

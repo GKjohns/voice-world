@@ -134,6 +134,8 @@ function handleEvent(event: RealtimeServerEvent) {
       break
     case 'response-done':
       responsePending.value = false
+      // A reply with no wish in it (chit-chat): the gathering glow from speech-start lets go.
+      if (!acking && !ackWanted) useIntent().release()
       if (acking) {
         acking = false
       } else if (ackWanted) {

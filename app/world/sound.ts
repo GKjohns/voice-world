@@ -7,7 +7,7 @@
  * Everything runs through one master gain (M mutes it) into a limiter, with a small synthetic reverb on the
  * one-shots. Audio only starts after a user gesture (browsers block it before one).
  */
-import type { Ambient } from '#shared/world/ops'
+import type { Ambient, Weather } from '#shared/world/ops'
 
 const BED_LEVEL = 0.16
 const SFX_LEVEL = 0.5
@@ -25,6 +25,10 @@ export class Ambience {
   private bed: Bed | null = null
   private wanted: Ambient | undefined
   private current: Ambient | undefined
+  // Loop 2: the weather has its own bed (rain on top of a lake's lapping), switched separately.
+  private weatherBed: Bed | null = null
+  private weatherWanted: Weather | undefined
+  private weatherCurrent: Weather | undefined
   private voices: number[] = [] // start times (ctx seconds) of recent one-shots, for a polyphony cap
   muted = false
 
@@ -73,13 +77,26 @@ export class Ambience {
     return this.muted
   }
 
+  /** Rain hiss, a storm's downpour and gusts, snow's hush. 'clear', 'fog' and 'aurora' are silent. */
+  setWeather(w: Weather | undefined): void {
+    this.weatherWanted = w === 'rain' || w === 'storm' || w === 'snow' ? w : undefined
+    this.apply()
+  }
+
   dispose(): void {
+    this.weatherBed?.stop()
     this.bed?.stop()
     void this.ctx?.close()
     this.ctx = null
   }
 
   private apply(): void {
+    if (this.ctx && this.beds && this.weatherWanted !== this.weatherCurrent) {
+      this.weatherBed?.stop()
+      this.weatherBed = null
+      this.weatherCurrent = this.weatherWanted
+      if (this.weatherWanted) this.weatherBed = makeBed(this.ctx, this.beds, this.weatherWanted)
+    }
     if (!this.ctx || !this.beds || this.wanted === this.current) return
     this.bed?.stop()
     this.bed = null
@@ -236,6 +253,47 @@ export class Ambience {
     tone(v, 'sine', 55, 41, 0.3, 2.6, 0.35)
   }
 
+  /**
+   * Thunder `distance` metres away, arriving `delayMs` from now: a sharp crack when it's close, then a long
+   * rolling rumble of low noise whose swells come and go. Never polyphony-capped away (it's the storm).
+   */
+  sfxThunder(distance: number, delayMs = 0): void {
+    const ctx = this.ctx
+    if (!ctx || !this.sfx || !this.wet || this.muted || ctx.state !== 'running') return
+    const v: Voice = { ctx, t: ctx.currentTime + Math.max(0, delayMs) / 1000, dry: this.sfx, wet: this.wet }
+    const near = Math.max(0, Math.min(1, 1 - distance / 400))
+    if (near > 0.55) noiseHit(v, 'highpass', 1800, 0.35, 0.5 * near)
+    const len = 3.2 + 2.5 * (1 - near) + Math.random()
+    const g = ctx.createGain()
+    g.gain.setValueAtTime(0.0001, v.t)
+    g.gain.exponentialRampToValueAtTime(0.5 + 0.5 * near, v.t + 0.06 + 0.25 * (1 - near))
+    // Rolls: two or three swells as the sound comes back off far clouds.
+    let at = v.t + 0.4
+    for (let i = 0; i < 3; i++) {
+      at += 0.5 + Math.random() * 0.9
+      g.gain.exponentialRampToValueAtTime(0.18 + Math.random() * 0.3, at)
+    }
+    g.gain.exponentialRampToValueAtTime(0.0001, v.t + len)
+    g.connect(v.dry)
+    g.connect(v.wet)
+    const src = noise(ctx, true)
+    const lp = ctx.createBiquadFilter()
+    lp.type = 'lowpass'
+    lp.frequency.setValueAtTime(900 * (0.4 + near), v.t)
+    lp.frequency.exponentialRampToValueAtTime(140, v.t + len)
+    src.connect(lp).connect(g)
+    src.start(v.t)
+    src.stop(v.t + len + 0.1)
+    tone(v, 'sine', 48, 32, 0.08, len * 0.7, 0.4 + 0.3 * near)
+  }
+
+  /** A shooting star: a faint glassy fall. */
+  sfxStar(delayMs = 0): void {
+    const v = this.slot(delayMs)
+    if (!v) return
+    tone(v, 'sine', 2600, 1300, 0.01, 0.9, 0.035, true)
+  }
+
   /** Teleport in: a warm open chord blooming as the new place appears. */
   sfxArrive(delayMs = 0): void {
     const v = this.slot(delayMs, 3)
@@ -321,7 +379,7 @@ function noise(ctx: AudioContext, brown: boolean): AudioBufferSourceNode {
 }
 
 /** One bed: noise → filter → gain, with a slow LFO on the gain (waves, gusts) or the filter. */
-function makeBed(ctx: AudioContext, out: AudioNode, kind: Ambient): Bed {
+function makeBed(ctx: AudioContext, out: AudioNode, kind: Ambient | Weather): Bed {
   const fade = ctx.createGain()
   fade.gain.value = 0
   fade.gain.setTargetAtTime(1, ctx.currentTime, 1.2)
@@ -364,6 +422,16 @@ function makeBed(ctx: AudioContext, out: AudioNode, kind: Ambient): Bed {
     layer(true, 'lowpass', 300, 0.7, 0.7, 0.4, 0.2)
     // Crackle: sparse clicks from highpassed noise with a fast, jittery LFO.
     layer(false, 'highpass', 2600, 0.7, 0.05, 7.3, 0.05)
+  } else if (kind === 'rain') {
+    // A steady hiss of drops with a softer patter underneath.
+    layer(false, 'bandpass', 3800, 0.5, 0.32, 0.11, 0.05)
+    layer(false, 'lowpass', 900, 0.6, 0.35, 0.17, 0.08)
+  } else if (kind === 'storm') {
+    layer(false, 'bandpass', 3000, 0.45, 0.5, 0.13, 0.1)
+    layer(true, 'lowpass', 500, 0.7, 0.8, 0.09, 0.35)
+    layer(false, 'bandpass', 420, 1.3, 0.3, 0.06, 240, true) // gusts
+  } else if (kind === 'snow') {
+    layer(false, 'bandpass', 380, 1.4, 0.18, 0.05, 150, true) // a hushed wind
   }
   return {
     stop: () => {

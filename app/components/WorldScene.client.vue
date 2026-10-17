@@ -57,8 +57,7 @@ function onKey(e: KeyboardEvent) {
     e.preventDefault()
     world.undo()
   }
-  // M mutes the ambient sound bed (Sprint 4).
-  if (!e.metaKey && !e.ctrlKey && e.key.toLowerCase() === 'm') renderer?.sound.toggleMute()
+  // M (mute) lives in HudPresence: a leading M may be the first letter of "make…".
 }
 </script>
 

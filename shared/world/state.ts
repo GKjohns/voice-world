@@ -5,11 +5,12 @@
  */
 import { KIT, isKitKind, learnedKind } from './kinds.ts'
 import type { KindDescriptor } from './kinds.ts'
-import { deOverlap, hashSeed, layout, resolveAnchor, rng } from './layout.ts'
+import { altitudeY, capAltitude, deOverlap, hashSeed, layout, resolveAnchor, rng } from './layout.ts'
+import { honestSay } from './honesty.ts'
 import type { Placed } from './layout.ts'
 import { parseOps } from './ops.ts'
-import type { DroppedOp, Op, Props } from './ops.ts'
-import { entityRadius, kindOf, select } from './select.ts'
+import type { DroppedOp, Op, Props, SkyEvent, Vec3 } from './ops.ts'
+import { entityHeight, entityRadius, kindOf, select } from './select.ts'
 import type { Batch, Effects, Entity, OpContext, WorldState } from './types.ts'
 
 export const WORLD_VERSION = 1
@@ -28,7 +29,7 @@ export function createWorld(): WorldState {
 }
 
 export function emptyEffects(): Effects {
-  return { spawned: [], modified: [], removed: [], redefined: [], atmosphere: false, say: [], notes: [] }
+  return { spawned: [], modified: [], removed: [], redefined: [], atmosphere: false, say: [], notes: [], events: [], facts: [] }
 }
 
 interface StepResult {
@@ -36,6 +37,8 @@ interface StepResult {
   say?: string
   notes: string[]
   teleport?: Effects['teleport']
+  facts?: string[]
+  event?: { kind: SkyEvent, at?: Vec3 }
 }
 
 /**
@@ -48,6 +51,8 @@ export function applyOp(state: WorldState, op: Op, ctx: OpContext): { state: Wor
   if (res.say) effects.say.push(res.say)
   effects.notes.push(...res.notes)
   if (res.teleport) effects.teleport = res.teleport
+  if (res.facts) effects.facts!.push(...res.facts)
+  if (res.event) effects.events!.push(res.event)
   return { state: res.state, effects }
 }
 
@@ -57,22 +62,31 @@ function step(state: WorldState, op: Op, ctx: OpContext): StepResult {
 
   switch (op.op) {
     case 'spawn': {
+      // "A castle on that hill" with no hill in the world: raise the hill at the gaze first, then build on it.
+      const of = op.at?.anchor === 'target' && op.at.side === 'on_top' ? op.at.of : undefined
+      const landform = of?.kind ?? of?.tag
+      if (landform && landform !== op.kind && KIT[landform]?.surface && !select(state, of!, ctx).length) {
+        const base = step(state, { op: 'spawn', kind: landform, at: { anchor: 'gaze' } } as Op, ctx)
+        const top = step(base.state, op, ctx)
+        return { ...top, notes: [`no ${landform} here: raised one first`, ...base.notes, ...top.notes], facts: [...(base.facts ?? []), ...(top.facts ?? [])] }
+      }
       const notes: string[] = []
       const desc = kindOf(state, op.kind)
       if (!state.kinds[op.kind]) notes.push(`unknown kind "${op.kind}": holding its spot with a placeholder until it's defined`)
       const out = layout(state, { desc, count: op.count ?? 1, arrange: op.arrange, at: op.at, radius: op.radius, vary: op.vary, facing: op.facing, xz: op.xz, yaw: op.yaw, props: op.set }, ctx, rand)
       notes.push(...out.notes)
       let nextId = state.nextId
-      const spawned: Entity[] = out.placed.map((p) => {
+      const spawned: Entity[] = withPaths(out.placed.map((p) => {
         const props: Props = { ...op.set }
         const scale = round3(p.scale * (op.set?.scale ?? 1))
         if (scale !== 1) props.scale = scale
         else delete props.scale
+        if (props.motion === 'none') delete props.motion
         const e: Entity = { id: `${op.kind}#${nextId++}`, kind: op.kind, tags: [...desc.tags], pos: p.pos, rotY: round3(p.rotY), props, group }
         if (p.hue) e.hue = p.hue
         return e
-      })
-      return { state: { ...state, entities: [...state.entities, ...spawned], nextId, lastGroup: group }, notes }
+      }), ctx)
+      return { state: { ...state, entities: [...state.entities, ...spawned], nextId, lastGroup: group }, notes, facts: skyFacts(spawned, op.set) }
     }
 
     case 'define': {
@@ -87,8 +101,29 @@ function step(state: WorldState, op: Op, ctx: OpContext): StepResult {
       const targets = select(state, op.target, ctx)
       if (!targets.length) return { state, notes: [`modify: nothing matches ${JSON.stringify(op.target)}`] }
       const ids = new Set(targets.map(t => t.id))
-      const entities = state.entities.map(e => ids.has(e.id) ? { ...e, props: mergeProps(e.props, op.set, op.relative ?? false, kindOf(state, e.kind)) } : e)
-      return { state: { ...state, entities }, notes: [] }
+      const { altitude, ...rest } = op.set
+      const rel = op.relative ?? false
+      const changed0 = state.entities.filter(e => ids.has(e.id)).map((e) => {
+        const props = Object.keys(rest).length ? mergeProps(e.props, rest, rel, kindOf(state, e.kind)) : { ...e.props }
+        let pos = e.pos
+        if (altitude !== undefined) {
+          // "Higher" multiplies the height it floats at; a number or 'sky' sets it.
+          const y0 = rel && typeof altitude === 'number' ? Math.min(150, e.pos[1] * altitude) : altitudeY(altitude, rand, targets.length)
+          const y = capAltitude(state, e.pos[0], e.pos[2], y0, entityHeight(state, e), rand)
+          pos = [e.pos[0], round3(y), e.pos[2]]
+          props.altitude = altitude === 'sky' ? 'sky' : round3(y)
+          if (y <= 0) delete props.altitude
+        }
+        if (props.motion === 'none') delete props.motion
+        const next: Entity = { ...e, props, pos }
+        if (!props.motion) delete next.path
+        return next
+      })
+      // A new motion (or a new circle) resolves its path for the whole set at once, so a herd shares one loop.
+      const changed = op.set.motion || op.set.around || op.set.range ? withPaths(changed0, ctx) : changed0
+      const byId = new Map(changed.map(e => [e.id, e]))
+      const entities = state.entities.map(e => byId.get(e.id) ?? e)
+      return { state: { ...state, entities }, notes: [], facts: skyFacts(changed, op.set) }
     }
 
     case 'move': {
@@ -127,13 +162,27 @@ function step(state: WorldState, op: Op, ctx: OpContext): StepResult {
       return { state: replayLog(state.log.slice(0, -1)), notes: [`undid ${undone.id}${undone.label ? ` (“${undone.label}”)` : ''}`] }
     }
 
-    case 'atmosphere':
-      return { state: { ...state, atmosphere: stripAtmos({ time: op.time ?? state.atmosphere.time, fog: op.fog ?? state.atmosphere.fog, ambient: op.ambient ?? state.atmosphere.ambient }) }, notes: [] }
+    case 'atmosphere': {
+      const a = state.atmosphere
+      const weather = op.weather === undefined ? a.weather : op.weather === 'clear' ? undefined : op.weather
+      // Fog as weather thickens the air; "clear skies" thins whatever fog the weather brought.
+      const fog = op.fog ?? (op.weather === 'fog' ? 0.75 : op.weather === 'clear' && a.weather === 'fog' ? 0 : a.fog)
+      const playerScale = op.playerScale === undefined ? a.playerScale : op.playerScale
+      const facts: string[] = []
+      if (op.weather) facts.push(`weather → ${op.weather}`)
+      if (op.event) facts.push(`sky event: ${op.event}`)
+      if (op.playerScale !== undefined) facts.push(op.playerScale === 1 ? 'player back to normal size' : `player scale → ${op.playerScale} (the world looms ${round3(1 / op.playerScale)}× larger)`)
+      // A sunrise sweep ends in day; lightning strikes where you look (when that's close enough to see).
+      const time = op.event === 'sunrise' && !op.time ? 'day' : op.time ?? a.time
+      const event = op.event ? { kind: op.event, ...(op.event === 'lightning' && (ctx.gaze.dist ?? 99) < 90 ? { at: ctx.gaze.point } : {}) } : undefined
+      return { state: { ...state, atmosphere: stripAtmos({ time, fog, ambient: op.ambient ?? a.ambient, weather, playerScale }) }, notes: [], facts, event }
+    }
 
     case 'teleport':
       // Clears the stage (and the old place's sound); the Director streams the new place into this same
       // batch afterwards (extendLastBatch), so the log replays the built scene without calling a model.
-      return { state: { ...state, entities: [], place: op.world, lastGroup: null, atmosphere: stripAtmos({ ...state.atmosphere, ambient: undefined }) }, notes: [], teleport: { world: op.world, brief: op.brief } }
+      // A new place starts dry and at your own size (the Director sets its own weather).
+      return { state: { ...state, entities: [], place: op.world, lastGroup: null, atmosphere: stripAtmos({ ...state.atmosphere, ambient: undefined, weather: undefined, playerScale: undefined }) }, notes: [], teleport: { world: op.world, brief: op.brief } }
 
     case 'say':
       return { state, say: op.text, notes: [] }
@@ -144,7 +193,63 @@ function stripAtmos(a: WorldState['atmosphere']): WorldState['atmosphere'] {
   const out: WorldState['atmosphere'] = { time: a.time }
   if (a.fog !== undefined) out.fog = a.fog
   if (a.ambient !== undefined && a.ambient !== 'none') out.ambient = a.ambient
+  if (a.weather !== undefined) out.weather = a.weather
+  if (a.playerScale !== undefined && Math.abs(a.playerScale - 1) > 1e-3) out.playerScale = a.playerScale
   return out
+}
+
+const PATHED = new Set(['orbit', 'gallop', 'fly'])
+const MIN_R: Record<string, number> = { orbit: 8, gallop: 10, fly: 12 }
+
+/**
+ * Resolve the circle each orbit / gallop / flight follows. Around the player or the gaze: that point, at the
+ * thing's own distance (never tighter than a natural minimum). Around 'self': the loop sits just beyond the
+ * group (away from the player), so every member starts ON it and the herd runs one shared circle in a band.
+ */
+function withPaths(list: Entity[], ctx: OpContext): Entity[] {
+  const moving = list.filter(e => e.props.motion && PATHED.has(e.props.motion))
+  if (!moving.length) return list
+  const motion = moving[0]!.props.motion!
+  const around = moving[0]!.props.around ?? 'self'
+  const range = moving[0]!.props.range
+  let c: [number, number]
+  if (around === 'player') c = [ctx.player.pos[0], ctx.player.pos[2]]
+  else if (around === 'gaze') c = [ctx.gaze.point[0], ctx.gaze.point[2]]
+  else {
+    const cx = moving.reduce((s, e) => s + e.pos[0], 0) / moving.length
+    const cz = moving.reduce((s, e) => s + e.pos[2], 0) / moving.length
+    const R = range ?? MIN_R[motion]! * 1.25
+    const dx = cx - ctx.player.pos[0]
+    const dz = cz - ctx.player.pos[2]
+    const d = Math.hypot(dx, dz)
+    const away: [number, number] = d > 0.5 ? [dx / d, dz / d] : [-Math.sin(ctx.player.yaw), -Math.cos(ctx.player.yaw)]
+    c = [cx + away[0] * R, cz + away[1] * R]
+  }
+  const ids = new Set(moving.map(e => e.id))
+  return list.map((e) => {
+    if (!ids.has(e.id)) return e
+    const own = Math.hypot(e.pos[0] - c[0], e.pos[2] - c[1])
+    const r = around === 'self' ? Math.max(3, own) : Math.max(range ?? MIN_R[motion]!, own)
+    return { ...e, path: { c: [round3(c[0]), round3(c[1])] as [number, number], r: round3(r) } }
+  })
+}
+
+/** What the batch did to the sky and to motion, in words the genie can repeat ("40 lantern in the sky 15–45 m up, drifting"). */
+function skyFacts(list: Entity[], set: Props | undefined): string[] | undefined {
+  if (!set || !list.length) return undefined
+  const bits: string[] = []
+  if (set.altitude !== undefined) {
+    const ys = list.map(e => e.pos[1])
+    const lo = Math.round(Math.min(...ys))
+    const hi = Math.round(Math.max(...ys))
+    bits.push(lo > 0 || hi > 0 ? `in the sky ${lo === hi ? lo : `${lo}–${hi}`} m up` : 'back on the ground')
+  }
+  if (set.motion) bits.push(set.motion === 'none' ? 'now still' : `${set.motion}${set.around === 'player' ? ' around the player' : ''}`)
+  if (set.glow !== undefined) bits.push(set.glow > 0 ? 'glowing' : 'not glowing')
+  if (set.light !== undefined) bits.push(set.light > 0 ? 'casting light' : 'no longer casting light')
+  if (!bits.length) return undefined
+  const kinds = [...new Set(list.map(e => e.kind))].join('/')
+  return [`${list.length} ${kinds}: ${bits.join(', ')}`]
 }
 
 function mergeProps(props: Props, set: Props, relative: boolean, desc: KindDescriptor): Props {
@@ -191,6 +296,8 @@ function commitOps(state: WorldState, ops: Op[], dropped: DroppedOp[], ctx: OpCo
       if (res.say) extras.say.push(res.say)
       extras.notes.push(...res.notes)
       if (res.teleport) extras.teleport = res.teleport
+      if (res.facts) extras.facts!.push(...res.facts)
+      if (res.event) extras.events!.push(res.event)
     }
     return s
   }
@@ -206,7 +313,9 @@ function commitOps(state: WorldState, ops: Op[], dropped: DroppedOp[], ctx: OpCo
     batch = { id: `g${s.nextGroup}`, label, ops: worldOps, dropped, ctx, at }
     s = { ...s, log: [...s.log, batch], nextGroup: s.nextGroup + 1 }
   }
-  const effects: Effects = { ...diffStates(state, s), say: extras.say, notes: extras.notes, teleport: extras.teleport }
+  // The genie only claims what this batch actually did.
+  const say = extras.say.map(t => honestSay(t, worldOps, s, !!changed || !!extras.events!.length))
+  const effects: Effects = { ...diffStates(state, s), say, notes: extras.notes, teleport: extras.teleport, events: extras.events, facts: extras.facts }
   return { state: s, effects, ops, dropped, batch }
 }
 
@@ -221,17 +330,20 @@ export function extendLastBatch(state: WorldState, raw: unknown): BatchResult {
   if (!b) return { state, effects: { ...emptyEffects(), notes: ['nothing to extend'] }, ops: [], dropped }
   const extras = emptyEffects()
   const keep = ops.filter(o => o.op !== 'undo' && o.op !== 'teleport' && o.op !== 'say')
-  for (const o of ops) if (o.op === 'say') extras.say.push(o.text)
   // Step with the batch's own group number (nextGroup was bumped when it was committed).
   let s: WorldState = { ...state, nextGroup: state.nextGroup - 1 }
   for (const op of keep) {
     const res = step(s, op, b.ctx)
     s = res.state
     extras.notes.push(...res.notes)
+    if (res.facts) extras.facts!.push(...res.facts)
+    if (res.event) extras.events!.push(res.event)
   }
   const batch: Batch = { ...b, ops: [...b.ops, ...keep], dropped: [...b.dropped, ...dropped] }
   s = { ...s, nextGroup: state.nextGroup, log: [...state.log.slice(0, -1), batch] }
-  return { state: s, effects: { ...diffStates(state, s), say: extras.say, notes: extras.notes }, ops: keep, dropped, batch }
+  // A say streamed in after the sentence's ops is checked against everything the batch did.
+  for (const o of ops) if (o.op === 'say') extras.say.push(honestSay(o.text, batch.ops, s, true))
+  return { state: s, effects: { ...diffStates(state, s), say: extras.say, notes: extras.notes, events: extras.events, facts: extras.facts }, ops: keep, dropped, batch }
 }
 
 /** Rebuild a world from its op log. Ops in a log are already strict, so they're applied as-is. */
@@ -263,12 +375,14 @@ export function diffStates(a: WorldState, b: WorldState): Effects {
     const prev = a.kinds[kind]
     if (desc.learned && prev !== desc && JSON.stringify(prev?.parts) !== JSON.stringify(desc.parts)) fx.redefined.push(kind)
   }
-  fx.atmosphere = a.atmosphere.time !== b.atmosphere.time || a.atmosphere.fog !== b.atmosphere.fog || a.atmosphere.ambient !== b.atmosphere.ambient
+  const aa = a.atmosphere
+  const ba = b.atmosphere
+  fx.atmosphere = aa.time !== ba.time || aa.fog !== ba.fog || aa.ambient !== ba.ambient || aa.weather !== ba.weather || aa.playerScale !== ba.playerScale
   return fx
 }
 
 function entityKey(e: Entity): string {
-  return JSON.stringify([e.pos, e.rotY, e.props, e.tags, e.hue])
+  return JSON.stringify([e.pos, e.rotY, e.props, e.tags, e.hue, e.path])
 }
 
 // ---------- summaries (the model's view of the world, and the HUD's) ----------

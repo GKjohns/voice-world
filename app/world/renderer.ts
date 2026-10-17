@@ -5,10 +5,11 @@
  */
 import * as THREE from 'three'
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js'
-import { kindHeight } from '#shared/world/kinds'
+import { isTerrain, kindHeight } from '#shared/world/kinds'
 import type { Fall, KindDescriptor } from '#shared/world/kinds'
 import type { Vec3 } from '#shared/world/ops'
 import { kindOf } from '#shared/world/select'
+import { groundHeight } from '#shared/world/terrain'
 import type { Effects, Entity, GazeSnapshot, Player, WorldState } from '#shared/world/types'
 import { ATMOSPHERES } from './atmosphere'
 import type { AtmospherePreset } from './atmosphere'
@@ -17,19 +18,25 @@ import { applyMaterialProps, gazeNdc, lookTargets } from './look'
 import { buildFromParts } from './parts'
 import { Ambience } from './sound'
 import { Gathering } from './fx/anticipate'
+import { Placeholder } from './fx/placeholder'
 import { beam, dissolve, shimmer, shockwave, sparkle } from './fx/arrival'
 import type { Fx } from './fx/common'
 import { solveFrame } from './fx/frame'
 import type { FrameBox, View } from './fx/frame'
 import { Vortex } from './fx/vortex'
+import { applyPose, blendedPose } from './fx/motion'
+import { WeatherFx } from './fx/weather'
+import { softDot } from './fx/common'
 
 const EYE = 1.6
 const WALK = 6
 const RUN = 14
+const MAX_SLOPE = 1 // rise per metre (over a 2.5 m stride) you can walk up (45°): hills yes, a peak's flanks slide you along them
 const MAX_LIGHTS = 10
 const REVEAL_TIGHT = 4.5 // fog radius (m) around the player while a place is being summoned
 const BIG = 8 // metres tall: arrivals this big get the beam from the sky, the thump and the shake
 const MID = 3
+const GLOW_TINT = new THREE.Color('#ffe2a8')
 const PARTICLE_BUDGET = 1600 // dissolve sparks per sync (a teleport dissolves the whole old world)
 
 interface Item {
@@ -130,10 +137,22 @@ export class WorldRenderer {
   private camMove: { from: View, to: View, start: number, dur: number } | null = null
   private shake: { amp: number, start: number, dur: number } | null = null
   private lift = 0
+  /** Where you stood before the god view lifted you, and where it put you (to land you again later). */
+  private preLift: { from: View, to: View } | null = null
+  private wallRay = new THREE.Raycaster()
+  /** The terrain under your feet, smoothed (the camera rides on it). */
+  private groundY = 0
   private lastInput = 0
   private dt = 0
   private vortex = new Vortex()
   private gathering = new Gathering()
+  // Loop 2 (sky): weather and sky events, per-item motion clocks, the player's size.
+  private weather = new WeatherFx()
+  private atmosBase: AtmospherePreset = { ...ATMOSPHERES.dusk }
+  private motionStart = new Map<string, { key: string, t0: number }>()
+  private playerScale = 1
+  private playerScaleTo = 1
+  private forming = new Placeholder()
   private revealChord = false
   private rings = 0 // heavy-landing budget per sync, so a global scale-up isn't 40 overlapping shockwaves
 
@@ -156,7 +175,8 @@ export class WorldRenderer {
     this.pmrem = new THREE.PMREMGenerator(this.renderer)
     this.scene.environment = this.pmrem.fromScene(new RoomEnvironment(), 0.04).texture
 
-    this.camera = new THREE.PerspectiveCamera(65, w / h, 0.1, 600)
+    // Far plane well past the horizon anchor (300–1200 m) so mountain ranges and moons fit in the frustum.
+    this.camera = new THREE.PerspectiveCamera(65, w / h, 0.1, 3200)
     this.camera.position.set(0, EYE, 0)
 
     this.hemi = new THREE.HemisphereLight(0xbfd4ff, 0x3a3328, 1)
@@ -168,7 +188,7 @@ export class WorldRenderer {
     Object.assign(this.sun.shadow.camera, { left: -45, right: 45, top: 45, bottom: -45, near: 1, far: 220 })
     this.scene.add(this.hemi, this.sun, this.sun.target)
 
-    this.ground = new THREE.Mesh(new THREE.PlaneGeometry(1200, 1200), new THREE.MeshStandardMaterial({ color: 0x2c3340, roughness: 1 }))
+    this.ground = new THREE.Mesh(new THREE.PlaneGeometry(6000, 6000), new THREE.MeshStandardMaterial({ color: 0x2c3340, roughness: 1 }))
     this.ground.rotation.x = -Math.PI / 2
     this.ground.receiveShadow = true
     this.ground.name = 'ground'
@@ -229,12 +249,16 @@ export class WorldRenderer {
     this.highlight = ring(0.94, 1, 0xffffff, 0.45) // unit ring scaled to the hovered entity's footprint
     this.ghost = ring(1.5, 1.8, 0x7dd3a8, 0)
     this.scene.add(this.reticle, this.highlight, this.ghost)
-    this.scene.add(this.vortex.obj, this.gathering.obj)
+    this.scene.add(this.vortex.obj, this.gathering.obj, this.forming.obj)
+    this.scene.add(this.weather.obj)
+    this.weather.onThunder = (d, ms) => this.sound.sfxThunder(d, ms)
+    this.weather.onStar = () => this.sound.sfxStar()
 
     this.scene.fog = new THREE.Fog(0x2a3550, 20, 140)
     this.applyAtmosphere(ATMOSPHERES.dusk)
 
     this.raycaster.camera = this.camera
+    this.wallRay.camera = this.camera // belt and braces: a Sprite's raycast reads it
     this.raycaster.far = 160
     this.bindInput()
     this.ro = new ResizeObserver(() => this.resize())
@@ -255,6 +279,12 @@ export class WorldRenderer {
     const removeAt = fx?.teleport ? now + 520 : now
     // Anything landing answers the wish, so the "world listens" glow lets go.
     if (fx && (fx.spawned.length || fx.modified.length || fx.removed.length || fx.teleport)) this.gathering.set(null)
+    // The forming silhouette collapses into what arrived (or just fades if the wish changed something else).
+    if (fx && this.forming.active) {
+      const first = fx.spawned.map(id => wanted.get(id)).find(e => !!e)
+      if (first) this.forming.resolve(new THREE.Vector3(first.pos[0], 0, first.pos[2]))
+      else if (fx.modified.length || fx.removed.length || fx.teleport) this.forming.set(null)
+    }
 
     // Removals first (dissolve into sparks), including anything the effects missed.
     const removed = new Set(fx?.removed ?? [])
@@ -339,14 +369,29 @@ export class WorldRenderer {
 
     if (!prev || fx?.atmosphere || prev.atmosphere !== state.atmosphere) this.setAtmosphere(state, prev ? 900 : 0)
     this.sound.set(state.atmosphere.ambient)
+    // Weather, sky events and the player's size (Loop 2). Events are one-shots: a page load never replays them.
+    this.weather.set(state.atmosphere.weather)
+    this.sound.setWeather(state.atmosphere.weather)
+    this.setPlayerScale(state.atmosphere.playerScale ?? 1, prev ? 1800 : 0)
+    if (prev) {
+      for (const ev of fx?.events ?? []) {
+        if (ev.kind === 'sunrise') this.sunrise()
+        else this.weather.event(ev.kind, this.camera, ev.at)
+      }
+    }
     this.budgetLights()
 
     // Always frame the wish: what just arrived or changed shape should end up in shot, foot to top.
     if (fanfare && !this.reveal && !fx?.teleport) {
       const news = fanfare ? spawned.map(id => wanted.get(id)!) : []
       const framed = [...news, ...reshaped].filter(e => this.frameable(e))
-      if (framed.length) this.frameWish(framed, swelling)
-      else this.settleLift(state)
+      // Lifted by a scale-up and this wish isn't another one: come back down first (undo puts you back exactly).
+      // An undo always lands you; otherwise stay up only if the landing spot is inside scaled-up geometry.
+      const undid = state.log.length < (prev?.log.length ?? 0)
+      const land = !swelling && this.lift > 0.5 ? this.landing(undid) : undefined
+      const base = land && (undid || !this.engulfed(land.x, land.z)) ? land : undefined
+      if (framed.length) this.frameWish(framed, swelling, base)
+      else if (base) this.camMove = { from: this.view(), to: base, start: now, dur: 1400 }
     }
   }
 
@@ -355,6 +400,8 @@ export class WorldRenderer {
   private frameable(e: Entity): boolean {
     const d = this.desc(e)
     if (d.tags.includes('particles')) return false
+    // A sky full of small things (lanterns, a flock) is all around you: look up, don't get turned (Loop 2).
+    if (e.pos[1] > 4 && kindHeight(d, e.props) < BIG) return false
     return kindHeight(d, e.props) >= 0.6
   }
 
@@ -372,16 +419,22 @@ export class WorldRenderer {
    * Turn, tilt, back away or rise so `entities` are all in shot. Never while you're dragging or walking,
    * and any input hands control straight back.
    */
-  frameWish(entities: Entity[], preferLift = false): void {
-    if (this.userActive() || !this.state) return
+  frameWish(entities: Entity[], preferLift = false, base?: View): void {
+    if (!this.state || (this.userActive() && !base)) return
     const boxes: FrameBox[] = entities.map((e) => {
       const d = this.desc(e)
       return { x: e.pos[0], z: e.pos[2], r: Math.max(0.3, entityReach(d, e)), h: e.pos[1] + kindHeight(d, e.props) }
     })
     if (boxes.length === 1 && boxes[0]!.h < 1.2 && boxes[0]!.r < 1) return
-    const cur = this.view()
-    const to = preferLift ? this.godView(boxes, cur) : solveFrame(this.camera, cur, boxes, EYE)
+    const now = this.view()
+    const cur = base ?? now
+    const free = (x: number, z: number, dx: number, dz: number, max: number) => this.freeDist(x, z, dx, dz, max)
+    const to = (preferLift ? this.godView(boxes, cur) : solveFrame(this.camera, cur, boxes, this.eyeAt(cur.x, cur.z), { free })) ?? base
     if (!to) return
+    if (base) {
+      this.camMove = { from: now, to, start: performance.now(), dur: 1400 }
+      return
+    }
     const travel = Math.hypot(to.x - cur.x, to.z - cur.z) + Math.abs(to.lift - cur.lift)
     this.camMove = preferLift
       ? { from: cur, to, start: performance.now(), dur: 1300 }
@@ -395,7 +448,7 @@ export class WorldRenderer {
   private godView(boxes: FrameBox[], cur: View): View | null {
     const tops = boxes.map(b => b.h).sort((a, b) => b - a)
     const H = tops[Math.min(tops.length - 1, Math.floor(tops.length * 0.2))]!
-    if (H < 6) return solveFrame(this.camera, cur, boxes, EYE)
+    if (H < 6) return solveFrame(this.camera, cur, boxes, this.eyeAt(cur.x, cur.z), { free: (x, z, dx, dz, max) => this.freeDist(x, z, dx, dz, max) })
     let cx = 0
     let cz = 0
     for (const b of boxes) {
@@ -410,32 +463,135 @@ export class WorldRenderer {
     const z = cz + dir[1] * back
     const yaw = Math.atan2(-(cx - x), -(cz - z))
     const pitch = Math.max(-1.15, -Math.atan2(lift + EYE - H * 0.25, back))
-    return { yaw: cur.yaw + wrapAngle(yaw - cur.yaw), pitch, x, z, lift }
+    const to = { yaw: cur.yaw + wrapAngle(yaw - cur.yaw), pitch, x, z, lift }
+    // Only the first lift remembers the ground; a second 10× keeps the original spot.
+    this.preLift = { from: this.preLift?.from ?? { ...cur, lift: 0 }, to }
+    return to
   }
 
-  /** After a giant scale-up is undone (nothing tall left), drift back down to standing height. */
-  private settleLift(state: WorldState): void {
-    if (this.lift < 0.5 || this.userActive()) return
-    const tallest = state.entities.reduce((m, e) => Math.max(m, kindHeight(this.desc(e), e.props)), 0)
-    if (tallest > 14) return
+  /**
+   * Where to land after a lift: on undo, exactly where you stood before it. On any other ground-level wish,
+   * the same spot unless you've flown off somewhere (then straight down where you are). Never stays aloft.
+   */
+  private landing(undid: boolean): View {
     const cur = this.view()
-    this.camMove = { from: cur, to: { ...cur, lift: 0, pitch: Math.max(cur.pitch, -0.15) }, start: performance.now(), dur: 1200 }
+    const pl = this.preLift
+    const roamed = pl ? Math.hypot(cur.x - pl.to.x, cur.z - pl.to.z) > 8 : true
+    if (pl && (undid || !roamed)) return { ...pl.from, yaw: cur.yaw + wrapAngle(pl.from.yaw - cur.yaw), lift: 0 }
+    return { ...cur, lift: 0, pitch: Math.max(cur.pitch, -0.15) }
+  }
+
+  /**
+   * Would standing at (x, z) put you inside something scaled up around you (a giant's leg, a colossal
+   * house)? Only things whose footprint covers the spot and that tower over you count; terrain never does
+   * (you stand on it), and a mountain on the horizon is irrelevant.
+   */
+  private engulfed(x: number, z: number): boolean {
+    if (!this.state) return false
+    for (const e of this.state.entities) {
+      const d = this.desc(e)
+      if (isTerrain(d) || d.tags.includes('particles')) continue
+      const h = kindHeight(d, e.props)
+      if (h < 6 || e.pos[1] > EYE + this.groundAt(x, z)) continue
+      if (Math.hypot(x - e.pos[0], z - e.pos[2]) < entityReach(d, e) * 0.9) return true
+    }
+    return false
+  }
+
+  /** Ground height at (x, z): the terrain surface, or 0 on the flat world. */
+  private groundAt(x: number, z: number): number {
+    return this.state ? groundHeight(this.state, x, z) : 0
+  }
+
+  /** Eye height at (x, z) for the framing solver: the ground there plus your (scaled) eye. */
+  private eyeAt(x: number, z: number): number {
+    return this.groundAt(x, z) + EYE * this.playerScale
+  }
+
+  /**
+   * Walk by `move` over the terrain: downhill and gentle slopes are free; anything steeper than MAX_SLOPE
+   * slides you along the contour instead of up it, and a wall of rock stops you.
+   */
+  private walk(move: THREE.Vector3): void {
+    const p = this.camera.position
+    if (this.lift > 0.5 || !this.state) {
+      p.add(move)
+      return
+    }
+    const h0 = this.groundAt(p.x, p.z)
+    // Slope over a 2.5 m stride ahead, so one steep facet of a faceted hill doesn't stop you.
+    const slope = (m: THREE.Vector3) => {
+      const len = Math.hypot(m.x, m.z)
+      if (len < 1e-6) return Infinity
+      const probe = Math.max(len, 2.5)
+      return (this.groundAt(p.x + (m.x / len) * probe, p.z + (m.z / len) * probe) - h0) / probe
+    }
+    const steep = (m: THREE.Vector3) => slope(m) > MAX_SLOPE
+    const s0 = slope(move)
+    if (s0 <= MAX_SLOPE) {
+      // Climbing is slower than strolling: a hill takes effort, a mountain's foothills take a while.
+      p.addScaledVector(move, s0 > 0 ? Math.max(0.35, 1 - s0 * 0.6) : 1)
+      return
+    }
+    // Slide: drop the uphill part of the step (the gradient direction) and keep the rest.
+    const e = 0.3
+    const gx = this.groundAt(p.x + e, p.z) - this.groundAt(p.x - e, p.z)
+    const gz = this.groundAt(p.x, p.z + e) - this.groundAt(p.x, p.z - e)
+    const gl = Math.hypot(gx, gz)
+    if (gl < 1e-6) return
+    const up = (move.x * gx + move.z * gz) / gl
+    if (up <= 0) {
+      p.add(move)
+      return
+    }
+    const slide = new THREE.Vector3(move.x - (gx / gl) * up, 0, move.z - (gz / gl) * up)
+    if (!steep(slide)) p.add(slide)
+  }
+
+  /** Free walking distance from (x, z) along (dx, dz), up to `max`: a ray at eye and knee height against every thing. */
+  private freeDist(x: number, z: number, dx: number, dz: number, max: number): number {
+    const targets = this.rayTargets()
+    const g = this.groundAt(x, z)
+    let d = max
+    for (const y of [EYE, 0.6]) {
+      this.wallRay.set(new THREE.Vector3(x, g + y, z), new THREE.Vector3(dx, 0, dz).normalize())
+      this.wallRay.far = max
+      const hit = safeHits(this.wallRay, targets)[0]
+      if (hit) d = Math.min(d, hit.distance)
+    }
+    return d
+  }
+
+  /** Every visible mesh of every item: what rays may hit. Sprites, points and lines never are. */
+  private rayTargets(): THREE.Object3D[] {
+    const out: THREE.Object3D[] = []
+    for (const item of this.items.values()) {
+      item.holder.traverseVisible((o) => {
+        if ((o as THREE.Mesh).isMesh) out.push(o)
+      })
+    }
+    return out
   }
 
   /** A shake proportional to size and nearness: a castle 10 m away rattles you, a pine doesn't. */
-  private addShake(tall: number, at: THREE.Vector3, when: number): void {
+  private addShake(tall: number, at: THREE.Vector3, when: number, dur?: number): void {
     const d = Math.hypot(at.x - this.camera.position.x, at.z - this.camera.position.z)
     const near = Math.min(1, (tall * 2) / (d + 4))
     const amp = (0.006 + 0.03 * Math.min(1, tall / 60)) * near
     if (amp < 0.002) return
     const cur = this.shake
     if (cur && cur.amp > amp && when < cur.start + cur.dur * 0.5) return
-    this.shake = { amp, start: when, dur: 420 + Math.min(500, tall * 8) }
+    this.shake = { amp, start: when, dur: dur ?? 420 + Math.min(500, tall * 8) }
   }
 
   /** "The world listens": a soft glow gathers at `point` while a request is pending; null lets it go. */
   anticipate(point: Vec3 | null): void {
     this.gathering.set(point ? new THREE.Vector3(point[0], 0, point[2]) : null)
+  }
+
+  /** A wish is still being designed: a swirling silhouette stands at `point` until it arrives; null fades it. */
+  placeholder(point: Vec3 | null): void {
+    this.forming.set(point ? new THREE.Vector3(point[0], 0, point[2]) : null)
   }
 
   private playFx(fx: Fx, at: number, dur: number): void {
@@ -543,7 +699,9 @@ export class WorldRenderer {
     const tier = flat ? 'flat' : tall >= BIG ? 'big' : tall >= MID ? 'mid' : 'small'
     const loud = cue.loud
     const color = e.props.color ?? desc.defaults.color ?? '#ffffff'
-    const lead = tier === 'big' && loud ? 420 : 0
+    // Terrain and sky bodies don't come down a beam: they heave up out of the earth (or swell into the sky) with a rumble.
+    const colossal = tier === 'big' && isTerrain(desc)
+    const lead = tier === 'big' && loud && !colossal ? 420 : 0
     const at = at0 + lead
     const now = performance.now()
     const center = new THREE.Vector3(e.pos[0], y0, e.pos[2])
@@ -554,6 +712,8 @@ export class WorldRenderer {
 
     // The beam from the sky arrives first and holds while the thing comes down through it.
     let fallDur: number
+    // Airborne things (a lantern released, a bird) rise into their place from below instead of falling.
+    const airborne = y0 > 4 && tall < BIG && fall !== 'flicker'
     const impact = (when: number) => {
       if (!loud || flat) return
       if (tier === 'big') {
@@ -573,7 +733,19 @@ export class WorldRenderer {
       this.playFx(sparkle(new THREE.Vector3(center.x, y0 + y, center.z), Math.max(0.5, reach), color, tier === 'small' ? 26 : 40), when, 800)
     }
 
-    if (fall === 'drop') {
+    if (airborne) {
+      const rise = Math.min(14, y0 * 0.6)
+      fallDur = 1900
+      holder.scale.setScalar(0.001)
+      stretch.scale.y = h
+      this.tween(at, fallDur, (t) => {
+        holder.position.y = y0 - rise * (1 - ease.out(t))
+        holder.scale.setScalar(Math.max(0.001, s * Math.min(1, t * 2.5)))
+      }, () => {
+        holder.position.y = y0
+      }, show)
+      sparkleAt(at + 80, tall * 0.5 - rise)
+    } else if (fall === 'drop') {
       holder.scale.setScalar(s)
       stretch.scale.y = h
       if (tier === 'big' && loud) {
@@ -602,8 +774,26 @@ export class WorldRenderer {
           impact(performance.now())
         }, show)
       }
+    } else if (colossal && loud && fall === 'rise') {
+      // Up through the ground: the hidden part is below the floor, so it reads as land heaving up, not inflating.
+      fallDur = 2600 + Math.min(1400, tall * 4)
+      holder.scale.set(s, s * 0.55, s)
+      stretch.scale.y = h
+      holder.position.y = y0 - tall * 0.75
+      this.tween(at, fallDur, (t) => {
+        const k = ease.out(t)
+        holder.position.y = y0 - tall * 0.75 * (1 - k)
+        holder.scale.y = s * (0.55 + 0.45 * k)
+      }, () => {
+        holder.position.y = y0
+        holder.scale.setScalar(s)
+        impact(performance.now())
+      }, show)
+      this.puff(center, Math.min(60, reach * 0.5), 1.4, 70)
+      this.addShake(tall, center, at, fallDur)
+      this.sound.sfxSummon(tall, fallDur * 0.8, at - now)
     } else if (fall === 'grow' || fall === 'rise') {
-      fallDur = tier === 'big' && loud ? 1100 : fall === 'grow' ? 620 : 700
+      fallDur = tier === 'big' && loud ? (colossal ? 2400 : 1100) : fall === 'grow' ? 620 : 700
       if (fall === 'grow') holder.scale.setScalar(0.001)
       else holder.scale.set(s, 0.001, s)
       stretch.scale.y = h
@@ -639,7 +829,7 @@ export class WorldRenderer {
       if (cue.count === 1 && loud && !flat) this.sound.sfxPop(1.2, at + 900 - now)
     }
 
-    if (tier === 'big' && loud) {
+    if (tier === 'big' && loud && !colossal) {
       const tint = new THREE.Color('#ffe2ad').lerp(new THREE.Color(color), 0.25)
       const total = lead + fallDur + 900
       this.playFx(beam(center, Math.max(1.4, reach * 0.95), tint, lead / total + 0.04, (lead + fallDur) / total), at0, total)
@@ -695,8 +885,10 @@ export class WorldRenderer {
       })
     }
     const recolored = this.applyLook(item, e, true, at)
-    const changed = resized || moved || recolored || rebuilt
-    if (fx && (resized || recolored) && tall1 >= 0.3) {
+    // Glow, light and motion changes are changes too (Loop 2): they get the shimmer and the whoosh.
+    const lit = (e.props.glow ?? 0) !== (before.props.glow ?? 0) || (e.props.light ?? 0) !== (before.props.light ?? 0) || e.props.motion !== before.props.motion
+    const changed = resized || moved || recolored || rebuilt || lit
+    if (fx && (resized || recolored || lit) && tall1 >= 0.3) {
       const color = e.props.color ?? this.lampTint(e)?.getStyle() ?? '#ffffff'
       this.playFx(shimmer(new THREE.Vector3(e.pos[0], 0, e.pos[2]), entityReach(desc, e), tall1 + e.pos[1], color), at, resized ? 900 : 620)
     }
@@ -761,7 +953,8 @@ export class WorldRenderer {
 
   /** Apply colours (tweened bottom-to-top when `animate`). Returns whether any colour changed. */
   private applyLook(item: Item, e: Entity, animate: boolean, at = performance.now()): boolean {
-    applyMaterialProps(item.body, e.props)
+    applyMaterialProps(item.body, e.props, !!this.desc(e).learned)
+    this.glowExtras(item, e)
     const targets = lookTargets(item.body, e.props, e.hue)
     const tint = this.lampTint(e)
     if (tint) for (const t of targets) if (t.mesh.userData.slot === 'glow') t.color.copy(tint)
@@ -776,7 +969,12 @@ export class WorldRenderer {
       const mat = m.material as THREE.MeshStandardMaterial
       mat.color.copy(c)
       if (m.userData.slot === 'glow') mat.emissive.copy(c)
-      else if (m.userData.emissiveFollows !== undefined && mat.emissive) mat.emissive.copy(c).multiplyScalar(m.userData.emissiveFollows as number)
+      else if (m.userData.emissiveFollows !== undefined && mat.emissive) {
+        mat.emissive.copy(c)
+        // A body glow (Loop 2) leans toward warm light, so "make the castle glow" reads as light, not grey paint.
+        if (m.userData.glowTint) mat.emissive.lerp(GLOW_TINT, m.userData.glowTint as number)
+        mat.emissive.multiplyScalar(m.userData.emissiveFollows as number)
+      }
     }
     if (!animate) {
       for (const { mesh, color } of targets) setColor(mesh, color)
@@ -785,7 +983,11 @@ export class WorldRenderer {
     }
     const from = targets.map(t => (t.mesh.material as THREE.MeshStandardMaterial).color.clone())
     const lightFrom = lights.map(l => l.light.color.clone())
-    if (targets.every((t, i) => from[i]!.equals(t.color)) && lights.every((l, i) => lightFrom[i]!.equals(l.to))) return false
+    if (targets.every((t, i) => from[i]!.equals(t.color)) && lights.every((l, i) => lightFrom[i]!.equals(l.to))) {
+      // Same colours, but a glow change still has to reach the emissive.
+      for (const { mesh, color } of targets) setColor(mesh, color)
+      return false
+    }
     const tmp = new THREE.Color()
     // The paint wipes bottom to top: lower meshes change first.
     const ys = targets.map(t => t.mesh.position.y)
@@ -855,7 +1057,7 @@ export class WorldRenderer {
       this.applyAtmosphere(target)
       return
     }
-    const from = { ...this.atmos }
+    const from = { ...this.atmosBase }
     const factorFrom = this.fogFactor
     // A newer change (clear, then "make it day" straight after) takes over from an older tween.
     const version = ++this.atmosVersion
@@ -867,7 +1069,10 @@ export class WorldRenderer {
     })
   }
 
-  private applyAtmosphere(a: AtmospherePreset): void {
+  private applyAtmosphere(base: AtmospherePreset): void {
+    // The weather grades the time-of-day preset (a storm greys it, snow whitens the ground, a flash lights it).
+    this.atmosBase = base
+    const a = this.weather.grade(base)
     this.atmos = a
     this.skyUniforms.top.value.set(a.skyTop)
     this.skyUniforms.horizon.value.set(a.skyHorizon)
@@ -916,9 +1121,8 @@ export class WorldRenderer {
   gaze(): GazeSnapshot & { info: GazeInfo } {
     // The centre crosshair, unless pointing has moved the gaze (look.ts setGazeOverride).
     this.raycaster.setFromCamera(gazeNdc(), this.camera)
-    const targets: THREE.Object3D[] = [this.ground]
-    for (const item of this.items.values()) targets.push(item.holder)
-    const hits = this.raycaster.intersectObjects(targets, true)
+    const targets = [this.ground, ...this.rayTargets()]
+    const hits = safeHits(this.raycaster, targets)
     for (const h of hits) {
       if (h.object === this.ground) {
         return { point: v3(h.point), dist: round2(h.distance), info: { kind: 'ground', dist: h.distance } }
@@ -953,7 +1157,8 @@ export class WorldRenderer {
     this.pitch = pitch
     if (pos) {
       this.lift = 0
-      this.camera.position.set(pos[0], EYE, pos[1])
+      this.groundY = this.groundAt(pos[0], pos[1])
+      this.camera.position.set(pos[0], this.groundY + EYE, pos[1])
     }
   }
 
@@ -990,17 +1195,24 @@ export class WorldRenderer {
       this.lift = cm.from.lift + (cm.to.lift - cm.from.lift) * k
       if (t >= 1) this.camMove = null
     }
-    this.camera.position.y = EYE + this.lift
+    if (this.preLift && !this.camMove && this.lift < 0.5) this.preLift = null
+    // Ride the terrain: ease toward the ground under you (quick up a rise, a touch slower dropping off it).
+    const gy = this.groundAt(this.camera.position.x, this.camera.position.z)
+    this.groundY += (gy - this.groundY) * (1 - Math.exp(-dt * (gy > this.groundY ? 12 : 7)))
+    if (Math.abs(gy - this.groundY) > 60) this.groundY = gy // a teleport or a mountain rising under you: no long glide
+    this.camera.position.y = this.groundY + EYE * this.playerScale + this.lift
 
     const f = new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw))
     const r = new THREE.Vector3(-f.z, 0, f.x)
     // Walking speed scales with the eye lift: a giant strides.
-    const sp = (this.keys.shift ? RUN : WALK) * dt * (1 + this.lift / 12)
+    const sp = (this.keys.shift ? RUN : WALK) * dt * (1 + this.lift / 12) * Math.max(0.2, Math.sqrt(this.playerScale))
     const k = this.keys
-    if (k.w || k.arrowup) this.camera.position.addScaledVector(f, sp)
-    if (k.s || k.arrowdown) this.camera.position.addScaledVector(f, -sp)
-    if (k.a || k.arrowleft) this.camera.position.addScaledVector(r, -sp)
-    if (k.d || k.arrowright) this.camera.position.addScaledVector(r, sp)
+    const move = new THREE.Vector3()
+    if (k.w || k.arrowup) move.addScaledVector(f, sp)
+    if (k.s || k.arrowdown) move.addScaledVector(f, -sp)
+    if (k.a || k.arrowleft) move.addScaledVector(r, -sp)
+    if (k.d || k.arrowright) move.addScaledVector(r, sp)
+    if (move.lengthSq() > 0) this.walk(move)
     this.camera.rotation.set(this.pitch, this.yaw, 0, 'YXZ')
     // Weight: a decaying, slightly irregular shake after something big lands.
     const sh = this.shake
@@ -1049,6 +1261,7 @@ export class WorldRenderer {
     }
     for (const item of this.items.values()) item.body.traverse(animate)
     for (const item of this.leaving) item.body.traverse(animate)
+    this.moveItems(now)
 
     // The teleport vortex: full while the place is summoned, gone once the fog has pulled back ~14 m.
     // It spins up within ~300 ms of the wish (so the screen is never an empty wall of fog) and fades as the
@@ -1062,6 +1275,8 @@ export class WorldRenderer {
     this.vortex.strength += (vs - this.vortex.strength) * Math.min(1, dt * (vs > this.vortex.strength ? 8 : 3))
     this.vortex.tick(dt, this.camera.position)
     this.gathering.tick(dt)
+    this.forming.tick(dt)
+    if (this.weather.tick(dt, this.camera, this.atmosBase)) this.applyAtmosphere(this.atmosBase)
 
     if (this.reveal) {
       const r = this.reveal
@@ -1093,6 +1308,111 @@ export class WorldRenderer {
     this.renderer.render(this.scene, this.camera)
     const w = window as unknown as { __sceneReady?: boolean }
     if (!w.__sceneReady) w.__sceneReady = true
+  }
+
+  // ---------- Loop 2: glow, light, motion, player size, sunrise ----------
+
+  /**
+   * `glow` on a thing with no glow parts makes its body luminous (look.ts); this adds the soft halo that
+   * sells it at night. `light` gives it a real point light (counted by budgetLights like any lamp).
+   */
+  private glowExtras(item: Item, e: Entity): void {
+    const desc = this.desc(e)
+    const tall = Math.max(0.5, kindHeight(desc, { ...e.props, scale: 1 }))
+    const reach = Math.max(0.5, desc.footprint)
+    const color = e.props.color ?? desc.defaults.color ?? '#ffe2b0'
+    const glowing = (e.props.glow ?? 0) > 0 && !!item.body.userData.bodyGlow
+    let halo = item.body.userData.glowHalo as THREE.Sprite | undefined
+    if (glowing && !halo) {
+      halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: softDot(), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false }))
+      halo.raycast = () => {}
+      item.body.add(halo)
+      item.body.userData.glowHalo = halo
+    }
+    if (halo) {
+      halo.visible = glowing
+      halo.material.color.set(color).lerp(new THREE.Color('#ffffff'), 0.25)
+      halo.material.opacity = Math.min(0.6, 0.18 * (e.props.glow ?? 0))
+      halo.position.y = tall * 0.55
+      halo.scale.setScalar(Math.max(reach * 3.2, tall * 1.6))
+    }
+    const want = e.props.light ?? 0
+    let light = item.body.userData.castLight as THREE.PointLight | undefined
+    if (want > 0 && !light) {
+      light = new THREE.PointLight('#ffd9a0', 0, 0, 2)
+      light.userData.cast = true
+      item.body.add(light)
+      item.body.userData.castLight = light
+    }
+    if (light) {
+      light.visible = want > 0
+      light.color.set(this.lampTint(e) ?? color).lerp(new THREE.Color('#fff1d6'), 0.3)
+      light.intensity = want * 14 * Math.max(1, tall * 0.5)
+      light.distance = 10 + reach * 3 + tall * 1.5
+      light.position.set(0, tall * 0.6, 0)
+    }
+  }
+
+  /** Per-frame motion (fx/motion.ts): each moving item's pose goes on its stretch group, blended in from rest. */
+  private moveItems(now: number): void {
+    for (const item of this.items.values()) {
+      const e = item.entity
+      const m = e.props.motion
+      if (!m) {
+        if (this.motionStart.delete(e.id)) applyPose(item, null)
+        continue
+      }
+      // The clock restarts when the motion (or where it is) changes, so a modify blends in from where it stands.
+      const key = `${m}|${e.props.speed ?? 1}|${e.path?.c.join(',') ?? ''}|${e.path?.r ?? ''}|${e.pos.join(',')}`
+      let clock = this.motionStart.get(e.id)
+      if (!clock || clock.key !== key) {
+        clock = { key, t0: now }
+        this.motionStart.set(e.id, clock)
+      }
+      applyPose(item, blendedPose(e, (now - clock.t0) / 1000, kindHeight(this.desc(e), e.props)))
+    }
+  }
+
+  /**
+   * "Make me tiny": the player's size changes, not the world's. Eye height, stride and the near plane all
+   * scale; shrinking a lot tips your gaze up at the giants around you.
+   */
+  private setPlayerScale(k: number, dur: number): void {
+    if (Math.abs(k - this.playerScaleTo) < 1e-3) return
+    const from = this.playerScale
+    this.playerScaleTo = k
+    if (!dur) {
+      this.playerScale = k
+      this.camera.near = Math.max(0.02, Math.min(0.1, 0.1 * k))
+      this.camera.updateProjectionMatrix()
+      return
+    }
+    const p0 = this.pitch
+    const lookUp = k < from * 0.5 && !this.userActive() ? Math.max(p0, 0.2) : p0
+    this.sound.sfxWhoosh(k > from, 0, true)
+    this.tween(performance.now(), dur, (t) => {
+      const e = ease.inOut(t)
+      // Geometric, so a 10× shrink feels even all the way down.
+      this.playerScale = from * (k / from) ** e
+      this.camera.near = Math.max(0.02, Math.min(0.1, 0.1 * this.playerScale))
+      this.camera.updateProjectionMatrix()
+      if (lookUp !== p0 && !this.userActive()) this.pitch = p0 + (lookUp - p0) * e
+    })
+  }
+
+  /** A sunrise sweep: through dawn's rose light to the full day, over about seven seconds. */
+  private sunrise(): void {
+    const version = ++this.atmosVersion
+    const from = { ...this.atmosBase }
+    const dawn = ATMOSPHERES.dawn
+    const day = ATMOSPHERES[this.state?.atmosphere.time ?? 'day']
+    const now = performance.now()
+    this.tween(now, 3400, (t) => {
+      if (version === this.atmosVersion) this.applyAtmosphere(lerpPreset(from, dawn, ease.inOut(t)))
+    })
+    this.tween(now + 3400, 3800, (t) => {
+      if (version === this.atmosVersion) this.applyAtmosphere(lerpPreset(dawn, day, ease.inOut(t)))
+    })
   }
 
   private tween(start: number, dur: number, fn: (t: number) => void, done?: () => void, begin?: () => void): void {
@@ -1167,7 +1487,8 @@ export class WorldRenderer {
       if (document.pointerLockElement !== el) el.requestPointerLock?.()
     })
     on(window, 'keydown', (e) => {
-      if (typing(e) || e.metaKey || e.ctrlKey) return
+      // defaultPrevented: the HUD took this key as a letter of a sentence (it listens in the capture phase).
+      if (typing(e) || e.metaKey || e.ctrlKey || e.defaultPrevented) return
       const key = e.key.toLowerCase()
       if ('wasd'.includes(key) || key.startsWith('arrow')) this.takeControl()
       this.keys[key] = true
@@ -1178,6 +1499,15 @@ export class WorldRenderer {
     on(window, 'blur', () => {
       this.keys = {}
     })
+  }
+
+  /** The HUD decided a W/A/S/D tap was the first letter of a sentence: stop walking and step back to `at`. */
+  cancelWalk(at?: [number, number]): void {
+    this.keys = {}
+    if (at && !this.camMove) {
+      this.camera.position.x = at[0]
+      this.camera.position.z = at[1]
+    }
   }
 
   /** Any look or walk input takes the camera back instantly. */
@@ -1205,6 +1535,8 @@ export class WorldRenderer {
     this.sound.dispose()
     this.vortex.dispose()
     this.gathering.dispose()
+    this.weather.dispose()
+    this.forming.dispose()
     this.renderer.setAnimationLoop(null)
     this.ro.disconnect()
     for (const fn of this.cleanup) fn()
@@ -1379,4 +1711,13 @@ function glowSprite(color: string, disc: boolean): THREE.Sprite {
   sprite.renderOrder = -1
   sprite.visible = false
   return sprite
+}
+
+/** Raycast `targets` (already flattened to meshes) without recursing: nothing exotic can throw in here. */
+function safeHits(ray: THREE.Raycaster, targets: THREE.Object3D[]): THREE.Intersection[] {
+  try {
+    return ray.intersectObjects(targets, false)
+  } catch {
+    return []
+  }
 }

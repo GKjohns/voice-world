@@ -1,7 +1,9 @@
 /**
  * Camera framing: given the things a wish just made or changed (as footprint circles with a height), find a
  * view (yaw, pitch, position, eye lift) that shows all of them, foot to top, inside the frame. Tries the
- * current spot first (turn and tilt only), then backs away. (The renderer's god view handles global scale-ups.)
+ * current spot first (turn and tilt only), then backs away a few metres at most, never through a wall. If it
+ * still doesn't fit, it stays put and tilts up: awe from below beats being yanked out of the room.
+ * (The renderer's god view handles global scale-ups.)
  */
 import * as THREE from 'three'
 
@@ -24,6 +26,26 @@ export interface View {
 }
 
 const MARGIN = 0.92
+/** The furthest a framing move may carry you (m). Everything bigger is seen from where you stand. */
+export const MAX_BACK = 7
+/** How far short of a wall a step back stops (m). */
+const WALL_GAP = 0.8
+
+export interface FrameOpts {
+  /** Cap on the step back (default MAX_BACK). */
+  maxBack?: number
+  /** Free distance from (x, z) along the unit direction (dx, dz), up to `max`: the renderer raycasts walls. */
+  free?: (x: number, z: number, dx: number, dz: number, max: number) => number
+}
+
+/** The step-back distances worth trying: 0 first, then up to the cap, stopping WALL_GAP short of a wall. */
+export function backLadder(maxBack: number, free = Infinity): number[] {
+  const lim = Math.max(0, Math.min(maxBack, free - WALL_GAP))
+  const out = [0]
+  for (const b of [1.5, 3, 4.5, 6, 7, 8]) if (b <= lim + 1e-6) out.push(b)
+  if (lim > 0.5 && out[out.length - 1]! < lim - 0.25) out.push(lim)
+  return out
+}
 const PITCH_MIN = -1.2
 const PITCH_MAX = 0.68
 const scratch = new THREE.PerspectiveCamera()
@@ -99,7 +121,7 @@ function aim(pts: THREE.Vector3[], x: number, z: number, y: number, centerYaw: n
  * A view that frames `boxes`, or null when the current one already does: turn and tilt first, then back
  * away a step at a time (the closest spot that fits wins).
  */
-export function solveFrame(cam: THREE.PerspectiveCamera, cur: View, boxes: FrameBox[], eye: number): View | null {
+export function solveFrame(cam: THREE.PerspectiveCamera, cur: View, boxes: FrameBox[], eye: number, opts: FrameOpts = {}): View | null {
   if (!boxes.length) return null
   const pts = samples(boxes)
   place(cam, cur, eye)
@@ -120,9 +142,10 @@ export function solveFrame(cam: THREE.PerspectiveCamera, cur: View, boxes: Frame
   const away = Math.hypot(cur.x - cx, cur.z - cz)
   // Back away from the centre of the things; standing on top of it, back away from where you face.
   const dir: [number, number] = away > 0.5 ? [(cur.x - cx) / away, (cur.z - cz) / away] : [Math.sin(cur.yaw), Math.cos(cur.yaw)]
-  const backs = [0, 3, 6, 10, 15, 22, 30, 40, 52, 66, 82, 100]
+  const maxBack = opts.maxBack ?? MAX_BACK
+  const backs = backLadder(maxBack, opts.free ? opts.free(cur.x, cur.z, dir[0], dir[1], maxBack + WALL_GAP) : Infinity)
 
-  let best: { view: View, score: number } | null = null
+  let stay: View | null = null
   for (const back of backs) {
     const x = cur.x + dir[0] * back
     const z = cur.z + dir[1] * back
@@ -134,9 +157,10 @@ export function solveFrame(cam: THREE.PerspectiveCamera, cur: View, boxes: Frame
     place(cam, view, eye)
     const score = worst(pts)
     if (score <= MARGIN) return view
-    if (!best || score < best.score) best = { view, score }
+    stay ??= view
   }
-  return best?.view ?? null
+  // Too big to frame from here: don't move, just turn and tilt toward it and let it be too big.
+  return stay
 }
 
 function wrap(a: number): number {

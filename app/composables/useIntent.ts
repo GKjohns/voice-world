@@ -59,12 +59,26 @@ function setPhase(p: IntentPhase) {
   }
 }
 
-/** Freeze where the player is looking now, and show the ghost there at once (no model needed). */
+/** How long an answer may take before a forming silhouette stands in for it. */
+const PLACEHOLDER_MS = 700
+
+/**
+ * Freeze where the player is looking now, show the ghost there at once (no model needed), and start the
+ * "world listens" glow: motes gather there while you type or talk, until something lands.
+ */
 function capture(): OpContext {
   const world = useWorld()
   const ctx = world.snapshot()
-  world.renderer()?.showGhost(ctx.gaze.point, 1.6, 2600)
+  const r = world.renderer()
+  r?.showGhost(ctx.gaze.point, 1.6, 2600)
+  r?.anticipate(ctx.gaze.point)
   return ctx
+}
+
+/** Let the glow go, unless another sentence is being typed or is still in flight. */
+function release() {
+  if (pending || inflight.value) return
+  useWorld().renderer()?.anticipate(null)
 }
 
 /** The text bar calls this on the first keystroke of a sentence; `take` hands the snapshot to `build`. */
@@ -73,6 +87,7 @@ function beginTyping() {
 }
 function cancelTyping() {
   pending = null
+  release()
 }
 function takeSnapshot(): OpContext {
   const ctx = pending ?? capture()
@@ -146,6 +161,14 @@ async function build(request: string, ctx: OpContext, source: 'text' | 'voice' =
     pendingText.value = pendingText.value.filter((_, j) => j !== i)
   }
   const started = performance.now()
+  // Still nothing after 700 ms (or a `define` arrived): something is being designed, so show it forming.
+  let landed = false
+  const formAt = () => {
+    if (!landed) world.renderer()?.placeholder(ctx.gaze.point)
+  }
+  const formTimer = setTimeout(formAt, PLACEHOLDER_MS)
+  // The glow holds (or starts, for a voice wish whose speech-start glow already let go) until something lands.
+  world.renderer()?.anticipate(ctx.gaze.point)
 
   // What this sentence did, summed over every run/extend.
   const spawned = new Set<string>()
@@ -171,6 +194,8 @@ async function build(request: string, ctx: OpContext, source: 'text' | 'voice' =
     if (fx.atmosphere && !other.some(o => o.startsWith('light'))) other.push(`light → ${out.state.atmosphere.time}`)
     if (fx.teleport) other.push(`teleport → ${fx.teleport.world}`)
     if (fx.redefined.length) other.push(`learned ${fx.redefined.join(', ')}`)
+    // Loop 2 (sky): what really happened in the air and the weather, so the genie's reply can only claim that.
+    for (const f of fx.facts ?? []) if (!other.includes(f)) other.push(f)
     if (out.ops.some(o => o.op === 'undo')) other.push('undid the last change')
     notes.push(...fx.notes)
     says.push(...fx.say)
@@ -184,6 +209,8 @@ async function build(request: string, ctx: OpContext, source: 'text' | 'voice' =
     absorb(out)
   }
   const apply = (op: Op) => {
+    if (op.op === 'define') formAt()
+    else if (op.op !== 'say') landed = true
     if (op.op === 'say' && !target && !entries.length) {
       held.push(op)
       return
@@ -225,7 +252,10 @@ async function build(request: string, ctx: OpContext, source: 'text' | 'voice' =
     netError = (err as Error).message
   }
   done()
+  clearTimeout(formTimer)
+  if (!inflight.value) world.renderer()?.placeholder(null)
   if (held.length) open(held, text)
+  release()
   const ms = end?.ms ?? Math.round(performance.now() - started)
   const failure = netError ?? end?.error ?? (end ? undefined : 'the stream ended early')
   if (!entries.length) {
@@ -344,7 +374,7 @@ function toggleMic() {
 export function useIntent() {
   return {
     phase, inflight, interim, error, model, micSupported, micOn, pendingText,
-    build, beginTyping, cancelTyping, takeSnapshot, capture,
+    build, beginTyping, cancelTyping, takeSnapshot, capture, release,
     detectMic, startMic, stopMic, toggleMic
   }
 }

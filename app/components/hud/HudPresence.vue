@@ -4,8 +4,11 @@
  * when you start typing (or click the orb), the tiny mic icon, and the first-run whisper on an empty
  * world. Stays mounted in developer mode for its keys (backtick), but draws nothing there.
  *
- * Keys: any printable key except the walk/mute keys (W A S D M) starts a sentence with that letter;
- * Enter or / opens the field empty; Esc clears and closes it; ` toggles developer mode.
+ * Keys: any printable key starts a sentence with that letter; Enter or / opens the field empty; Esc clears
+ * and closes it; ` toggles developer mode. W A S D, M and space are "maybe typing": they walk (or, for M,
+ * mute) at once, but if another key follows within TAP_MS the walk is taken back and both letters go into
+ * the field. Holding a walk key (key repeat, or down longer than HOLD_MS), or pressing it while the mouse is
+ * locked or dragging, is always walking. A lone M mutes once TAP_MS passes with nothing after it.
  */
 const world = useWorld()
 const intent = useIntent()
@@ -16,6 +19,41 @@ const text = ref('')
 const inputOpen = ref(false)
 const input = useTemplateRef<{ inputRef?: HTMLInputElement }>('input')
 const RESERVED = new Set(['w', 'a', 's', 'd', 'm', ' '])
+const TAP_MS = 350
+const HOLD_MS = 180
+
+/** A walk/mute key that might be the first letter of a sentence. */
+let maybe: { chars: string, key: string, pose?: [number, number], expire: ReturnType<typeof setTimeout>, hold: ReturnType<typeof setTimeout> } | null = null
+const down = new Set<string>()
+let dragging = false
+
+function toggleMute() {
+  world.renderer()?.sound.toggleMute()
+}
+function dropMaybe() {
+  if (!maybe) return
+  clearTimeout(maybe.expire)
+  clearTimeout(maybe.hold)
+  maybe = null
+}
+function startMaybe(key: string) {
+  const p = world.renderer()?.player().pos
+  const m = {
+    chars: key,
+    key,
+    pose: p ? [p[0], p[2]] as [number, number] : undefined,
+    // Nothing followed: it was a step (already walked), or a lone M (mute now).
+    expire: setTimeout(() => {
+      if (maybe === m && key === 'm') toggleMute()
+      if (maybe === m) maybe = null
+    }, TAP_MS),
+    // Still held: that's walking, not typing.
+    hold: setTimeout(() => {
+      if (maybe === m && key !== 'm' && down.has(key)) dropMaybe()
+    }, HOLD_MS)
+  }
+  maybe = m
+}
 
 // ---------- captions ----------
 const userLine = ref('')
@@ -107,14 +145,62 @@ function onWindowKey(e: KeyboardEvent) {
     hud.setDev(!hud.devMode.value)
     return
   }
-  if (hud.devMode.value) return
+  const k = e.key.toLowerCase()
+  if (hud.devMode.value) {
+    if (k === 'm') toggleMute()
+    return
+  }
   if (e.key === 'Enter' || e.key === '/') {
     e.preventDefault()
+    dropMaybe()
     void openInput()
-  } else if (e.key.length === 1 && !RESERVED.has(e.key.toLowerCase())) {
+    return
+  }
+  if (e.key.length !== 1) return
+  if (inputOpen.value) {
+    // The field is opening but hasn't taken focus yet: keep the letter.
     e.preventDefault()
     void openInput(e.key)
+    return
   }
+  if (maybe) {
+    if (e.repeat || (k === maybe.key && k !== 'm')) {
+      // Holding or re-tapping the same walk key is walking.
+      dropMaybe()
+      return
+    }
+    // A second key right after a tap: that tap was the first letter. Take the step back and type both.
+    e.preventDefault()
+    const seed = maybe.chars + e.key
+    const pose = maybe.pose
+    dropMaybe()
+    world.renderer()?.cancelWalk(pose)
+    void openInput(seed)
+    return
+  }
+  if (RESERVED.has(k)) {
+    if (e.repeat || dragging || document.pointerLockElement) {
+      if (k === 'm' && !e.repeat) toggleMute()
+      return
+    }
+    if (k === ' ') e.preventDefault()
+    startMaybe(e.key === ' ' ? ' ' : e.key)
+    return
+  }
+  e.preventDefault()
+  void openInput(e.key)
+}
+function onWindowKeyUp(e: KeyboardEvent) {
+  down.delete(e.key.toLowerCase())
+}
+function onKeyDownTrack(e: KeyboardEvent) {
+  down.add(e.key.toLowerCase())
+}
+function onPointerDown() {
+  dragging = true
+}
+function onPointerUp() {
+  dragging = false
 }
 
 // ---------- first run ----------
@@ -126,9 +212,20 @@ function onOrb() {
   else void openInput()
 }
 
-onMounted(() => window.addEventListener('keydown', onWindowKey))
+onMounted(() => {
+  window.addEventListener('keydown', onKeyDownTrack, true)
+  window.addEventListener('keydown', onWindowKey, true)
+  window.addEventListener('keyup', onWindowKeyUp, true)
+  window.addEventListener('pointerdown', onPointerDown, true)
+  window.addEventListener('pointerup', onPointerUp, true)
+})
 onBeforeUnmount(() => {
-  window.removeEventListener('keydown', onWindowKey)
+  dropMaybe()
+  window.removeEventListener('keydown', onKeyDownTrack, true)
+  window.removeEventListener('keydown', onWindowKey, true)
+  window.removeEventListener('keyup', onWindowKeyUp, true)
+  window.removeEventListener('pointerdown', onPointerDown, true)
+  window.removeEventListener('pointerup', onPointerUp, true)
   clearTimeout(userTimer)
   clearTimeout(genieTimer)
 })
@@ -157,7 +254,7 @@ onBeforeUnmount(() => {
           Try: “raise a castle on a hill”
         </p>
         <p class="mt-6 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-xs tracking-wide text-white/45">
-          just start typing · tap the
+          just start typing (or press Enter) · tap the
           <UIcon
             name="i-lucide-mic"
             class="size-3.5"

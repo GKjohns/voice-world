@@ -4,6 +4,7 @@
  * server context builder never import three.
  */
 import type { Part, Props } from './ops.ts'
+import type { Surface } from './terrain.ts'
 
 export type Fall = 'drop' | 'grow' | 'rise' | 'flicker'
 
@@ -32,6 +33,8 @@ export interface KindDescriptor {
   contact?: boolean
   /** Builds from props.length / props.width (floors, walls, rugs, water), so those rebuild it. */
   sized?: boolean
+  /** Terrain you can stand things on: its height function (shared/world/terrain.ts). Never an obstacle. */
+  surface?: Surface
 }
 
 export const KIT: Record<string, KindDescriptor> = {
@@ -82,12 +85,34 @@ export const KIT: Record<string, KindDescriptor> = {
   // ---- life (particles) ----
   fireflies: { kind: 'fireflies', tags: ['particles', 'fireflies', 'life', 'ambient'], footprint: 0, fall: 'flicker', baseHeight: 3, defaults: { color: '#fff1a0', length: 24, width: 24 }, sized: true, note: 'a drifting swarm of fireflies over length × width m (default 24×24), 0.5–3 m up' },
   dust_motes: { kind: 'dust_motes', tags: ['particles', 'dust', 'life', 'ambient'], footprint: 0, fall: 'flicker', baseHeight: 3.5, defaults: { color: '#ffe2b0', length: 14, width: 14 }, sized: true, note: 'dust motes hanging in lamplight over length × width m (default 14×14)' },
-  embers: { kind: 'embers', tags: ['particles', 'embers', 'smoke', 'fire', 'life'], footprint: 0, fall: 'flicker', baseHeight: 5, defaults: { color: '#ff8a3c' }, note: 'rising sparks and a wisp of smoke; put it on a campfire, fireplace or brazier' }
+  embers: { kind: 'embers', tags: ['particles', 'embers', 'smoke', 'fire', 'life'], footprint: 0, fall: 'flicker', baseHeight: 5, defaults: { color: '#ff8a3c' }, note: 'rising sparks and a wisp of smoke; put it on a campfire, fireplace or brazier' },
+
+  // ---- sky (Loop 2): things that live in the air ----
+  lantern: { kind: 'lantern', tags: ['lantern', 'light', 'sky', 'decoration', 'paper'], footprint: 0.5, fall: 'grow', baseHeight: 1.15, defaults: { color: '#ff9440', glow: 1 }, note: 'a glowing paper sky lantern with a warm flame inside, 1.1 m; THE floating lantern: give it altitude sky + motion drift; color = paper' },
+  bird: { kind: 'bird', tags: ['bird', 'animal', 'sky', 'life'], footprint: 0.4, fall: 'grow', baseHeight: 0.4, defaults: { color: '#f2efe9', trim: '#2a2d33' }, note: 'a gull-like bird, 1.2 m wingspan, wings flapping; flocks circle: altitude 15–30, motion orbit or fly' },
+
+  // ---- terrain (Loop 2): real scale; they rise out of the ground. Things spawned on them stand on their surface. ----
+  mountain: { kind: 'mountain', tags: ['terrain', 'mountain', 'peak', 'rock', 'nature'], footprint: 150, fall: 'rise', baseHeight: 220, surface: 'mountain', randomYaw: true, defaults: { color: '#6f6a72', trim: '#f3f5fa' }, note: 'a faceted 220 m mountain (scale 0.4–1.8 = 90–400 m) with snow above its upper slopes; color = rock, trim = snow. Big: put it at anchor horizon' },
+  mountain_range: { kind: 'mountain_range', tags: ['terrain', 'mountain', 'range', 'mountains', 'rock', 'nature'], footprint: 120, fall: 'rise', baseHeight: 260, surface: 'range', sized: true, defaults: { color: '#66647a', trim: '#f3f5fa', length: 800 }, note: 'ONE entity: a snow-capped ridge of 5–12 peaks up to 260 m along an 800 m arc (length 400–1600); color = rock, trim = snow. Put it at anchor horizon' },
+  hill: { kind: 'hill', tags: ['terrain', 'hill', 'grass', 'nature'], footprint: 45, fall: 'rise', baseHeight: 16, surface: 'hill', randomYaw: true, defaults: { color: '#5f8046', trim: '#7a7466' }, note: 'a grassy rounded hill 16 m tall, 90 m across; things placed on it stand on its slope or top (side on_top = the summit). "raise the hill" → height relative' },
+  cliff: { kind: 'cliff', tags: ['terrain', 'cliff', 'rock', 'mesa', 'nature'], footprint: 30, fall: 'rise', baseHeight: 45, surface: 'mesa', defaults: { color: '#8a6e58', trim: '#5f7d45' }, note: 'a sheer-sided rock plateau 45 m tall, 100 m wide, its flat top grassy (trim); its face looks at the player; a mesa' },
+  volcano: { kind: 'volcano', tags: ['terrain', 'volcano', 'mountain', 'fire', 'lava', 'nature'], footprint: 300, fall: 'rise', baseHeight: 240, surface: 'volcano', randomYaw: true, defaults: { color: '#3d3533', trim: '#26201f', glow: 1 }, note: 'a 240 m volcano with a glowing crater, lava streaks and a smoke plume; glow = how hot. Huge: anchor horizon or gaze far away' },
+  waterfall: { kind: 'waterfall', tags: ['terrain', 'water', 'waterfall', 'nature'], footprint: 2, fall: 'rise', baseHeight: 40, defaults: { color: '#cfe8f6', trim: '#6b6460' }, note: 'a 40 m animated waterfall pouring over its own rock lip into a misty pool; against a cliff: at target cliff, side front, gap 0' },
+  river: { kind: 'river', tags: ['terrain', 'water', 'river', 'stream', 'nature'], footprint: 0, fall: 'rise', baseHeight: 0.08, sized: true, length: 240, width: 14, defaults: { color: '#3f7396', trim: '#b9a27a', length: 240, width: 14 }, note: 'a flowing river ribbon that winds `length` m (default 240) along its local z, `width` m wide (default 14), with sandy banks; facing player runs it toward you' },
+  island: { kind: 'island', tags: ['terrain', 'island', 'sand', 'water', 'nature'], footprint: 40, fall: 'rise', baseHeight: 14, surface: 'island', randomYaw: true, defaults: { color: '#5f8a46', trim: '#d8c38f' }, note: 'a grassy island 80 m across with a sand beach (trim), ringed by its own sea 200 m wide' },
+  canyon: { kind: 'canyon', tags: ['terrain', 'canyon', 'cliff', 'rock', 'nature'], footprint: 0, fall: 'rise', baseHeight: 70, surface: 'canyon', sized: true, defaults: { color: '#b0623e', trim: '#d89a6a', length: 320 }, note: 'two banded red-rock walls 70 m tall either side of a 40 m channel running `length` m (default 320) along its local z; at the player it surrounds you' },
+  giant_moon: { kind: 'giant_moon', tags: ['sky', 'moon', 'celestial'], footprint: 0, fall: 'grow', baseHeight: 420, defaults: { color: '#e9e6dc', glow: 1 }, note: 'a huge cratered moon hanging 300 m up in the sky (90 m across); anchor horizon' },
+  planet: { kind: 'planet', tags: ['sky', 'planet', 'celestial'], footprint: 0, fall: 'grow', baseHeight: 460, defaults: { color: '#d9925a', trim: '#e8d6b0', glow: 1 }, note: 'a giant ringed planet in the sky, 120 m across, 330 m up; color = bands, trim = rings; anchor horizon' }
 }
 
 /** The fallback for kinds nobody has defined yet: a labelled crystal holding the spot. */
 export const BLOB: KindDescriptor = {
   kind: 'blob', tags: ['placeholder'], footprint: 1.2, fall: 'drop', baseHeight: 2.2, defaults: { color: '#9b8cff', glow: 0.4 }
+}
+
+/** Terrain (mountains, hills, cliffs…): rises from the ground, ignores clearance from other things. */
+export function isTerrain(desc: KindDescriptor): boolean {
+  return desc.tags.includes('terrain') || desc.tags.includes('celestial')
 }
 
 export function isKitKind(kind: string): boolean {

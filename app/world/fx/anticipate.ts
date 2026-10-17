@@ -9,7 +9,7 @@ const N = 90
 
 export class Gathering {
   readonly obj = new THREE.Group()
-  private motes = additivePoints(N, 0xcfe8ff, 0.2)
+  private motes = additivePoints(N, 0xcfe8ff, 0.26)
   private pool: THREE.Mesh
   private poolMat: THREE.MeshBasicMaterial
   private seeds = new Float32Array(N * 3)
@@ -42,7 +42,7 @@ export class Gathering {
     if (!this.obj.visible) return
     this.time += dt
     const breathe = 0.75 + 0.25 * Math.sin(this.time * 4.2)
-    this.poolMat.opacity = 0.5 * this.level * breathe
+    this.poolMat.opacity = 0.7 * this.level * breathe
     this.pool.scale.setScalar(1.4 + 0.25 * Math.sin(this.time * 4.2))
     const p = this.motes.pos
     const s = this.seeds
