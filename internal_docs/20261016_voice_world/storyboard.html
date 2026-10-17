@@ -1,0 +1,525 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Conjure Storyboard</title>
+<style>
+  :root {
+    --hud-bg: rgba(15, 18, 26, 0.72);
+    --hud-border: rgba(255, 255, 255, 0.10);
+    --hud-text: #e8ebf2;
+    --hud-muted: #9aa3b5;
+    --accent: #7dd3a8;
+    --warn: #f5b971;
+    --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0c0f16; color: var(--hud-text);
+    font: 14px/1.45 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+  #stage { position: fixed; inset: 0; }
+  canvas { display: block; }
+  #fade { position: fixed; inset: 0; pointer-events: none; opacity: 0; transition: opacity .6s ease; background: #c8ccd6; }
+
+  .panel { position: fixed; background: var(--hud-bg); border: 1px solid var(--hud-border);
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-radius: 12px; }
+
+  #frames { top: 16px; left: 16px; right: 360px; padding: 10px 12px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  #frames .title { font-weight: 600; margin-right: 6px; }
+  #frames button { all: unset; cursor: pointer; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--hud-border);
+    color: var(--hud-text); font-size: 13px; }
+  #frames button:hover { background: rgba(255,255,255,.07); }
+  #frames button.on { background: var(--accent); color: #0c0f16; border-color: transparent; }
+
+  #caption { top: 74px; left: 16px; max-width: 520px; padding: 12px 14px; font-size: 13.5px; color: var(--hud-text); }
+  #caption b { color: var(--accent); }
+  #caption .sprint { color: var(--hud-muted); font-size: 12px; margin-top: 4px; }
+
+  #log { top: 16px; right: 16px; bottom: 16px; width: 330px; display: flex; flex-direction: column; overflow: hidden; }
+  #log header { padding: 12px 14px; border-bottom: 1px solid var(--hud-border); display: flex; justify-content: space-between; align-items: baseline; }
+  #log header span { color: var(--hud-muted); font-size: 12px; }
+  #log .entries { overflow-y: auto; padding: 8px 10px; display: flex; flex-direction: column; gap: 8px; }
+  .entry { border: 1px solid var(--hud-border); border-radius: 8px; padding: 8px 10px; }
+  .entry .said { font-size: 13px; margin-bottom: 4px; }
+  .entry .meta { color: var(--hud-muted); font-size: 11px; margin-bottom: 4px; }
+  .entry pre { margin: 0; font: 11px/1.4 var(--mono); color: #b9e6cf; white-space: pre-wrap; word-break: break-word; max-height: 220px; overflow: auto; }
+
+  #bar { left: 50%; bottom: 20px; transform: translateX(calc(-50% - 170px)); width: min(620px, calc(100vw - 400px));
+    padding: 8px; display: flex; gap: 8px; align-items: center; }
+  #pill { display: flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 999px; background: rgba(255,255,255,.06);
+    font-size: 12.5px; color: var(--hud-muted); white-space: nowrap; min-width: 108px; }
+  #pill i { width: 8px; height: 8px; border-radius: 50%; background: var(--hud-muted); }
+  #pill[data-s="hearing"] i { background: var(--accent); animation: pulse 1s infinite; }
+  #pill[data-s="thinking"] i { background: var(--warn); animation: pulse .5s infinite; }
+  #pill[data-s="building"] i { background: #8ab4ff; animation: pulse .3s infinite; }
+  @keyframes pulse { 50% { opacity: .3; } }
+  #say { flex: 1; background: transparent; border: 1px solid var(--hud-border); border-radius: 8px; padding: 9px 12px; color: var(--hud-text); font: inherit; outline: none; }
+  #say:focus { border-color: var(--accent); }
+  #mic { all: unset; cursor: pointer; width: 38px; height: 38px; border-radius: 8px; display: grid; place-items: center; border: 1px solid var(--hud-border); }
+  #mic.live { background: var(--accent); color: #0c0f16; }
+
+  #reply { left: 50%; bottom: 82px; transform: translateX(calc(-50% - 170px)); padding: 8px 14px; font-size: 13.5px; opacity: 0; transition: opacity .3s; }
+  #reply.show { opacity: 1; }
+  #help { left: 16px; bottom: 84px; padding: 8px 12px; color: var(--hud-muted); font-size: 12px; }
+
+  #cam { right: 362px; bottom: 82px; width: 210px; height: 158px; padding: 0; display: none; overflow: hidden; }
+  #cam svg { width: 100%; height: 100%; }
+  #cam .lbl { position: absolute; left: 8px; top: 6px; font: 11px var(--mono); color: var(--accent); }
+
+  #crosshair { position: fixed; left: 50%; top: 50%; width: 14px; height: 14px; margin: -7px 0 0 -7px; pointer-events: none;
+    border: 1.5px solid rgba(255,255,255,.7); border-radius: 50%; }
+
+  @media (max-width: 900px) {
+    #log { top: auto; height: 34vh; left: 16px; right: 16px; width: auto; }
+    #frames { right: 16px; }
+    #bar, #reply { transform: translateX(-50%); width: calc(100vw - 32px); bottom: calc(34vh + 28px); }
+    #reply { bottom: calc(34vh + 88px); }
+    #help, #cam { display: none !important; }
+  }
+</style>
+</head>
+<body>
+<div id="stage"></div>
+<div id="fade"></div>
+<div id="crosshair"></div>
+
+<div id="frames" class="panel">
+  <span class="title">Conjure · storyboard</span>
+  <button data-f="1">1 · The void</button>
+  <button data-f="2">2 · "A house over there"</button>
+  <button data-f="3">3 · "Taller, and red"</button>
+  <button data-f="4">4 · "Trees along the road"</button>
+  <button data-f="5">5 · "Take me to a pool hall"</button>
+  <button data-f="6">6 · "Somewhere tranquil"</button>
+  <button data-f="7">7 · Hands-free</button>
+</div>
+
+<div id="caption" class="panel"></div>
+
+<aside id="log" class="panel">
+  <header><strong>Op stack</strong><span>what the model emits</span></header>
+  <div class="entries" id="entries"></div>
+</aside>
+
+<div id="reply" class="panel"></div>
+<div id="bar" class="panel">
+  <div id="pill" data-s="idle"><i></i><span>listening</span></div>
+  <input id="say" placeholder='Try "put a tower over there", "make it blue", "take me somewhere tranquil"' autocomplete="off">
+  <button id="mic" title="Speak (Chrome)">🎙</button>
+</div>
+<div id="help" class="panel">Drag to look · WASD to walk · aim with the ring · ⌘Z undo</div>
+<div id="cam" class="panel"><span class="lbl" id="camlbl">head yaw 0°</span>
+  <svg viewBox="0 0 210 158"><rect width="210" height="158" fill="#111722"/>
+    <g id="face" stroke="#7dd3a8" stroke-width="1.2" fill="none" opacity=".9">
+      <ellipse cx="105" cy="78" rx="34" ry="44"/><circle cx="92" cy="68" r="4"/><circle cx="118" cy="68" r="4"/>
+      <path d="M96 98 Q105 104 114 98"/><path d="M105 72 L102 88 L108 88"/>
+    </g>
+    <g id="hand" stroke="#f5b971" stroke-width="1.4" fill="none" opacity="0">
+      <circle cx="168" cy="118" r="9"/><line x1="168" y1="110" x2="150" y2="84"/><line x1="150" y1="84" x2="128" y2="60" stroke-dasharray="3 3"/>
+    </g>
+  </svg>
+</div>
+
+<script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js" } }</script>
+<script type="module">
+import * as THREE from 'three'
+
+// ---------- renderer / scene ----------
+const stage = document.getElementById('stage')
+const renderer = new THREE.WebGLRenderer({ antialias: true })
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2))
+renderer.setSize(innerWidth, innerHeight)
+renderer.shadowMap.enabled = true
+renderer.toneMapping = THREE.ACESFilmicToneMapping
+stage.appendChild(renderer.domElement)
+
+const scene = new THREE.Scene()
+const camera = new THREE.PerspectiveCamera(65, innerWidth / innerHeight, 0.1, 400)
+camera.position.set(0, 1.6, 6)
+let yaw = 0, pitch = -0.12
+addEventListener('resize', () => { placeCaption(); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight) })
+
+const hemi = new THREE.HemisphereLight(0xbfd4ff, 0x3a3328, 0.9); scene.add(hemi)
+const sun = new THREE.DirectionalLight(0xffd2a1, 2.2)
+sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048)
+Object.assign(sun.shadow.camera, { left: -40, right: 40, top: 40, bottom: -40, far: 150 })
+scene.add(sun, sun.target)
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(400, 400), new THREE.MeshStandardMaterial({ color: 0x2c3340, roughness: 1 }))
+ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; ground.name = 'ground'; scene.add(ground)
+const grid = new THREE.GridHelper(400, 200, 0x55617a, 0x3a4252); grid.material.transparent = true; grid.material.opacity = .35; grid.position.y = .01; scene.add(grid)
+
+const ATMOS = {
+  dusk:    { sky: 0x2a3550, fog: 0x2a3550, fogD: [20, 140], sun: 0xffb07a, sunI: 1.8, sunPos: [-30, 14, 30], hemi: 1.0, ground: 0x2c3340, grid: true },
+  day:     { sky: 0x9cc6ee, fog: 0xb9d4ee, fogD: [40, 220], sun: 0xfff1d6, sunI: 2.6, sunPos: [20, 50, 10], hemi: 1.0, ground: 0x6f8a55, grid: false },
+  golden:  { sky: 0xf2b77e, fog: 0xe9b88b, fogD: [10, 110], sun: 0xffb36b, sunI: 2.2, sunPos: [-40, 8, -60], hemi: .75, ground: 0x4c5b3a, grid: false },
+  night:   { sky: 0x0b1020, fog: 0x0b1020, fogD: [15, 90], sun: 0x8090ff, sunI: .35, sunPos: [10, 30, 10], hemi: .25, ground: 0x1d2230, grid: false },
+  interior:{ sky: 0x120d0a, fog: 0x1a120c, fogD: [8, 40], sun: 0xffc890, sunI: .35, sunPos: [0, 30, 0], hemi: 1.2, ground: 0x241a12, grid: false },
+}
+function atmosphere(name) {
+  const a = ATMOS[name]; scene.background = new THREE.Color(a.sky); scene.fog = new THREE.Fog(a.fog, ...a.fogD)
+  sun.color.set(a.sun); sun.intensity = a.sunI; sun.position.set(...a.sunPos); hemi.intensity = a.hemi
+  ground.material.color.set(a.ground); grid.visible = a.grid
+  document.getElementById('fade').style.background = '#' + new THREE.Color(a.fog).getHexString()
+}
+atmosphere('dusk')
+
+// ---------- kit: parametric prefabs (primitives only, like workspace-3d) ----------
+const M = (c, o = {}) => new THREE.MeshStandardMaterial({ color: c, roughness: .8, ...o })
+function mesh(geo, mat, x = 0, y = 0, z = 0) { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = m.receiveShadow = true; return m }
+function textTex(text, color = '#ff4fa3') {
+  const c = document.createElement('canvas'); c.width = 512; c.height = 128; const g = c.getContext('2d')
+  g.fillStyle = '#00000000'; g.clearRect(0, 0, 512, 128); g.font = 'bold 76px system-ui'; g.textAlign = 'center'; g.textBaseline = 'middle'
+  g.shadowColor = color; g.shadowBlur = 24; g.fillStyle = color; g.fillText(text, 256, 66); return new THREE.CanvasTexture(c)
+}
+const KIT = {
+  house: { r: 3.2, fall: 'drop', build: ({ floors = 1, color = '#d9c8a9' }) => {
+    const g = new THREE.Group(), h = 2.8 * floors
+    g.add(mesh(new THREE.BoxGeometry(4.4, h, 4.4), M(color), 0, h / 2, 0))
+    const roof = mesh(new THREE.ConeGeometry(3.6, 2, 4), M('#7a3b2e'), 0, h + 1, 0); roof.rotation.y = Math.PI / 4; g.add(roof)
+    g.add(mesh(new THREE.BoxGeometry(.9, 1.8, .1), M('#4a3326'), 0, .9, 2.22))
+    for (let f = 0; f < floors; f++) for (const x of [-1.3, 1.3]) g.add(mesh(new THREE.BoxGeometry(.8, .8, .08), M('#ffd98a', { emissive: '#ffb648', emissiveIntensity: .9 }), x, 1.6 + f * 2.8, 2.22))
+    return g } },
+  tower: { r: 3.5, fall: 'drop', build: ({ floors = 8, color = '#8fa3bf' }) => {
+    const g = new THREE.Group(), h = 3 * floors
+    g.add(mesh(new THREE.BoxGeometry(5, h, 5), M(color, { metalness: .3, roughness: .4 }), 0, h / 2, 0))
+    for (let f = 1; f < floors; f++) g.add(mesh(new THREE.BoxGeometry(5.06, .12, 5.06), M('#33404f'), 0, f * 3, 0))
+    return g } },
+  pine: { r: 1.2, fall: 'grow', build: ({ s = 1 }) => {
+    const g = new THREE.Group(); g.add(mesh(new THREE.CylinderGeometry(.15, .22, 1.2), M('#5a3d28'), 0, .6, 0))
+    for (let i = 0; i < 3; i++) g.add(mesh(new THREE.ConeGeometry(1.4 - i * .35, 1.8, 7), M('#2f5d3c'), 0, 1.6 + i * 1, 0))
+    g.scale.setScalar(s); return g } },
+  road: { r: 0, fall: 'rise', build: () => { const g = new THREE.Group()
+    g.add(mesh(new THREE.BoxGeometry(5, .06, 40), M('#3b3d42', { roughness: 1 }), 0, .03, 0))
+    for (let z = -18; z <= 18; z += 4) g.add(mesh(new THREE.BoxGeometry(.18, .07, 1.6), M('#e8d27a'), 0, .04, z))
+    return g } },
+  lamp: { r: .6, fall: 'drop', build: () => { const g = new THREE.Group()
+    g.add(mesh(new THREE.CylinderGeometry(.07, .1, 4), M('#2a2d33'), 0, 2, 0))
+    g.add(mesh(new THREE.SphereGeometry(.28), M('#fff1c4', { emissive: '#ffd27a', emissiveIntensity: 2 }), 0, 4.1, 0))
+    const l = new THREE.PointLight(0xffd27a, 12, 12, 1.6); l.position.y = 4; g.add(l); return g } },
+  bench: { r: 1.2, fall: 'drop', build: () => { const g = new THREE.Group()
+    g.add(mesh(new THREE.BoxGeometry(2, .1, .5), M('#8a5a38'), 0, .5, 0), mesh(new THREE.BoxGeometry(2, .5, .08), M('#8a5a38'), 0, .8, -.22))
+    for (const x of [-.85, .85]) g.add(mesh(new THREE.BoxGeometry(.08, .5, .45), M('#2a2d33'), x, .25, 0)); return g } },
+  blob: { r: 1.2, fall: 'drop', build: ({ label = '?' }) => { const g = new THREE.Group()
+    g.add(mesh(new THREE.IcosahedronGeometry(1, 1), M('#9b8cff', { flatShading: true, emissive: '#3a2f8f', emissiveIntensity: .4 }), 0, 1.1, 0))
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: textTex(label, '#c9c2ff'), transparent: true })); s.scale.set(4, 1, 1); s.position.y = 2.8; g.add(s); return g } },
+  // pool hall set
+  floor: { r: 0, fall: 'rise', build: ({ w = 18, d = 14, color = '#5b3a24' }) => mesh(new THREE.BoxGeometry(w, .1, d), M(color, { roughness: .6 }), 0, .05, 0) },
+  wall: { r: 0, fall: 'rise', build: ({ w = 18, h = 4.2, color = '#7a5240' }) => mesh(new THREE.BoxGeometry(w, h, .25), M(color), 0, h / 2, 0) },
+  pool_table: { r: 2.2, fall: 'drop', build: () => { const g = new THREE.Group()
+    g.add(mesh(new THREE.BoxGeometry(2.6, .2, 1.45), M('#1f6b45'), 0, .82, 0))
+    g.add(mesh(new THREE.BoxGeometry(2.85, .26, 1.7), M('#4a2a18'), 0, .72, 0))
+    for (const x of [-1.2, 1.2]) for (const z of [-.6, .6]) g.add(mesh(new THREE.BoxGeometry(.18, .7, .18), M('#3a2012'), x, .35, z))
+    const cols = ['#f4d03f', '#2e86de', '#e74c3c', '#8e44ad', '#f39c12', '#27ae60', '#c0392b', '#111', '#fff']
+    cols.forEach((c, i) => g.add(mesh(new THREE.SphereGeometry(.05), M(c, { roughness: .2 }), .5 + (i % 3) * .1, .97, -.1 + Math.floor(i / 3) * .1)))
+    return g } },
+  hanging_lamp: { r: 0, fall: 'flicker', build: () => { const g = new THREE.Group()
+    g.add(mesh(new THREE.CylinderGeometry(.01, .01, 2.0), M('#111'), 0, 3.2, 0))
+    g.add(mesh(new THREE.CylinderGeometry(.35, .9, .4, 12, 1, true), M('#2f7d4a', { side: THREE.DoubleSide, emissive: '#1d4a2c', emissiveIntensity: .5 }), 0, 2.0, 0))
+    g.add(mesh(new THREE.SphereGeometry(.16), M('#fff3d0', { emissive: '#ffe2a0', emissiveIntensity: 3 }), 0, 1.92, 0))
+    const l = new THREE.SpotLight(0xffe2b0, 25, 8, .9, .5, 1.4); l.position.y = 1.9; l.target.position.y = 0; g.add(l, l.target); return g } },
+  bar: { r: 3, fall: 'drop', build: () => { const g = new THREE.Group()
+    g.add(mesh(new THREE.BoxGeometry(6, 1.1, .8), M('#4a2a18'), 0, .55, 0), mesh(new THREE.BoxGeometry(6.2, .08, 1), M('#2a1a10', { roughness: .3 }), 0, 1.14, 0))
+    for (let i = 0; i < 9; i++) g.add(mesh(new THREE.CylinderGeometry(.06, .06, .32), M(['#7fbf7f', '#c97f3f', '#9fc3ff'][i % 3], { transparent: true, opacity: .8, roughness: .1 }), -2.4 + i * .6, 1.34, 0))
+    return g } },
+  stool: { r: .4, fall: 'drop', build: () => { const g = new THREE.Group()
+    g.add(mesh(new THREE.CylinderGeometry(.22, .22, .08, 14), M('#8b1e2b'), 0, .78, 0), mesh(new THREE.CylinderGeometry(.04, .06, .75), M('#999', { metalness: .8, roughness: .3 }), 0, .38, 0)); return g } },
+  jukebox: { r: .8, fall: 'drop', build: () => { const g = new THREE.Group()
+    g.add(mesh(new THREE.BoxGeometry(1.1, 1.7, .6), M('#6d2a14'), 0, .85, 0))
+    const top = mesh(new THREE.CylinderGeometry(.55, .55, .6, 20, 1, false, 0, Math.PI), M('#ff9a3c', { emissive: '#ff6a00', emissiveIntensity: 1.4 }), 0, 1.7, 0); top.rotation.x = Math.PI / 2; top.rotation.z = Math.PI / 2; g.add(top)
+    return g } },
+  neon: { r: 0, fall: 'flicker', build: ({ text = 'BILLIARDS' }) => {
+    const p = new THREE.Mesh(new THREE.PlaneGeometry(5, 1.25), new THREE.MeshBasicMaterial({ map: textTex(text), transparent: true })); p.position.y = 3.2; return p } },
+  // tranquil set
+  lake: { r: 0, fall: 'rise', build: () => mesh(new THREE.CircleGeometry(60, 64).rotateX(-Math.PI / 2), M('#3f6f8f', { roughness: .08, metalness: .6 }), 0, .02, 0) },
+  dock: { r: 0, fall: 'rise', build: () => { const g = new THREE.Group()
+    for (let z = 0; z < 12; z++) g.add(mesh(new THREE.BoxGeometry(2.4, .12, .42), M(z % 2 ? '#8a6a48' : '#7c5e3f'), 0, .45, -z * .5))
+    for (const x of [-1.1, 1.1]) for (let z = 0; z < 3; z++) g.add(mesh(new THREE.CylinderGeometry(.09, .09, 1.2), M('#5a4330'), x, .1, -z * 2.6))
+    return g } },
+  shore: { r: 0, fall: 'rise', build: () => mesh(new THREE.RingGeometry(14, 90, 64).rotateX(-Math.PI / 2), M('#4c5b3a', { roughness: 1 }), 0, .05, 0) },
+  rock: { r: .9, fall: 'grow', build: ({ s = 1 }) => { const m = mesh(new THREE.DodecahedronGeometry(.8 * s, 0), M('#6e6a62', { flatShading: true }), 0, .3 * s, 0); m.scale.y = .6; return m } },
+  fireflies: { r: 0, fall: 'flicker', build: () => {
+    const n = 140, pos = new Float32Array(n * 3)
+    for (let i = 0; i < n; i++) { pos[i * 3] = (Math.random() - .5) * 26; pos[i * 3 + 1] = .5 + Math.random() * 2.5; pos[i * 3 + 2] = -Math.random() * 18 }
+    const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(pos, 3))
+    const p = new THREE.Points(geo, new THREE.PointsMaterial({ color: 0xfff1a0, size: .09, transparent: true, opacity: .9 })); p.userData.drift = true; return p } },
+}
+
+// ---------- world state: the op log is the world ----------
+let world = []          // { id, kind, params, obj, opIndex }
+let opGroups = []       // undo groups: arrays of ids
+let nextId = 1, last = null, currentWorld = 'void'
+
+const ray = new THREE.Raycaster(), center = new THREE.Vector2(0, 0)
+function gaze() {
+  ray.setFromCamera(center, camera)
+  const hits = ray.intersectObjects([ground, ...world.map(w => w.obj)], true)
+  for (const h of hits) {
+    if (h.object === ground) return { kind: 'ground', point: h.point.clone(), dist: h.distance }
+    const w = world.find(w => { let o = h.object; while (o) { if (o === w.obj) return true; o = o.parent } return false })
+    if (w) return { kind: 'object', ref: w, point: h.point.clone(), dist: h.distance }
+  }
+  const p = camera.position.clone().add(new THREE.Vector3(0, 0, -12).applyEuler(new THREE.Euler(0, yaw, 0))); p.y = 0
+  return { kind: 'ground', point: p, dist: 12 }
+}
+
+// placement resolver: snap to ground, nudge out of other footprints, face the player
+function resolve(at, kind) {
+  let p
+  if (at === 'gaze') { const g = gazeSnap || gaze(); p = (g.kind === 'object' ? g.ref.obj.position.clone().add(new THREE.Vector3(4, 0, 0)) : g.point) }
+  else if (at.xz) p = new THREE.Vector3(at.xz[0], 0, at.xz[1])
+  else if (at.rel === 'player') { const v = { ahead: [0, -1], behind: [0, 1], left: [-1, 0], right: [1, 0] }[at.dir]; p = camera.position.clone().add(new THREE.Vector3(v[0] * at.dist, 0, v[1] * at.dist).applyEuler(new THREE.Euler(0, yaw, 0))) }
+  p.y = 0
+  const r = KIT[kind].r
+  if (r > 0) for (let tries = 0; tries < 12; tries++) {
+    const clash = world.find(w => KIT[w.kind].r > 0 && w.obj.position.distanceTo(p) < KIT[w.kind].r + r)
+    if (!clash) break
+    p.add(p.clone().sub(clash.obj.position).setY(0).normalize().multiplyScalar(.8))
+  }
+  return p
+}
+
+// ---------- tweens ----------
+const tweens = []
+const ease = { out: t => 1 - Math.pow(1 - t, 3), bounce: t => { const n = 7.5625, d = 2.75; if (t < 1 / d) return n * t * t; if (t < 2 / d) return n * (t -= 1.5 / d) * t + .75; if (t < 2.5 / d) return n * (t -= 2.25 / d) * t + .9375; return n * (t -= 2.625 / d) * t + .984375 } }
+function tween(dur, fn, done) { tweens.push({ t0: performance.now(), dur, fn, done }) }
+function arrive(obj, style) {
+  const y0 = obj.position.y
+  if (style === 'drop') { obj.position.y = y0 + 7; tween(900, t => obj.position.y = y0 + 7 * (1 - ease.bounce(t)), () => puff(obj.position)) }
+  else if (style === 'grow') { obj.scale.multiplyScalar(.001); const s = obj.userData.s0; tween(600, t => obj.scale.setScalar(Math.max(.001, s * ease.out(t)))) }
+  else if (style === 'rise') { obj.scale.y = .001; tween(700, t => obj.scale.y = Math.max(.001, ease.out(t))) }
+  else if (style === 'flicker') { obj.visible = false; let n = 0; const iv = setInterval(() => { obj.visible = !obj.visible; if (++n > 6) { clearInterval(iv); obj.visible = true } }, 90) }
+}
+function puff(at) {
+  const geo = new THREE.BufferGeometry(), n = 40, pos = new Float32Array(n * 3), vel = []
+  for (let i = 0; i < n; i++) { const a = Math.random() * Math.PI * 2; vel.push([Math.cos(a) * (2 + Math.random() * 2), Math.random() * .8, Math.sin(a) * (2 + Math.random() * 2)]); pos.set([at.x, .2, at.z], i * 3) }
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3))
+  const pts = new THREE.Points(geo, new THREE.PointsMaterial({ color: 0xd8d0c0, size: .18, transparent: true, opacity: .7 })); scene.add(pts)
+  tween(800, t => { for (let i = 0; i < n; i++) { pos[i * 3] = at.x + vel[i][0] * ease.out(t); pos[i * 3 + 1] = .2 + vel[i][1] * t; pos[i * 3 + 2] = at.z + vel[i][2] * ease.out(t) } geo.attributes.position.needsUpdate = true; pts.material.opacity = .7 * (1 - t) }, () => { scene.remove(pts); geo.dispose() })
+}
+
+// ghost outline at the gaze point (shows before the model answers)
+const ghost = new THREE.Mesh(new THREE.RingGeometry(1.6, 1.9, 40).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x7dd3a8, transparent: true, opacity: .0 }))
+ghost.position.y = .03; scene.add(ghost)
+const reticle = new THREE.Mesh(new THREE.RingGeometry(.35, .45, 32).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: .55 }))
+reticle.position.y = .04; scene.add(reticle)
+let gazeSnap = null
+
+// ---------- op executor ----------
+function exec(op, group) {
+  if (op.op === 'spawn') {
+    const def = KIT[op.kind] || KIT.blob
+    const params = op.kind in KIT ? (op.params || {}) : { label: op.kind }
+    const obj = def.build(params); obj.userData.s0 = obj.scale.x
+    const p = op.at.raw ? new THREE.Vector3(...op.at.raw) : resolve(op.at, op.kind in KIT ? op.kind : 'blob')
+    obj.position.add(p)
+    if (op.rotY != null) obj.rotation.y = op.rotY
+    else if (op.facing === 'player') obj.rotation.y = Math.atan2(camera.position.x - p.x, camera.position.z - p.z)
+    scene.add(obj); arrive(obj, def.fall)
+    const id = `${op.kind}#${nextId++}`; world.push({ id, kind: op.kind in KIT ? op.kind : 'blob', params, obj }); group.push(id); last = id
+  } else if (op.op === 'modify') {
+    const w = ref(op.target); if (!w) return
+    const params = { ...w.params, ...op.set }
+    const obj = KIT[w.kind].build(params); obj.position.copy(w.obj.position); obj.rotation.copy(w.obj.rotation)
+    const hOld = new THREE.Box3().setFromObject(w.obj).getSize(new THREE.Vector3()).y
+    scene.remove(w.obj); scene.add(obj); w.obj = obj; w.params = params
+    const hNew = new THREE.Box3().setFromObject(obj).getSize(new THREE.Vector3()).y, k = hOld / hNew
+    obj.scale.y = k; tween(700, t => obj.scale.y = k + (1 - k) * ease.bounce(t)); last = w.id
+  } else if (op.op === 'scatter') {
+    const along = ref(op.region.along); if (!along) return
+    const base = along.obj.position, rot = along.obj.rotation.y, half = 18
+    let i = 0
+    for (let z = -half; z <= half; z += (2 * half) / (op.count / 2 - 1)) for (const side of [-1, 1]) {
+      const v = new THREE.Vector3(side * 4.2, 0, z).applyEuler(new THREE.Euler(0, rot, 0)).add(base)
+      setTimeout(() => exec({ op: 'spawn', kind: op.kind, params: { s: .9 + Math.random() * .4 }, at: { raw: [v.x, 0, v.z] } }, group), i++ * 90)
+    }
+  } else if (op.op === 'remove') {
+    const w = ref(op.target); if (!w) return
+    tween(350, t => w.obj.scale.setScalar(Math.max(.001, 1 - t)), () => scene.remove(w.obj)); world = world.filter(x => x !== w)
+  } else if (op.op === 'atmosphere') atmosphere(op.time)
+  else if (op.op === 'say') say(op.text)
+  else if (op.op === 'teleport') teleport(op.world)
+}
+function ref(r) {
+  if (r === 'last') return world.find(w => w.id === last)
+  if (r === 'gaze') { const g = gazeSnap || gaze(); return g.kind === 'object' ? g.ref : world.find(w => w.id === last) }
+  if (r.id) return world.find(w => w.id === r.id)
+  if (r.kind) return [...world].reverse().find(w => w.kind === r.kind)
+}
+function run(ops) { const group = []; opGroups.push(group); ops.forEach((op, i) => setTimeout(() => exec(op, group), op.delay ?? i * 60)) }
+function undo() { const g = opGroups.pop(); if (!g) return; for (const id of g) exec({ op: 'remove', target: { id } }, []); say('Undone.') }
+function clearWorld() { for (const w of world) scene.remove(w.obj); world = []; opGroups = []; last = null }
+
+// ---------- scene recipes (what the Director streams) ----------
+const RECIPES = {
+  void: () => [{ op: 'atmosphere', time: 'dusk' }],
+  pool_hall: () => {
+    const ops = [{ op: 'atmosphere', time: 'interior', fog: .6, ambient: 'murmur_and_clacks', palette: ['#2f7d4a', '#5b3a24', '#ff4fa3'] },
+      { op: 'spawn', kind: 'floor', at: { xz: [0, -3] } },
+      { op: 'spawn', kind: 'wall', at: { xz: [0, -10] } }, { op: 'spawn', kind: 'wall', at: { xz: [-9, -3] }, rotY: Math.PI / 2 },
+      { op: 'spawn', kind: 'wall', at: { xz: [9, -3] }, rotY: Math.PI / 2 }, { op: 'spawn', kind: 'wall', params: { h: 4.2, color: '#5e4032' }, at: { xz: [0, 4] } }]
+    for (const [x, z] of [[-4.5, -6], [0, -6], [4.5, -6], [-4.5, -1.5], [4.5, -1.5]]) {
+      ops.push({ op: 'spawn', kind: 'pool_table', at: { xz: [x, z] } }, { op: 'spawn', kind: 'hanging_lamp', at: { xz: [x, z] } })
+    }
+    ops.push({ op: 'spawn', kind: 'bar', at: { xz: [0, 2.6] }, rotY: Math.PI })
+    for (let i = 0; i < 6; i++) ops.push({ op: 'spawn', kind: 'stool', at: { xz: [-2.5 + i, 1.6] } })
+    ops.push({ op: 'spawn', kind: 'jukebox', at: { xz: [8, -9] }, rotY: -.5 }, { op: 'spawn', kind: 'neon', at: { xz: [0, -9.8] } },
+      { op: 'say', text: 'Welcome in. Table three is open.' })
+    return ops
+  },
+  tranquil: () => {
+    const ops = [{ op: 'atmosphere', time: 'golden', fog: .4, ambient: 'loons_and_water', palette: ['#f2b77e', '#3f6f8f', '#2f5d3c'] },
+      { op: 'spawn', kind: 'lake', at: { xz: [0, -13] } }, { op: 'spawn', kind: 'shore', at: { xz: [0, -13] } }, { op: 'spawn', kind: 'dock', at: { xz: [0, 2] } }]
+    for (let i = 0; i < 46; i++) { const a = (i / 46) * Math.PI * 2 + Math.random() * .1, r = 17 + Math.random() * 14; const x = Math.cos(a) * r, z = -13 + Math.sin(a) * r * 1.4; if (Math.hypot(x, z - 6.5) < 10) continue; ops.push({ op: 'spawn', kind: 'pine', params: { s: 1.4 + Math.random() * 1.6 }, at: { xz: [x, z] } }) }
+    for (const [x, z, s] of [[-2.2, 2.6, .9], [2.4, 3.4, .7], [-3.2, 1.2, 1.2]]) ops.push({ op: 'spawn', kind: 'rock', params: { s }, at: { xz: [x, z] } })
+    ops.push({ op: 'spawn', kind: 'fireflies', at: { xz: [0, 2] } }, { op: 'say', text: 'Take your time. The water is calm tonight.' })
+    return ops
+  },
+}
+function teleport(name) {
+  const fade = document.getElementById('fade'); fade.style.opacity = 1; setPill('building')
+  setTimeout(() => {
+    clearWorld(); currentWorld = name
+    camera.position.set(0, 1.6, name === 'tranquil' ? 6.5 : 0.5); yaw = 0; pitch = name === 'tranquil' ? -.05 : -.1
+    const ops = RECIPES[name](); const group = []; opGroups.push(group)
+    // build outward from the player: sort spawns by distance, stagger like a stream
+    const head = ops.filter(o => o.op !== 'spawn'), spawns = ops.filter(o => o.op === 'spawn')
+    spawns.sort((a, b) => dist(a) - dist(b))
+    head.filter(o => o.op === 'atmosphere').forEach(o => exec(o, group))
+    fade.style.opacity = 0
+    spawns.forEach((op, i) => setTimeout(() => exec(op, group), 250 + i * 110))
+    setTimeout(() => { head.filter(o => o.op === 'say').forEach(o => exec(o, group)); setPill('idle') }, 400 + spawns.length * 110)
+  }, 650)
+}
+const dist = o => o.at?.xz ? Math.hypot(o.at.xz[0] - camera.position.x, o.at.xz[1] - camera.position.z) : 0
+
+// ---------- stand-in "model": keyword matcher → WorldOp[] ----------
+const COLORS = { red: '#c0453a', blue: '#4a74c9', green: '#4f9a5a', white: '#eeeae2', black: '#2a2a2e', yellow: '#e6c14a', pink: '#e58fb5', purple: '#8a5cc9', orange: '#e08a3c' }
+function interpret(text) {
+  const t = text.toLowerCase(), ops = []
+  if (/undo|take that back|never ?mind/.test(t)) return 'undo'
+  if (/pool hall|billiard|pool table room|dive bar/.test(t)) return [{ op: 'teleport', world: 'pool_hall' }]
+  if (/tranquil|relax|calm|peaceful|lake|serene/.test(t)) return [{ op: 'teleport', world: 'tranquil' }]
+  if (/back to (the )?(void|start)|empty|reset/.test(t)) return [{ op: 'teleport', world: 'void' }]
+  if (/(night|evening)\b/.test(t)) return [{ op: 'atmosphere', time: 'night' }, { op: 'say', text: 'Lights down.' }]
+  if (/(day|morning|noon|sunny)\b/.test(t)) return [{ op: 'atmosphere', time: 'day' }, { op: 'say', text: 'Morning.' }]
+  if (/remove|get rid|delete|destroy/.test(t)) return [{ op: 'remove', target: 'gaze' }, { op: 'say', text: 'Gone.' }]
+  if (/tree/.test(t) && /along|line|both sides/.test(t)) return [{ op: 'scatter', kind: 'pine', count: 16, region: { along: { kind: 'road', nearest: true } } }, { op: 'say', text: 'Planting.' }]
+  const set = {}
+  if (/taller|bigger|higher|another floor|add a floor/.test(t)) { const w = ref('gaze') || ref('last'); set.floors = ((w?.params.floors) ?? (w?.kind === 'tower' ? 8 : 1)) + (w?.kind === 'tower' ? 4 : 1) }
+  for (const [c, hex] of Object.entries(COLORS)) if (new RegExp(`\\b${c}\\b`).test(t)) set.color = hex
+  const spawnKind = /tower|skyscraper/.test(t) ? 'tower' : /house|building|home|cabin|cottage/.test(t) ? 'house' : /tree|pine/.test(t) ? 'pine'
+    : /road|street|path/.test(t) ? 'road' : /lamp|street ?light/.test(t) ? 'lamp' : /bench/.test(t) ? 'bench' : /rock|boulder/.test(t) ? 'rock' : null
+  if (spawnKind && /put|make|add|build|place|spawn|give|plant|create|want|need/.test(t)) {
+    ops.push({ op: 'spawn', kind: spawnKind, params: set.color ? { color: set.color } : undefined, at: 'gaze', facing: 'player' })
+    ops.push({ op: 'say', text: ['There you go.', 'Done.', 'How’s that?'][Math.floor(Math.random() * 3)] }); return ops
+  }
+  if (Object.keys(set).length) return [{ op: 'modify', target: 'gaze', set }, { op: 'say', text: 'Like that?' }]
+  const noun = t.match(/(?:a|an|some)\s+([a-z ]{3,24})/)?.[1]?.trim()
+  if (noun) return [{ op: 'spawn', kind: noun.replace(/ /g, '_'), at: 'gaze' }, { op: 'say', text: `No ${noun} in the kit yet. Holding its spot (codegen fills it in, Option B).` }]
+  return [{ op: 'say', text: 'Say that another way?' }]
+}
+
+// ---------- HUD ----------
+const $ = id => document.getElementById(id)
+function setPill(s) { $('pill').dataset.s = s; $('pill').querySelector('span').textContent = { idle: 'listening', hearing: 'hearing…', thinking: 'thinking…', building: 'building…' }[s] }
+let replyT; function say(text) { $('reply').textContent = '🗣 ' + text; $('reply').classList.add('show'); clearTimeout(replyT); replyT = setTimeout(() => $('reply').classList.remove('show'), 3200) }
+function logEntry(said, ops, ctx) {
+  const e = document.createElement('div'); e.className = 'entry'
+  const shown = Array.isArray(ops) ? (ops[0]?.op === 'teleport' ? [...ops, ...RECIPES[ops[0].world]().slice(0, 4), { '…': `${RECIPES[ops[0].world]().length - 4} more ops streamed by the Director` }] : ops) : [{ op: 'undo' }]
+  e.innerHTML = `<div class="said">“${said}”</div><div class="meta">${ctx}</div><pre></pre>`
+  e.querySelector('pre').textContent = shown.map(o => JSON.stringify(o, (k, v) => typeof v === 'number' ? Math.round(v * 100) / 100 : v)).join('\n')
+  $('entries').prepend(e)
+}
+function ctxLine() {
+  const g = gazeSnap || gaze()
+  const brain = 'haiku-5.5 (simulated)'
+  return `${brain} · gaze: ${g.kind === 'object' ? g.ref.id : `ground ${g.dist.toFixed(1)} m`} · last: ${last || '—'} · ${world.length} objects`
+}
+function command(text) {
+  if (!text.trim()) return
+  gazeSnap = gaze()                     // deictic snapshot: where you looked when you started talking
+  if (gazeSnap.kind === 'ground') { ghost.position.set(gazeSnap.point.x, .03, gazeSnap.point.z); ghost.material.opacity = .9 }
+  setPill('thinking')
+  const ops = interpret(text)
+  logEntry(text, ops, ops?.[0]?.op === 'teleport' ? ctxLine().replace('haiku-5.5', 'sonnet-5.5 director') : ctxLine())
+  setTimeout(() => {                    // ~model latency
+    ghost.material.opacity = 0
+    if (ops === 'undo') undo(); else run(ops)
+    setPill(ops?.[0]?.op === 'teleport' ? 'building' : 'idle'); gazeSnap = null
+  }, ops?.[0]?.op === 'teleport' ? 300 : 650)
+}
+$('say').addEventListener('keydown', e => { if (e.key === 'Enter') { command(e.target.value); e.target.value = '' } e.stopPropagation() })
+addEventListener('keydown', e => { if ((e.metaKey || e.ctrlKey) && e.key === 'z') { e.preventDefault(); undo() } })
+
+// mic: Chrome's built-in speech recognition stands in for the realtime session
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition
+let rec = null
+$('mic').onclick = () => {
+  if (!SR) return say('Speech recognition needs Chrome. Type instead.')
+  if (rec) { rec.stop(); return }
+  rec = new SR(); rec.lang = 'en-US'; rec.interimResults = true; rec.continuous = true
+  rec.onspeechstart = () => { gazeSnap = gaze(); setPill('hearing') }
+  rec.onresult = e => { const r = e.results[e.results.length - 1]; $('say').value = r[0].transcript; if (r.isFinal) { const snap = gazeSnap; command(r[0].transcript); gazeSnap = snap; $('say').value = '' } }
+  rec.onend = () => { rec = null; $('mic').classList.remove('live'); setPill('idle') }
+  rec.start(); $('mic').classList.add('live')
+}
+
+// ---------- frames: scripted moments in the core loop ----------
+const CAPTIONS = {
+  1: ['<b>The void.</b> A grid at dusk and nothing else. The pill says <i>listening</i>. The white ring is your gaze point; every “there” resolves to it.', 'Sprint 1: world kernel'],
+  2: ['<b>“Put a little house over there.”</b> The green ghost ring marks the gaze snapshot taken <i>when you started speaking</i>. The model only picks <code>kind</code> + <code>at:"gaze"</code>; the resolver snaps, de-overlaps and faces it toward you. Then it drops and bounces.', 'Sprints 1–2: kit, resolver, op brain'],
+  3: ['<b>“Make it taller. And red.”</b> “It” resolves to what you’re looking at, or else the last thing made. One <code>modify</code> op; the engine rebuilds the prefab with new params and springs it up.', 'Sprint 2: references'],
+  4: ['<b>“Line some trees along the road.”</b> One <code>scatter</code> op referencing <code>{kind:"road"}</code>. The engine plants 16 pines in a staggered stream, so it reads as being built rather than appearing.', 'Sprint 2: scatter + regions'],
+  5: ['<b>“Take me to a pool hall.”</b> Fog out, then the Director streams a scene recipe: atmosphere, shell, tables, lamps, bar, neon. Ops play sorted by distance from you, so the room assembles outward from your feet.', 'Sprint 4: teleport mode'],
+  6: ['<b>“Take me somewhere tranquil, I want to relax.”</b> No follow-up question. The model infers golden hour, still water, a dock, pines, fireflies and a softer voice. That’s the whole pitch: intent → world.', 'Sprint 4: atmosphere + nature set'],
+  7: ['<b>Hands-free.</b> Webcam head tracking turns the view (yaw/pitch from face landmarks); a pointing finger overrides gaze for “there.” Mocked here: the view sweeps as if you turned your head, then you point and say “put a tower there.”', 'Sprint 5: MediaPipe face + hand'],
+}
+let frameTimers = []
+function frame(n) {
+  frameTimers.forEach(clearTimeout); frameTimers = []
+  document.querySelectorAll('#frames button').forEach(b => b.classList.toggle('on', +b.dataset.f === n))
+  $('caption').innerHTML = CAPTIONS[n][0] + `<div class="sprint">${CAPTIONS[n][1]}</div>`; placeCaption()
+  $('cam').style.display = n === 7 ? 'block' : 'none'; headSweep = null
+  const at = (ms, fn) => frameTimers.push(setTimeout(fn, ms))
+  const fresh = () => { if (currentWorld !== 'void') { clearWorld(); atmosphere('dusk'); currentWorld = 'void' } camera.position.set(0, 1.6, 6); yaw = 0; pitch = -.12 }
+  if (n === 1) { clearWorld(); fresh() }
+  if (n === 2) { fresh(); if (!world.some(w => w.kind === 'house')) { yaw = .45; pitch = -.11; at(400, () => command('Put a little house over there')) } }
+  if (n === 3) { fresh(); if (!world.some(w => w.kind === 'house')) { yaw = .45; pitch = -.11; command('Put a little house over there'); at(1800, () => command('Make it taller. And red.')) } else at(200, () => { aimAt(world.find(w => w.kind === 'house')); command('Make it taller. And red.') }) }
+  if (n === 4) { clearWorld(); fresh(); yaw = -.35; pitch = -.08; at(200, () => command('Build a road over there')); at(1600, () => command('Line some trees along the road')) }
+  if (n === 5) at(100, () => command('Take me to a pool hall'))
+  if (n === 6) at(100, () => command('Take me somewhere tranquil, I want to relax'))
+  if (n === 7) { fresh(); headSweep = performance.now(); at(2600, () => { $('hand').setAttribute('opacity', 1) }); at(3200, () => command('Put a tower there')); at(4200, () => $('hand').setAttribute('opacity', 0)) }
+}
+function placeCaption() { document.getElementById('caption').style.top = document.getElementById('frames').getBoundingClientRect().bottom + 8 + 'px' }
+function aimAt(w) { if (!w) return; const d = w.obj.position.clone().sub(camera.position); yaw = Math.atan2(-d.x, -d.z); pitch = .04 }
+document.querySelectorAll('#frames button').forEach(b => b.onclick = () => frame(+b.dataset.f))
+
+// ---------- look + walk ----------
+let drag = null; const keys = {}
+renderer.domElement.addEventListener('pointerdown', e => drag = [e.clientX, e.clientY])
+addEventListener('pointerup', () => drag = null)
+addEventListener('pointermove', e => { if (!drag) return; yaw -= (e.clientX - drag[0]) * .004; pitch = Math.max(-1.2, Math.min(.6, pitch - (e.clientY - drag[1]) * .004)); drag = [e.clientX, e.clientY] })
+addEventListener('keydown', e => keys[e.key.toLowerCase()] = true); addEventListener('keyup', e => keys[e.key.toLowerCase()] = false)
+let headSweep = null
+
+// ---------- loop ----------
+let prev = performance.now()
+renderer.setAnimationLoop(now => {
+  const dt = Math.min(.05, (now - prev) / 1000); prev = now
+  for (let i = tweens.length - 1; i >= 0; i--) { const tw = tweens[i], t = Math.min(1, (now - tw.t0) / tw.dur); tw.fn(t); if (t >= 1) { tweens.splice(i, 1); tw.done?.() } }
+  if (headSweep) { const s = (now - headSweep) / 1000; const y = Math.sin(Math.min(s, 2.4) * 1.3) * .55; yaw = y; pitch = -.06 + Math.min(1, Math.max(0, (s - 3.8) / 1.4)) * .36; $('camlbl').textContent = `head yaw ${Math.round(-y * 57)}° · pitch ${Math.round(pitch * 57)}°`; $('face').setAttribute('transform', `translate(${-y * 30} 0)`) }
+  const f = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw)), r = new THREE.Vector3(-f.z, 0, f.x), sp = 6 * dt
+  if (keys.w) camera.position.addScaledVector(f, sp); if (keys.s) camera.position.addScaledVector(f, -sp)
+  if (keys.a) camera.position.addScaledVector(r, -sp); if (keys.d) camera.position.addScaledVector(r, sp)
+  camera.rotation.set(pitch, yaw, 0, 'YXZ')
+  const g = gaze(); reticle.position.set(g.point.x, g.kind === 'ground' ? .04 : g.point.y, g.point.z); reticle.visible = g.kind === 'ground'
+  sun.target.position.copy(camera.position).setY(0); sun.position.add(new THREE.Vector3())
+  for (const w of world) if (w.obj.userData.drift) { const p = w.obj.geometry.attributes.position; for (let i = 0; i < p.count; i++) p.array[i * 3 + 1] += Math.sin(now / 700 + i) * .002; p.needsUpdate = true; w.obj.material.opacity = .6 + .4 * Math.sin(now / 400) }
+  renderer.render(scene, camera)
+})
+window.__ready = true
+frame(1)
+</script>
+</body>
+</html>

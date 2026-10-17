@@ -1,0 +1,69 @@
+realtime live check — 2026-10-17T00:48:13.109Z — openai/gpt-realtime-mini via AI Gateway, server-vad, tools: [build]
+
+## trees.wav
+heard:        "Put a bunch of trees over there."
+tool calls:   build({  
+  "request": "put a bunch of trees over there"
+}) @3778 ms
+speech end → build call:  1149 ms (VAD speech-stopped → build call: 311 ms)
+/api/intent:  1888 ms → "spawned 9 pine"
+voice said:   "Nine pines, coming up."
+events:
+     697 ms  session-created
+     737 ms  session-updated
+    1474 ms  speech-started
+    3467 ms  speech-stopped
+    3468 ms  audio-committed
+    3468 ms  conversation-item-added
+    3468 ms  custom
+    3468 ms  response-created
+    3641 ms  output-item-added
+    3641 ms  conversation-item-added
+    3778 ms  function-call-arguments-done
+    3784 ms  custom
+    3784 ms  output-item-done
+    3784 ms  response-done
+    3792 ms  custom
+    4527 ms  custom
+    4527 ms  input-transcription-completed
+    5748 ms  conversation-item-added
+    5748 ms  custom
+    5754 ms  response-created
+    5995 ms  output-item-added
+    5995 ms  conversation-item-added
+    6614 ms  audio-done
+    6614 ms  audio-transcript-done
+    6614 ms  custom
+    6614 ms  output-item-done
+    6615 ms  response-done
+
+## hi.wav
+heard:        null
+tool calls:   none
+voice said:   "Hey there! I'm doing great, thanks for asking. How about you?"
+events:
+     661 ms  session-created
+     707 ms  session-updated
+    1482 ms  speech-started
+    3286 ms  speech-stopped
+    3324 ms  audio-committed
+    3324 ms  conversation-item-added
+    3325 ms  custom
+    3325 ms  response-created
+    3475 ms  output-item-added
+    3475 ms  conversation-item-added
+    4161 ms  audio-done
+    4161 ms  audio-transcript-done
+    4161 ms  custom
+    4161 ms  output-item-done
+    4161 ms  response-done
+
+
+## Browser run (scripts/voice-shoot.mjs: headless Chromium, fake mic playing bench/fixtures/session.wav, dev server :3091)
+deixis: speech-start gaze (-4.8, -8.7) → tree centroid (-5.2, -9.5), 0.9 m apart
+fallback mode: browser
+[voice] build “put a bunch of trees over there” vad→tool 510 ms, tool→built 1331 ms: spawned 9 pine
+[voice] build “make them all red” vad→tool 474 ms, tool→built 1230 ms: changed 9
+[voice] realtime error: Failed to fetch realtime setup: 502
+earlier run: [voice] build “put a bunch of trees over there” vad→tool 177 ms, tool→built 2441 ms: spawned 9 pine
+earlier run: [voice] build “make them all red” vad→tool 344 ms, tool→built 1239 ms: changed 9

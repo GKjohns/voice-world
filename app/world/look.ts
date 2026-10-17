@@ -1,0 +1,97 @@
+/**
+ * Apply an entity's props to its built meshes: slot colours, per-instance hue jitter, glow and the
+ * material preset. Kept separate from building so a recolour never has to rebuild geometry.
+ */
+import * as THREE from 'three'
+import type { Material, Props } from '#shared/world/ops'
+
+const PRESETS: Record<Material, Partial<THREE.MeshStandardMaterial>> = {
+  matte: { roughness: 0.9, metalness: 0, transparent: false, opacity: 1 },
+  wood: { roughness: 0.75, metalness: 0, transparent: false, opacity: 1 },
+  metal: { roughness: 0.3, metalness: 0.85, transparent: false, opacity: 1 },
+  glass: { roughness: 0.08, metalness: 0.2, transparent: true, opacity: 0.55 },
+  stone: { roughness: 1, metalness: 0, transparent: false, opacity: 1 }
+}
+
+export function materialLook(material?: Material): Partial<THREE.MeshStandardMaterial> {
+  return material ? PRESETS[material] : {}
+}
+
+export interface LookTarget {
+  color: THREE.Color
+  mesh: THREE.Mesh
+}
+
+/** Target colours for every slotted mesh. Returned (not applied) so the renderer can tween to them. */
+export function lookTargets(root: THREE.Object3D, props: Props, hue = 0): LookTarget[] {
+  const out: LookTarget[] = []
+  root.traverse((o) => {
+    const m = o as THREE.Mesh
+    if (!m.isMesh || !m.userData.baseColor) return
+    const slot = m.userData.slot as string | undefined
+    let hex = m.userData.baseColor as string
+    if (slot === 'primary' && props.color) hex = props.color
+    if (slot === 'trim' && props.trim) hex = props.trim
+    const color = safeColor(hex, m.userData.baseColor as string)
+    // Hue jitter only touches the primary slot: a cluster of pines varies its needles, not its trunks.
+    if (hue && slot === 'primary') {
+      // A colour someone asked for ("make them red") keeps most of its hue; only lightness varies much.
+      const h = props.color ? hue * 0.25 : hue
+      const hsl = { h: 0, s: 0, l: 0 }
+      color.getHSL(hsl)
+      color.setHSL((hsl.h + h + 1) % 1, hsl.s, Math.min(1, Math.max(0, hsl.l + hue * 0.6)))
+    }
+    out.push({ color, mesh: m })
+  })
+  return out
+}
+
+/** Glow and material presets apply instantly; colour goes through lookTargets so it can wipe. */
+export function applyMaterialProps(root: THREE.Object3D, props: Props): void {
+  root.traverse((o) => {
+    const m = o as THREE.Mesh
+    if (!m.isMesh) return
+    const material = m.material as THREE.MeshStandardMaterial
+    const slot = m.userData.slot as string | undefined
+    if (slot === 'glow') {
+      material.emissiveIntensity = (m.userData.baseGlow ?? 1) * (props.glow ?? 1)
+    }
+    if (slot === 'primary' && props.material) {
+      Object.assign(material, PRESETS[props.material])
+      material.needsUpdate = true
+    }
+  })
+  root.traverse((o) => {
+    const light = o as THREE.PointLight
+    if (light.isPointLight) light.intensity = (light.userData.baseIntensity ?? 10) * (props.glow ?? 1)
+  })
+}
+
+export function safeColor(hex: string, fallback: string): THREE.Color {
+  // three warns and leaves the colour untouched on a bad string, so start from an impossible sentinel.
+  const c = new THREE.Color(-1, -1, -1)
+  c.set(hex)
+  return c.r < 0 ? c.set(fallback) : c
+}
+
+// ---------- gaze override (Sprint 5: pointing) ----------
+
+/**
+ * Where the gaze ray goes through the screen, in NDC. `null` = the centre crosshair (the default).
+ * Hand pointing sets it; renderer.gaze() reads it, so the reticle, HUD gaze label, `useWorld().snapshot()`
+ * and `useIntent().capture()` all follow the pointed spot ("put a tower there" while pointing).
+ */
+let gazeOverride: [number, number] | null = null
+
+export function setGazeOverride(ndc: [number, number] | null): void {
+  gazeOverride = ndc ? [Math.max(-1, Math.min(1, ndc[0])), Math.max(-1, Math.min(1, ndc[1]))] : null
+}
+
+export function getGazeOverride(): [number, number] | null {
+  return gazeOverride
+}
+
+/** The gaze ray's screen point for Raycaster.setFromCamera: the override, or the centre. */
+export function gazeNdc(): THREE.Vector2 {
+  return gazeOverride ? new THREE.Vector2(gazeOverride[0], gazeOverride[1]) : new THREE.Vector2(0, 0)
+}

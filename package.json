@@ -1,0 +1,41 @@
+{
+  "name": "conjure",
+  "private": true,
+  "description": "Speak a world into existence: a first-person 3D world that an LLM builds from your voice.",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "nuxt build",
+    "dev": "nuxt dev --port 3091",
+    "preview": "nuxt preview",
+    "postinstall": "nuxt prepare",
+    "lint": "eslint .",
+    "typecheck": "nuxt typecheck",
+    "test": "node --test tests/*.test.ts",
+    "shoot": "node scripts/shoot.mjs",
+    "bench:intent": "node --env-file=.env bench/intent.ts"
+  },
+  "devDependencies": {
+    "@nuxt/eslint": "^1.17.0",
+    "@types/node": "^26.6.5",
+    "@types/three": "^0.186.0",
+    "eslint": "^10.13.0",
+    "eslint-plugin-better-tailwindcss": "^4.9.1",
+    "playwright": "^1.63.0",
+    "typescript": "^6.0.3",
+    "vue-tsc": "^3.3.13"
+  },
+  "dependencies": {
+    "@ai-sdk/gateway": "^4.0.0",
+    "@iconify-json/lucide": "^1.2.134",
+    "@mediapipe/tasks-vision": "^1.1.1",
+    "@nuxt/ui": "^4.12.0",
+    "ai": "^7.0.68",
+    "nuxt": "^4.6.1",
+    "tailwindcss": "^4.3.3",
+    "three": "^0.186.0",
+    "zod": "^4.4.3"
+  }
+}

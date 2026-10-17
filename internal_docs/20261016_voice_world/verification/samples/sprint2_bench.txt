@@ -1,0 +1,111 @@
+Conjure intent bench · 2026-10-17T00:40 · 34 cases × 1 · models haiku, sonnet
+PASS haiku   2138ms  113tok  count: a bunch of trees              spawn pine×9 cluster  “A little grove for you.”
+PASS haiku   2120ms  121tok  count: a few rocks                   spawn rock×3 cluster  “A few stones, there.”
+PASS haiku   1998ms  107tok  count: lamps along the road          spawn lamp×7 along  “Lit the way.”
+PASS haiku   2128ms  170tok  count: a forest                      spawn pine×32 scatter + spawn oak×16 scatter  “A whole forest.”
+PASS haiku   1261ms  119tok  count: a grove of oaks               spawn oak×8 cluster  “A little oak grove.”
+PASS haiku   1290ms  114tok  count: ring of rocks around me       spawn rock×10 ring  “A circle of stones.”
+PASS haiku   2651ms  118tok  count: couple of benches to my right spawn bench×2 line  “Two benches, right here.”
+PASS haiku   1308ms  134tok  count: few white houses              spawn house×3 cluster  “Three white houses.”
+PASS haiku   2380ms  104tok  place: tower behind me               spawn tower×1  “Standing tall behind you.”
+PASS haiku   1336ms  112tok  place: bench next to the house       spawn bench×1  “A seat by the house.”
+PASS haiku   1313ms   91tok  set: all the trees red               modify {"tag":"tree"}→{"color":"#c0453a"}  “Autumn came early.”
+PASS haiku   1145ms   91tok  set: paint the houses blue           modify {"kind":"house"}→{"color":"#3a6fc0"}  “Blue it is.”
+PASS haiku   1227ms   77tok  set: remove the rocks                remove {"kind":"rock"}  “Rocks cleared.”
+PASS haiku   3371ms   90tok  set: trees twice as big              modify {"tag":"tree"}→{"scale":2}rel  “Giants, now.”
+PASS haiku   1533ms   91tok  set: lamps brighter                  modify {"kind":"lamp"}→{"glow":2}rel  “Brighter now.”
+PASS haiku   1134ms   74tok  set: clear everything                remove {"ref":"all"}  “Clean slate.”
+PASS haiku   2166ms  486tok  define: grandfather clock            define grandfather_clock(6) + spawn grandfather_clock×1  “Tick, tock. Here it is.”
+PASS haiku   2625ms  540tok  define: snowman                      define snowman(7) + spawn snowman×1  “A snowman for you.”
+PASS haiku   3505ms  770tok  define: hot air balloon              define hot_air_balloon(10) + spawn hot_air_balloon×1  “Up, up, and away.”
+PASS haiku   2374ms  449tok  define: fountain                     define fountain(5) + spawn fountain×1  “Splashing right there.”
+PASS haiku   2363ms  396tok  define: mailbox next to house        define mailbox(4) + spawn mailbox×1  “A red mailbox, by the door.”
+PASS haiku   3272ms  635tok  define: real jukebox (placeholder)   define jukebox(8) + modify {"ref":"gaze"}→{"material":"wood"}  “Now it's a proper jukebox.”
+PASS haiku   1279ms  132tok  reuse: five more (gaze on a pine)    spawn grandfather_clock×5 line  “Five more, coming up.”
+PASS haiku   1563ms  132tok  reuse: five more of those            spawn grandfather_clock×5 line  “Five more, coming up.”
+PASS haiku   1406ms   92tok  ref: make it taller                  modify {"ref":"gaze"}→{"height":1.5}rel  “Taller it is.”
+PASS haiku   1169ms  101tok  ref: those twice as tall             modify {"kind":"house","near":"gaze","within":15}→{"height":2}rel  “Reaching for the sky.”
+PASS haiku   1106ms   62tok  ref: undo that                       undo  “Taken back.”
+PASS haiku   1260ms   74tok  ref: get rid of that (gaze)          remove {"ref":"gaze"}  “Gone.”
+PASS haiku   1294ms   93tok  ref: make that blue (gaze)           modify {"ref":"gaze"}→{"color":"#3a6fc0"}  “Blue it is.”
+PASS haiku   1211ms   85tok  ref: another floor (gaze)            modify {"ref":"gaze"}→{"floors":2}  “One more floor.”
+PASS haiku   1225ms   70tok  atmo: make it night                  atmo night  “Night falls.”
+PASS haiku   1157ms   75tok  atmo: foggy                          atmo  fog 0.7  “Rolling in, misty.”
+PASS haiku   1432ms  127tok  teleport: pool hall                  teleport "pool hall"  “Racking them up.”
+PASS haiku   1577ms  141tok  teleport: tranquil                   teleport "peaceful retreat"  “Settle in and unwind.”
+haiku: 34/34 pass (100%) · latency median 1432 ms, p90 2651 ms · plain edits median 1313 ms (n=28) · define median 2625 ms (n=6) · cost $0.0066 ($0.00020/call) · cache hits 34/34
+(node:58014) Warning: AI SDK Warning System: To turn off warning logging, set the AI_SDK_LOG_WARNINGS global to false.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:58014) Warning: AI SDK Warning (gateway / anthropic/claude-sonnet-5.5): The feature "toolChoice" is not supported. toolChoice 'required' is not supported with this model or thinking configuration. Using 'auto' instead. Instruct the model to use a tool in the prompt and verify that a tool call was made.
+(node:58014) Warning: AI SDK Warning (gateway / anthropic/claude-sonnet-5.5): The feature "toolChoice" is not supported. toolChoice 'required' is not supported with this model or thinking configuration. Using 'auto' instead. Instruct the model to use a tool in the prompt and verify that a tool call was made.
+(node:58014) Warning: AI SDK Warning (gateway / anthropic/claude-sonnet-5.5): The feature "toolChoice" is not supported. toolChoice 'required' is not supported with this model or thinking configuration. Using 'auto' instead. Instruct the model to use a tool in the prompt and verify that a tool call was made.
+(node:58014) Warning: AI SDK Warning (gateway / anthropic/claude-sonnet-5.5): The feature "toolChoice" is not supported. toolChoice 'required' is not supported with this model or thinking configuration. Using 'auto' instead. Instruct the model to use a tool in the prompt and verify that a tool call was made.
+(node:58014) Warning: AI SDK Warning (gateway / anthropic/claude-sonnet-5.5): The feature "toolChoice" is not supported. toolChoice 'required' is not supported with this model or thinking configuration. Using 'auto' instead. Instruct the model to use a tool in the prompt and verify that a tool call was made.
+(node:58014) Warning: AI SDK Warning (gateway / anthropic/claude-sonnet-5.5): The feature "toolChoice" is not supported. toolChoice 'required' is not supported with this model or thinking configuration. Using 'auto' instead. Instruct the model to use a tool in the prompt and verify that a tool call was made.
+(node:58014) Warning: AI SDK Warning (gateway / anthropic/claude-sonnet-5.5): The feature "toolChoice" is not supported. toolChoice 'required' is not supported with this model or thinking configuration. Using 'auto' instead. Instruct the model to use a tool in the prompt and verify that a tool call was made.
+(node:58014) Warning: AI SDK Warning (gateway / anthropic/claude-sonnet-5.5): The feature "toolChoice" is not supported. toolChoice 'required' is not supported with this model or thinking configuration. Using 'auto' instead. Instruct the model to use a tool in the prompt and verify that a tool call was made.
+(node:58014) Warning: AI SDK Warning (gateway / anthropic/claude-sonnet-5.5): The feature "toolChoice" is not supported. toolChoice 'required' is not supported with this model or thinking configuration. Using 'auto' instead. Instruct the model to use a tool in the prompt and verify that a tool call was made.
+(node:58014) Warning: AI SDK Warning (gateway / anthropic/claude-sonnet-5.5): The feature "toolChoice" is not supported. toolChoice 'required' is not supported with this model or thinking configuration. Using 'auto' instead. Instruct the model to use a tool in the prompt and verify that a tool call was made.
+(node:58014) Warning: AI SDK Warning (gateway / anthropic/claude-sonnet-5.5): The feature "toolChoice" is not supported. toolChoice 'required' is not supported with this model or thinking configuration. Using 'auto' instead. Instruct the model to use a tool in the prompt and verify that a tool call was made.
+(node:58014) Warning: AI SDK Warning (gateway / anthropic/claude-sonnet-5.5): The feature "toolChoice" is not supported. toolChoice 'required' is not supported with this model or thinking configuration. Using 'auto' instead. Instruct the model to use a tool in the prompt and verify that a tool call was made.
+(node:58014) Warning: AI SDK Warning (gateway / anthropic/claude-sonnet-5.5): The feature "toolChoice" is not supported. toolChoice 'required' is not supported with this model or thinking configuration. Using 'auto' instead. Instruct the model to use a tool in the prompt and verify that a tool call was made.
+(node:58014) Warning: AI SDK Warning (gateway / anthropic/claude-sonnet-5.5): The feature "toolChoice" is not supported. toolChoice 'required' is not supported with this model or thinking configuration. Using 'auto' instead. Instruct the model to use a tool in the prompt and verify that a tool call was made.
+(node:58014) Warning: AI SDK Warning (gateway / anthropic/claude-sonnet-5.5): The feature "toolChoice" is not supported. toolChoice 'required' is not supported with this model or thinking configuration. Using 'auto' instead. Instruct the model to use a tool in the prompt and verify that a tool call was made.
+(node:58014) Warning: AI SDK Warning (gateway / anthropic/claude-sonnet-5.5): The feature "toolChoice" is not supported. toolChoice 'required' is not supported with this model or thinking configuration. Using 'auto' instead. Instruct the model to use a tool in the prompt and verify that a tool call was made.
+(node:58014) Warning: AI SDK Warning (gateway / anthropic/claude-sonnet-5.5): The feature "toolChoice" is not supported. toolChoice 'required' is not supported with this model or thinking configuration. Using 'auto' instead. Instruct the model to use a tool in the prompt and verify that a tool call was made.
+(node:58014) Warning: AI SDK Warning (gateway / anthropic/claude-sonnet-5.5): The feature "toolChoice" is not supported. toolChoice 'required' is not supported with this model or thinking configuration. Using 'auto' instead. Instruct the model to use a tool in the prompt and verify that a tool call was made.
+(node:58014) Warning: AI SDK Warning (gateway / anthropic/claude-sonnet-5.5): The feature "toolChoice" is not supported. toolChoice 'required' is not supported with this model or thinking configuration. Using 'auto' instead. Instruct the model to use a tool in the prompt and verify that a tool call was made.
+(node:58014) Warning: AI SDK Warning (gateway / anthropic/claude-sonnet-5.5): The feature "toolChoice" is not supported. toolChoice 'required' is not supported with this model or thinking configuration. Using 'auto' instead. Instruct the model to use a tool in the prompt and verify that a tool call was made.
+(node:58014) Warning: AI SDK Warning (gateway / anthropic/claude-sonnet-5.5): The feature "toolChoice" is not supported. toolChoice 'required' is not supported with this model or thinking configuration. Using 'auto' instead. Instruct the model to use a tool in the prompt and verify that a tool call was made.
+(node:58014) Warning: AI SDK Warning (gateway / anthropic/claude-sonnet-5.5): The feature "toolChoice" is not supported. toolChoice 'required' is not supported with this model or thinking configuration. Using 'auto' instead. Instruct the model to use a tool in the prompt and verify that a tool call was made.
+(node:58014) Warning: AI SDK Warning (gateway / anthropic/claude-sonnet-5.5): The feature "toolChoice" is not supported. toolChoice 'required' is not supported with this model or thinking configuration. Using 'auto' instead. Instruct the model to use a tool in the prompt and verify that a tool call was made.
+(node:58014) Warning: AI SDK Warning (gateway / anthropic/claude-sonnet-5.5): The feature "toolChoice" is not supported. toolChoice 'required' is not supported with this model or thinking configuration. Using 'auto' instead. Instruct the model to use a tool in the prompt and verify that a tool call was made.
+(node:58014) Warning: AI SDK Warning (gateway / anthropic/claude-sonnet-5.5): The feature "toolChoice" is not supported. toolChoice 'required' is not supported with this model or thinking configuration. Using 'auto' instead. Instruct the model to use a tool in the prompt and verify that a tool call was made.
+(node:58014) Warning: AI SDK Warning (gateway / anthropic/claude-sonnet-5.5): The feature "toolChoice" is not supported. toolChoice 'required' is not supported with this model or thinking configuration. Using 'auto' instead. Instruct the model to use a tool in the prompt and verify that a tool call was made.
+(node:58014) Warning: AI SDK Warning (gateway / anthropic/claude-sonnet-5.5): The feature "toolChoice" is not supported. toolChoice 'required' is not supported with this model or thinking configuration. Using 'auto' instead. Instruct the model to use a tool in the prompt and verify that a tool call was made.
+(node:58014) Warning: AI SDK Warning (gateway / anthropic/claude-sonnet-5.5): The feature "toolChoice" is not supported. toolChoice 'required' is not supported with this model or thinking configuration. Using 'auto' instead. Instruct the model to use a tool in the prompt and verify that a tool call was made.
+(node:58014) Warning: AI SDK Warning (gateway / anthropic/claude-sonnet-5.5): The feature "toolChoice" is not supported. toolChoice 'required' is not supported with this model or thinking configuration. Using 'auto' instead. Instruct the model to use a tool in the prompt and verify that a tool call was made.
+(node:58014) Warning: AI SDK Warning (gateway / anthropic/claude-sonnet-5.5): The feature "toolChoice" is not supported. toolChoice 'required' is not supported with this model or thinking configuration. Using 'auto' instead. Instruct the model to use a tool in the prompt and verify that a tool call was made.
+(node:58014) Warning: AI SDK Warning (gateway / anthropic/claude-sonnet-5.5): The feature "toolChoice" is not supported. toolChoice 'required' is not supported with this model or thinking configuration. Using 'auto' instead. Instruct the model to use a tool in the prompt and verify that a tool call was made.
+(node:58014) Warning: AI SDK Warning (gateway / anthropic/claude-sonnet-5.5): The feature "toolChoice" is not supported. toolChoice 'required' is not supported with this model or thinking configuration. Using 'auto' instead. Instruct the model to use a tool in the prompt and verify that a tool call was made.
+(node:58014) Warning: AI SDK Warning (gateway / anthropic/claude-sonnet-5.5): The feature "toolChoice" is not supported. toolChoice 'required' is not supported with this model or thinking configuration. Using 'auto' instead. Instruct the model to use a tool in the prompt and verify that a tool call was made.
+PASS sonnet  1898ms  123tok  count: a bunch of trees              spawn pine×9 cluster  “A little grove for you.”
+PASS sonnet  1840ms  125tok  count: a few rocks                   spawn rock×3 cluster  “A few rocks, placed.”
+PASS sonnet  7099ms  117tok  count: lamps along the road          spawn lamp×7 along  “Lit the way.”
+PASS sonnet  1949ms  180tok  count: a forest                      spawn pine×32 scatter + spawn oak×16 scatter  “A whole forest.”
+PASS sonnet  1272ms  123tok  count: a grove of oaks               spawn oak×8 cluster  “A little oak grove.”
+PASS sonnet  1369ms  124tok  count: ring of rocks around me       spawn rock×10 ring  “A circle of stones.”
+PASS sonnet  1413ms  122tok  count: couple of benches to my right spawn bench×2 line  “Take a seat.”
+PASS sonnet  1423ms  128tok  count: few white houses              spawn house×3 line  “Three white houses.”
+PASS sonnet  2832ms  112tok  place: tower behind me               spawn tower×1  “Rising behind you.”
+PASS sonnet  1306ms  121tok  place: bench next to the house       spawn bench×1  “A place to sit.”
+PASS sonnet  1237ms  101tok  set: all the trees red               modify {"tag":"tree"}→{"color":"#c0453a"}  “Autumn came early.”
+PASS sonnet  2698ms  101tok  set: paint the houses blue           modify {"kind":"house"}→{"color":"#3a6fc0"}  “Blue it is.”
+PASS sonnet  1253ms   87tok  set: remove the rocks                remove {"kind":"rock"}  “Rocks cleared.”
+PASS sonnet  1566ms  100tok  set: trees twice as big              modify {"tag":"tree"}→{"scale":2}rel  “Twice the size.”
+PASS sonnet  1206ms   97tok  set: lamps brighter                  modify {"kind":"lamp"}→{"glow":8}  “Shining brighter.”
+PASS sonnet  1102ms   84tok  set: clear everything                remove {"ref":"all"}  “A clean slate.”
+PASS sonnet  4664ms  511tok  define: grandfather clock            define grandfather_clock(6) + spawn grandfather_clock×1  “Tick, tock.”
+PASS sonnet  3042ms  554tok  define: snowman                      define snowman(7) + spawn snowman×1  “Do you want to build a snowman?”
+PASS sonnet  4860ms  664tok  define: hot air balloon              define hot_air_balloon(9) + spawn hot_air_balloon×1  “Up, up and away.”
+PASS sonnet  3447ms  520tok  define: fountain                     define fountain(6) + spawn fountain×1  “A fountain for you.”
+PASS sonnet  2896ms  416tok  define: mailbox next to house        define mailbox(4) + spawn mailbox×1  “Mail has a home.”
+PASS sonnet  3999ms  608tok  define: real jukebox (placeholder)   define jukebox(8)  “Now it's a proper jukebox.”
+PASS sonnet  1451ms  142tok  reuse: five more (gaze on a pine)    spawn grandfather_clock×5 line  “Five more, coming up.”
+PASS sonnet  1879ms  142tok  reuse: five more of those            spawn grandfather_clock×5 line  “Five more, coming up.”
+PASS sonnet  1434ms  102tok  ref: make it taller                  modify {"ref":"gaze"}→{"height":1.5}rel  “Taller it is.”
+PASS sonnet  1759ms  101tok  ref: those twice as tall             modify {"ref":"last"}→{"height":2}rel  “Reaching for the sky.”
+PASS sonnet  1290ms   72tok  ref: undo that                       undo  “Taken back.”
+PASS sonnet  1160ms   84tok  ref: get rid of that (gaze)          remove {"ref":"gaze"}  “Gone.”
+PASS sonnet  1146ms  103tok  ref: make that blue (gaze)           modify {"ref":"gaze"}→{"color":"#3a6fc0"}  “Blue it is.”
+PASS sonnet  1755ms  137tok  ref: another floor (gaze)            modify {"ref":"gaze"}→{"floors":2}  “One more floor.”
+PASS sonnet  1411ms   80tok  atmo: make it night                  atmo night  “Night falls.”
+PASS sonnet  1224ms   84tok  atmo: foggy                          atmo  fog 0.7  “Mist rolls in.”
+PASS sonnet  1421ms  137tok  teleport: pool hall                  teleport "pool hall"  “Racking them up.”
+PASS sonnet  1787ms  144tok  teleport: tranquil                   teleport "quiet garden"  “Time to unwind.”
+sonnet: 34/34 pass (100%) · latency median 1566 ms, p90 3999 ms · plain edits median 1423 ms (n=28) · define median 3999 ms (n=6) · cost $0.1665 ($0.00490/call) · cache hits 31/34
+Summary
+  haiku: 34/34 pass (100%) · latency median 1432 ms, p90 2651 ms · plain edits median 1313 ms (n=28) · define median 2625 ms (n=6) · cost $0.0066 ($0.00020/call) · cache hits 34/34
+  sonnet: 34/34 pass (100%) · latency median 1566 ms, p90 3999 ms · plain edits median 1423 ms (n=28) · define median 3999 ms (n=6) · cost $0.1665 ($0.00490/call) · cache hits 31/34
+  wall 35.0 s
+(node:58014) Warning: AI SDK Warning (gateway / anthropic/claude-sonnet-5.5): The feature "toolChoice" is not supported. toolChoice 'required' is not supported with this model or thinking configuration. Using 'auto' instead. Instruct the model to use a tool in the prompt and verify that a tool call was made.
