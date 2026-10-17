@@ -169,3 +169,32 @@ function wrap(a: number): number {
   while (x < -Math.PI) x += Math.PI * 2
   return x
 }
+
+/** The awe tilt's pitch range (rad): high enough to frame a 10–35° band, never straight up. */
+export const SKY_PITCH: [number, number] = [0.24, 0.62]
+
+/**
+ * Loop 3, "look up": something arrived in the sky (lanterns, a whale, an orbiting dragon). From where you
+ * stand, tilt up to the middle of it and turn a little toward the part in front of you. Position never
+ * changes. Points are world positions; `eye` is the camera position. Returns null when nothing is above you
+ * or you're already looking that high.
+ */
+export function skyTilt(eye: [number, number, number], yaw: number, pitch: number, points: [number, number, number][]): { yaw: number, pitch: number } | null {
+  const seen = points.map((p) => {
+    const dx = p[0] - eye[0]
+    const dz = p[2] - eye[2]
+    return { rel: wrap(Math.atan2(-dx, -dz) - yaw), el: Math.atan2(p[1] - eye[1], Math.hypot(dx, dz)) }
+  }).filter(s => s.el > 0.05)
+  if (!seen.length) return null
+  const front = seen.filter(s => Math.abs(s.rel) < Math.PI / 2)
+  const use = front.length ? front : seen
+  // Turn toward the middle of what's in front (circular mean), but only partway: you stay facing your world.
+  const turn = Math.atan2(use.reduce((a, s) => a + Math.sin(s.rel), 0), use.reduce((a, s) => a + Math.cos(s.rel), 0))
+  const maxTurn = front.length ? 0.6 : 1.0
+  const dYaw = Math.max(-maxTurn, Math.min(maxTurn, turn))
+  const els = use.map(s => s.el).sort((a, b) => a - b)
+  const mid = els[Math.floor(els.length / 2)]!
+  const to = Math.max(SKY_PITCH[0], Math.min(SKY_PITCH[1], mid))
+  if (to <= pitch + 0.04 && Math.abs(dYaw) < 0.05) return null
+  return { yaw: yaw + dYaw, pitch: Math.max(pitch, to) }
+}

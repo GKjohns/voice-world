@@ -9,7 +9,7 @@ import { altitudeY, capAltitude, deOverlap, hashSeed, layout, resolveAnchor, rng
 import { honestSay } from './honesty.ts'
 import type { Placed } from './layout.ts'
 import { parseOps } from './ops.ts'
-import type { DroppedOp, Op, Props, SkyEvent, Vec3 } from './ops.ts'
+import type { DroppedOp, Op, Placement, Props, Selector, SkyEvent, Vec3 } from './ops.ts'
 import { entityHeight, entityRadius, kindOf, select } from './select.ts'
 import type { Batch, Effects, Entity, OpContext, WorldState } from './types.ts'
 
@@ -99,7 +99,13 @@ function step(state: WorldState, op: Op, ctx: OpContext): StepResult {
 
     case 'modify': {
       const targets = select(state, op.target, ctx)
-      if (!targets.length) return { state, notes: [`modify: nothing matches ${JSON.stringify(op.target)}`] }
+      if (!targets.length) {
+        // A genie grants: "make the dragon fly around me" with no dragon conjures one, already flying.
+        const spawn = conjure(state, op.target, conjureSet(op.set, op.relative ?? false))
+        if (!spawn) return { state, notes: [`modify: nothing matches ${JSON.stringify(op.target)}`] }
+        const res = step(state, spawn, ctx)
+        return { ...res, notes: [`no ${spawn.kind} here: conjured ${spawn.count === 1 ? 'one' : spawn.count}`, ...res.notes] }
+      }
       const ids = new Set(targets.map(t => t.id))
       const { altitude, ...rest } = op.set
       const rel = op.relative ?? false
@@ -128,7 +134,13 @@ function step(state: WorldState, op: Op, ctx: OpContext): StepResult {
 
     case 'move': {
       const targets = select(state, op.target, ctx)
-      if (!targets.length) return { state, notes: [`move: nothing matches ${JSON.stringify(op.target)}`] }
+      if (!targets.length) {
+        // "Move the boat over there" with no boat: conjure one where it was meant to go.
+        const spawn = conjure(state, op.target, undefined, op.at)
+        if (!spawn) return { state, notes: [`move: nothing matches ${JSON.stringify(op.target)}`] }
+        const res = step(state, spawn, ctx)
+        return { ...res, notes: [`no ${spawn.kind} here: conjured ${spawn.count === 1 ? 'one' : spawn.count}`, ...res.notes] }
+      }
       const ids = new Set(targets.map(t => t.id))
       const maxR = Math.max(...targets.map(t => entityRadius(state, t)))
       const anchor = resolveAnchor({ ...state, entities: state.entities.filter(e => !ids.has(e.id)) }, op.at, ctx, maxR)
@@ -187,6 +199,66 @@ function step(state: WorldState, op: Op, ctx: OpContext): StepResult {
     case 'say':
       return { state, say: op.text, notes: [] }
   }
+}
+
+/**
+ * A modify or move whose selector names a concrete kind that isn't in the world becomes a spawn of that
+ * kind (the genie conjures what you asked about instead of refusing). Only a named kind the world knows
+ * (kit or learned) qualifies; refs (it, those, everything) and loose tags never conjure.
+ */
+function conjure(state: WorldState, sel: Selector, set?: Props, at?: Placement): Extract<Op, { op: 'spawn' }> | undefined {
+  if (sel.ref) return undefined
+  const word = (sel.kind ?? sel.tag ?? '').toLowerCase().trim()
+  if (!word) return undefined
+  const kind = [word, word.replace(/ies$/, 'y'), word.replace(/es$/, ''), word.replace(/s$/, '')].find(w => state.kinds[w] && !state.kinds[w]!.tags.includes('placeholder'))
+  if (!kind) return undefined
+  // Only when the world truly has none: a "lamp" selector over hanging lamps, or "those houses" with the
+  // gaze elsewhere, is a missed match, not a missing subject.
+  const forms = new Set([word, kind, word.replace(/es$/, ''), word.replace(/s$/, '')])
+  if (state.entities.some(e => forms.has(e.kind) || e.tags.some(t => forms.has(t)))) return undefined
+  const desc = state.kinds[kind]!
+  const many = kind !== word && !desc.sized
+  const count = Math.min(sel.limit ?? (many ? 6 : 1), 12)
+  const props: Props = { ...set }
+  // Something told to fly or circle that would otherwise stand on the ground takes to the air.
+  if ((props.motion === 'orbit' || props.motion === 'fly') && props.altitude === undefined && desc.baseHeight < 30) props.altitude = 18
+  const colossal = desc.tags.includes('terrain') && desc.baseHeight >= 100
+  return {
+    op: 'spawn',
+    kind,
+    count,
+    ...(count > 1 ? { arrange: 'cluster' as const, radius: 8, vary: 0.3 } : {}),
+    at: at ?? (colossal ? { anchor: 'horizon' } : { anchor: 'gaze' }),
+    facing: 'player',
+    ...(Object.keys(props).length ? { set: props } : {})
+  } as Extract<Op, { op: 'spawn' }>
+}
+
+/** A modify's props as a newborn's: absolute values carry over; relative ones only as a scale. */
+function conjureSet(set: Props, relative: boolean): Props {
+  if (!relative) return { ...set }
+  const out: Props = {}
+  for (const [k, v] of Object.entries(set) as [keyof Props, Props[keyof Props]][]) {
+    if (typeof v !== 'number') (out as Record<string, unknown>)[k] = v
+    else if (k === 'scale' || k === 'height') out.scale = Math.max(out.scale ?? 1, v)
+  }
+  return out
+}
+
+const TIME_WORDS = /\b(night|nighttime|midnight|dark|darkness|evening|dusk|twilight|sunset|golden|dawn|morning|sunrise|noon|midday|day|daytime|daylight|bright|afternoon|indoors)\b/i
+
+/**
+ * Weather keeps the time of day (Loop 3, #4): a weather wish that doesn't name a time never changes it
+ * ("a thunderstorm" at night stays night). Aurora and meteors may still bring the night they need. Only
+ * for the player's own sentences (a teleport's Director sets its own light with its weather).
+ */
+function keepTime(ops: Op[], label: string | undefined): Op[] {
+  if (label === undefined || TIME_WORDS.test(label) || ops.some(o => o.op === 'teleport')) return ops
+  return ops.map((o) => {
+    if (o.op !== 'atmosphere' || !o.time || !o.weather || o.weather === 'aurora') return o
+    const { time: _time, ...rest } = o
+    return rest as Op
+  })
 }
 
 function stripAtmos(a: WorldState['atmosphere']): WorldState['atmosphere'] {
@@ -284,7 +356,7 @@ export interface BatchResult {
  */
 export function applyBatch(state: WorldState, raw: unknown, ctx: OpContext, label?: string, at = Date.now()): BatchResult {
   const { ops, dropped } = parseOps(raw)
-  return commitOps(state, ops, dropped, ctx, label, at)
+  return commitOps(state, keepTime(ops, label), dropped, ctx, label, at)
 }
 
 function commitOps(state: WorldState, ops: Op[], dropped: DroppedOp[], ctx: OpContext, label: string | undefined, at: number): BatchResult {
@@ -329,7 +401,7 @@ export function extendLastBatch(state: WorldState, raw: unknown): BatchResult {
   const b = state.log[state.log.length - 1]
   if (!b) return { state, effects: { ...emptyEffects(), notes: ['nothing to extend'] }, ops: [], dropped }
   const extras = emptyEffects()
-  const keep = ops.filter(o => o.op !== 'undo' && o.op !== 'teleport' && o.op !== 'say')
+  const keep = b.ops.some(o => o.op === 'teleport') ? ops.filter(o => o.op !== 'undo' && o.op !== 'teleport' && o.op !== 'say') : keepTime(ops.filter(o => o.op !== 'undo' && o.op !== 'teleport' && o.op !== 'say'), b.label?.replace(/ \(cont\.\)$/, ''))
   // Step with the batch's own group number (nextGroup was bumped when it was committed).
   let s: WorldState = { ...state, nextGroup: state.nextGroup - 1 }
   for (const op of keep) {

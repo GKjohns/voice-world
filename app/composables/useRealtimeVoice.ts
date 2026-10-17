@@ -208,7 +208,8 @@ async function grant(toolName: string, args: Record<string, unknown> | null, ctx
       result: out.summary,
       ...(out.notes.length ? { notes: out.notes.slice(0, 3) } : {}),
       ...(out.dropped.length ? { dropped: out.dropped.slice(0, 2).map(d => d.reason) } : {}),
-      ...(out.say && out.ok ? { builderLine: `${out.say} (use only if true to the result)` } : {})
+      // The builder's line has already been through the honesty filter (true to the result, no "Shall I…?").
+      ...(out.say ? { builderLine: out.say } : {})
     }
   } finally {
     toolBusy.value--

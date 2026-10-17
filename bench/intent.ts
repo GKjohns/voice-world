@@ -13,6 +13,7 @@ import { distXZ } from '../shared/world/select.ts'
 import type { Op } from '../shared/world/ops.ts'
 import type { Entity, OpContext, WorldState } from '../shared/world/types.ts'
 import { interpret } from '../server/utils/intent.ts'
+import { KIT } from '../shared/world/kinds.ts'
 
 // ---------- scenes ----------
 
@@ -67,10 +68,10 @@ const SCENES = {
     ['make a bunch of trees', [{ op: 'spawn', kind: 'pine', count: 9, arrange: 'cluster', at: { anchor: 'gaze' }, radius: 6 }]],
     ['make it night', [{ op: 'atmosphere', time: 'night' }]]
   ),
-  dragon: () => build(['a dragon', [{ op: 'define', kind: 'dragon', tags: ['dragon', 'animal', 'creature'], parts: BLOCKY }, { op: 'spawn', kind: 'dragon', at: { anchor: 'gaze' } }]]),
+  dragon: () => build(['a dragon', [{ op: 'spawn', kind: 'dragon', at: { anchor: 'gaze' } }]]),
   horses: () => build(
     ['some trees', [{ op: 'spawn', kind: 'pine', count: 6, arrange: 'cluster', at: { anchor: 'player', dir: 'left', dist: 18 } }]],
-    ['a herd of horses', [{ op: 'define', kind: 'horse', tags: ['horse', 'animal'], parts: BLOCKY }, { op: 'spawn', kind: 'horse', count: 6, arrange: 'cluster', at: { anchor: 'gaze' } }]]
+    ['a herd of horses', [{ op: 'spawn', kind: 'horse', count: 6, arrange: 'cluster', at: { anchor: 'gaze' } }]]
   ),
   castle: () => build(
     ['some trees', [{ op: 'spawn', kind: 'pine', count: 6, arrange: 'cluster', at: { anchor: 'player', dir: 'right', dist: 18 } }]],
@@ -273,11 +274,41 @@ const CASES: Case[] = [
     const h = o.after.entities.filter(e => e.kind === 'horse')
     return expect(h.length === 6 && h.every(e => e.props.motion === 'gallop' && e.pos[1] < 1 && !!e.path), `motions ${[...new Set(h.map(e => e.props.motion))].join(',')}, y ${h[0]?.pos[1]}`)
   } },
-  { name: 'motion: no dragon to fly (honest)', text: 'make the dragon fly in circles', scene: 'grove', check: (o) => {
-    const line = o.say.join(' ')
-    const claim = line.split(/[.!?…,;]/).filter(c => !/\b(cannot|can't|not|no|alas|yet|shall)\b/i.test(c)).join(' ')
-    return expect(!o.after.entities.some(e => e.props.motion) && !/\b(soar|circl|fl(y|ies|ying))/i.test(claim), `say "${line}", moving ${o.after.entities.filter(e => e.props.motion).length}`)
+  // Loop 3 (#2): a wish about something missing conjures it, already doing what was asked.
+  { name: 'conjure: dragon flies around me (none)', text: 'make the dragon fly around me', scene: 'empty', check: (o) => {
+    const d = added(o).filter(e => /dragon|wyrm/.test(e.kind))
+    const real = d.length > 0 && (d[0]!.kind in KIT || !!o.after.kinds[d[0]!.kind])
+    return expect(d.length >= 1 && !!real && d.every(e => (e.props.motion === 'orbit' || e.props.motion === 'fly') && e.pos[1] >= 5), `dragons ${d.length}, motion ${d[0]?.props.motion}, y ${d[0]?.pos[1]}, kinds ${kinds(added(o))}, say "${o.say.join(' ')}"`)
   } },
+  { name: 'conjure: dragon circles (grove, none)', text: 'make the dragon fly in circles', scene: 'grove', check: (o) => {
+    const d = added(o).filter(e => /dragon|wyrm/.test(e.kind))
+    return expect(d.length >= 1 && d.every(e => !!e.props.motion && e.pos[1] >= 5) && !/shall i/i.test(o.say.join(' ')), `dragons ${d.length}, motion ${d[0]?.props.motion}, y ${d[0]?.pos[1]}, say "${o.say.join(' ')}"`)
+  } },
+  { name: 'conjure: horses gallop (none)', text: 'make the horses gallop', scene: 'empty', check: (o) => {
+    const h = added(o).filter(e => /horse|stallion|mare/.test(e.kind))
+    return expect(h.length >= 2 && (h[0]!.kind in KIT || !!o.after.kinds[h[0]!.kind]) && h.every(e => e.props.motion === 'gallop'), `horses ${h.length}, motions ${[...new Set(h.map(e => e.props.motion))].join(',')}, kinds ${kinds(added(o))}`)
+  } },
+  { name: 'conjure: castle on a hill (empty world)', text: 'put a castle on that hill', scene: 'empty', check: (o) => {
+    const c = added(o).find(e => /castle|fort/.test(e.kind))
+    return expect(added(o).some(e => e.kind === 'hill') && !!c && c.pos[1] > 8 && !/shall i/i.test(o.say.join(' ')), `added ${kinds(added(o))}${c ? ` castle y=${c.pos[1]}` : ''}, say "${o.say.join(' ')}"`)
+  } },
+  // Final: creature wishes use the kit kinds, never a define.
+  { name: 'kit: a dragon', text: 'a dragon', scene: 'empty', check: o => expect(added(o).some(e => e.kind === 'dragon') && !has(o, 'define'), `added ${kinds(added(o))}, define ${has(o, 'define')}`) },
+  { name: 'kit: sky whale', text: 'a giant whale swimming through the sky', scene: 'empty', check: (o) => {
+    const w = added(o).filter(e => e.kind === 'whale')
+    return expect(w.length >= 1 && !has(o, 'define') && w.every(e => e.pos[1] >= 10), `whales ${w.length}, y ${w.map(e => e.pos[1]).join(' ')}, define ${has(o, 'define')}`)
+  } },
+  { name: 'kit: herd of horses', text: 'a herd of horses galloping across the field', scene: 'grove', check: (o) => {
+    const h = added(o).filter(e => e.kind === 'horse')
+    return expect(h.length >= 3 && !has(o, 'define') && h.every(e => e.props.motion === 'gallop'), `horses ${h.length}, define ${has(o, 'define')}, kinds ${kinds(added(o))}`)
+  } },
+  { name: 'kit: dragon flies around me (none)', text: 'make a dragon fly around me', scene: 'grove', check: (o) => {
+    const d = added(o).filter(e => e.kind === 'dragon')
+    return expect(d.length >= 1 && !has(o, 'define') && d.every(e => (e.props.motion === 'orbit' || e.props.motion === 'fly') && e.pos[1] >= 5), `dragons ${d.length}, define ${has(o, 'define')}, motion ${d[0]?.props.motion}`)
+  } },
+  // Loop 3 (#4): weather keeps the time of day.
+  { name: 'weather: storm at night stays night', text: 'a thunderstorm', scene: 'night', check: o => expect(o.after.atmosphere.weather === 'storm' && o.after.atmosphere.time === 'night', `weather ${o.after.atmosphere.weather}, time ${o.after.atmosphere.time}`) },
+  { name: 'weather: snow at night stays night', text: 'let it snow', scene: 'night', check: o => expect(o.after.atmosphere.weather === 'snow' && o.after.atmosphere.time === 'night', `weather ${o.after.atmosphere.weather}, time ${o.after.atmosphere.time}`) },
   { name: 'weather: let it snow', text: 'let it snow', scene: 'grove', check: o => expect(o.after.atmosphere.weather === 'snow', `weather ${o.after.atmosphere.weather}`) },
   { name: 'weather: thunderstorm', text: 'summon a thunderstorm', scene: 'grove', check: o => expect(o.after.atmosphere.weather === 'storm', `weather ${o.after.atmosphere.weather}`) },
   { name: 'weather: make it rain', text: 'make it rain', scene: 'village', check: o => expect(o.after.atmosphere.weather === 'rain' || o.after.atmosphere.weather === 'storm', `weather ${o.after.atmosphere.weather}`) },

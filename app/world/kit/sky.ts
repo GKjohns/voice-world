@@ -35,7 +35,7 @@ export const lantern: Build = () => {
   const phase = Math.random() * 10
   g.userData.animate = (t: number) => {
     const k = 0.88 + 0.12 * Math.sin(t * 7.3 + phase) * Math.sin(t * 2.1 + phase * 0.7)
-    paper.emissiveIntensity = 1.05 * k
+    paper.emissiveIntensity = 1.05 * k * ((g.userData.dim as number | undefined) ?? 1)
     halo.material.opacity = (halo.userData.halo as number) * (0.85 + 0.15 * k)
   }
   return g

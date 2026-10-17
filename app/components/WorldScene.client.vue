@@ -12,6 +12,27 @@ const world = useWorld()
 const intent = useIntent()
 let renderer: WorldRenderer | null = null
 
+// The view survives a reload or a hot re-mount like the world does. Without it a re-mount came back at
+// the constructor's default (yaw 0, pitch -0.12) while the restored world kept you tiny on the dock.
+const VIEW_KEY = 'conjure.view'
+function saveView() {
+  if (!renderer) return
+  const p = renderer.camera.position
+  try {
+    localStorage.setItem(VIEW_KEY, JSON.stringify({ yaw: renderer.yaw, pitch: renderer.pitch, x: p.x, z: p.z }))
+  } catch {
+    // Storage blocked: you just start from the default view.
+  }
+}
+function restoreView() {
+  try {
+    const v = JSON.parse(localStorage.getItem(VIEW_KEY) ?? 'null') as { yaw: number, pitch: number, x: number, z: number } | null
+    if (v && [v.yaw, v.pitch, v.x, v.z].every(Number.isFinite) && world.state.value.entities.length) renderer?.look(v.yaw, v.pitch, [v.x, v.z])
+  } catch {
+    // Nothing saved, or unreadable: keep the default view.
+  }
+}
+
 onMounted(async () => {
   // Nuxt's client-only wrapper renders a placeholder on the first pass, so the host div lands a tick later.
   await nextTick()
@@ -19,6 +40,7 @@ onMounted(async () => {
   renderer = new WorldRenderer(hostEl.value)
   world.attach(renderer)
   world.restore()
+  restoreView()
   // A handle for the Playwright shoot script (and for poking at the world from devtools).
   const w = window as unknown as Record<string, unknown>
   w.__conjure = {
@@ -41,10 +63,13 @@ onMounted(async () => {
     renderer: () => renderer
   }
   window.addEventListener('keydown', onKey)
+  window.addEventListener('pagehide', saveView)
 })
 
 onBeforeUnmount(() => {
+  saveView()
   window.removeEventListener('keydown', onKey)
+  window.removeEventListener('pagehide', saveView)
   world.detach()
   renderer?.dispose()
   renderer = null

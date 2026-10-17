@@ -219,6 +219,12 @@ export function layout(state: WorldState, spec: LayoutSpec, ctx: OpContext, rand
       c[2] = ctx.player.pos[2] + dir[1] * need
     }
   }
+  // Indoors (a ceiling over the anchor, or over you), the "sky" is the room: lanterns fill it under the lid.
+  const lid = airborne && !horizon ? ceilingOver(state, c[0], c[2]) ?? ceilingOver(state, ctx.player.pos[0], ctx.player.pos[2]) : null
+  // Loop 3: "fill the sky" outdoors is a dome of lights in front of you, in the band you can see.
+  const dome = airborne && alt === 'sky' && n >= 6 && !lid && !room && !around && !anchor.onTop
+    && (arrange === 'scatter' || arrange === 'cluster') && (anchorKind === 'player' || anchorKind === 'gaze')
+  let domeY: number[] | null = null
   let pts: Vec3[] = []
   let faceAxis: { origin: Vec3, dir: [number, number] } | undefined
 
@@ -226,6 +232,11 @@ export function layout(state: WorldState, spec: LayoutSpec, ctx: OpContext, rand
     pts = horizonPoints(spec, ctx, n, r, tall, around, rand)
   } else if (around && arrange !== 'ring') {
     pts = annulusPoints(ctx.player.pos, n, r, spacing, spec, rand)
+  } else if (dome) {
+    const away = distXZ(c, ctx.player.pos)
+    const sky = skyDome(ctx.player.pos, away > 3 ? norm2(c[0] - ctx.player.pos[0], c[2] - ctx.player.pos[2]) : forward(yaw), n, rand)
+    pts = sky.pts
+    domeY = sky.ys
   } else if (arrange === 'single') {
     pts = [[c[0], c[1], c[2]]]
   } else if (arrange === 'cluster' || arrange === 'scatter') {
@@ -284,12 +295,12 @@ export function layout(state: WorldState, spec: LayoutSpec, ctx: OpContext, rand
   // The Director lays rooms out by hand (a lamp hangs over its table on purpose), so room placements never get pushed.
   if (!room && !anchor.onTop && !terrain && !airborne && r > 0) deOverlap(state, placed, r, ctx, new Set(), rand)
   if (airborne) {
-    // Indoors (a ceiling over the anchor, or over you), the "sky" is the room: lanterns fill it under the lid.
-    const lid = horizon ? null : ceilingOver(state, c[0], c[2]) ?? ceilingOver(state, ctx.player.pos[0], ctx.player.pos[2])
-    for (const p of placed) {
+    for (const [i, p] of placed.entries()) {
       if (lid && !underLid(lid, p.pos[0], p.pos[2])) p.pos = insideLid(lid, rand)
-      const y = altitudeY(alt, rand, n)
-      p.pos = [p.pos[0], p.pos[1] + capAltitude(state, p.pos[0], p.pos[2], y, tall, rand), p.pos[2]]
+      // Loop 3: small things floating indoors are smaller (a room of wish lanterns, not a wall of them).
+      if (lid && tall < 3) p.scale = round(p.scale * 0.45, 3)
+      const y = domeY?.[i] ?? altitudeY(alt, rand, n)
+      p.pos = [p.pos[0], p.pos[1] + capAltitude(state, p.pos[0], p.pos[2], y, tall * (lid ? p.scale : 1), rand), p.pos[2]]
     }
   }
   // Terrain snap: anything spawned over a hill, mountain or cliff stands on its surface.
@@ -315,6 +326,38 @@ export function altitudeY(alt: number | 'sky' | undefined, rand: () => number, n
 
 /** An interior's lid: a ceiling (or roof) entity, the height of its underside and its half-extents. */
 export interface Lid { e: Entity, y: number, hx: number, hz: number }
+
+const DEG = Math.PI / 180
+/** "Fill the sky" outdoors (Loop 3): most of the flock in a ±55° wedge ahead, 10–35° above the eye, 16–90 m out. */
+export const SKY_DOME = { wedge: 55 * DEG, elev: [10 * DEG, 35 * DEG] as [number, number], dist: [16, 90] as [number, number] }
+
+/**
+ * A sky flock laid out for the eye: low-discrepancy azimuth and height (no clumps, no gaps), each lantern's
+ * distance picked so its elevation lands in the visible band. One in seven goes anywhere around you, so
+ * turning round still finds lights. Heights stay inside SKY_BAND. Returns ground points and heights.
+ */
+export function skyDome(origin: Vec3, dir: [number, number], n: number, rand: () => number): { pts: Vec3[], ys: number[] } {
+  const eye = 1.6
+  const { wedge, elev, dist } = SKY_DOME
+  const r0 = rand()
+  const r1 = rand()
+  const pts: Vec3[] = []
+  const ys: number[] = []
+  for (let i = 0; i < n; i++) {
+    const u = (r0 + i * 0.7548776662) % 1
+    const w = (r1 + i * 0.5698402910) % 1
+    const a = i % 7 === 6 ? (u * 2 - 1) * Math.PI : (u * 2 - 1) * wedge
+    const y = SKY_BAND[0] + w * (SKY_BAND[1] - 1 - SKY_BAND[0])
+    const lo = Math.max(elev[0], Math.atan2(y - eye, dist[1]))
+    const hi = Math.min(elev[1], Math.atan2(y - eye, dist[0]))
+    const d = (y - eye) / Math.tan(lo + rand() * Math.max(0, hi - lo))
+    const ca = Math.cos(a)
+    const sa = Math.sin(a)
+    pts.push([origin[0] + (dir[0] * ca - dir[1] * sa) * d, 0, origin[2] + (dir[0] * sa + dir[1] * ca) * d])
+    ys.push(round(y, 2))
+  }
+  return { pts, ys }
+}
 
 /** The lowest ceiling or roof over (x, z), else null. Interiors have a low "sky". */
 export function ceilingOver(state: WorldState, x: number, z: number): Lid | null {

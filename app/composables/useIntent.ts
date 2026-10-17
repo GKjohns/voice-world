@@ -6,6 +6,7 @@
  */
 import { shallowRef } from 'vue'
 import { trimScene } from '#shared/world/context'
+import { honestSay } from '#shared/world/honesty'
 import type { DroppedOp, Op } from '#shared/world/ops'
 import type { BatchResult } from '#shared/world/state'
 import type { OpContext } from '#shared/world/types'
@@ -220,8 +221,10 @@ async function build(request: string, ctx: OpContext, source: 'text' | 'voice' =
     if (out) {
       absorb(out)
     } else if (op.op === 'say') {
-      // A say with no batch to join (the sentence changed nothing, or the batch is no longer last): caption it.
-      says.push(op.text)
+      // A say with no batch to join (the sentence changed nothing, or the batch is no longer last): caption
+      // it, through the same honesty filter as a batch's lines (Loop 3, #7: this path used to fib).
+      const changedSoFar = spawned.size + modified.size + removed.size > 0 || other.length > 0
+      says.push(honestSay(op.text, applied, world.state.value, changedSoFar))
       applied.push(op)
       world.caption.value = { text: says.join(' '), at: Date.now() }
     } else {

@@ -294,6 +294,120 @@ export class Ambience {
     tone(v, 'sine', 2600, 1300, 0.01, 0.9, 0.035, true)
   }
 
+  /**
+   * A dragon arrives (Loop 3): a rushing whoosh that swells as it dives in over `diveMs`, then a roar
+   * (a growling sawtooth through a sweeping filter, with a rough tremolo) and a low rumble under it.
+   */
+  sfxDragon(delayMs = 0, diveMs = 2600): void {
+    const v = this.slot(delayMs, 3)
+    if (!v) return
+    const dive = Math.max(0.5, diveMs / 1000)
+    const g = v.ctx.createGain()
+    g.gain.setValueAtTime(0.0001, v.t)
+    g.gain.exponentialRampToValueAtTime(0.55, v.t + dive * 0.85)
+    g.gain.exponentialRampToValueAtTime(0.0001, v.t + dive + 0.5)
+    g.connect(v.dry)
+    g.connect(v.wet)
+    const src = noise(v.ctx, false)
+    const bp = v.ctx.createBiquadFilter()
+    bp.type = 'bandpass'
+    bp.Q.value = 1.1
+    bp.frequency.setValueAtTime(220, v.t)
+    bp.frequency.exponentialRampToValueAtTime(1600, v.t + dive * 0.85)
+    bp.frequency.exponentialRampToValueAtTime(400, v.t + dive + 0.5)
+    src.connect(bp).connect(g)
+    src.start(v.t)
+    src.stop(v.t + dive + 0.6)
+    // The roar, as it pulls out of the dive.
+    const r0 = v.t + dive * 0.8
+    const rg = v.ctx.createGain()
+    rg.gain.setValueAtTime(0.0001, r0)
+    rg.gain.exponentialRampToValueAtTime(0.42, r0 + 0.18)
+    rg.gain.setTargetAtTime(0.25, r0 + 0.4, 0.4)
+    rg.gain.exponentialRampToValueAtTime(0.0001, r0 + 2.2)
+    rg.connect(v.dry)
+    rg.connect(v.wet)
+    const lp = v.ctx.createBiquadFilter()
+    lp.type = 'lowpass'
+    lp.Q.value = 6
+    lp.frequency.setValueAtTime(380, r0)
+    lp.frequency.exponentialRampToValueAtTime(1300, r0 + 0.35)
+    lp.frequency.exponentialRampToValueAtTime(260, r0 + 2.1)
+    const trem = v.ctx.createGain()
+    trem.gain.value = 0.6
+    const lfo = v.ctx.createOscillator()
+    lfo.frequency.value = 23
+    const lfoDepth = v.ctx.createGain()
+    lfoDepth.gain.value = 0.4
+    lfo.connect(lfoDepth).connect(trem.gain)
+    for (const [f, d] of [[92, 0], [97, 7]] as const) {
+      const o = v.ctx.createOscillator()
+      o.type = 'sawtooth'
+      o.detune.value = d
+      o.frequency.setValueAtTime(f * 1.25, r0)
+      o.frequency.exponentialRampToValueAtTime(f, r0 + 0.3)
+      o.frequency.exponentialRampToValueAtTime(f * 0.62, r0 + 2.1)
+      o.connect(trem)
+      o.start(r0)
+      o.stop(r0 + 2.3)
+    }
+    const breath = noise(v.ctx, true)
+    const nb = v.ctx.createBiquadFilter()
+    nb.type = 'bandpass'
+    nb.frequency.value = 520
+    nb.Q.value = 0.8
+    const ng = v.ctx.createGain()
+    ng.gain.value = 0.5
+    breath.connect(nb).connect(ng).connect(trem)
+    breath.start(r0)
+    breath.stop(r0 + 2.3)
+    trem.connect(lp).connect(rg)
+    lfo.start(r0)
+    lfo.stop(r0 + 2.3)
+    tone({ ...v, t: r0 }, 'sine', 62, 38, 0.15, 2.4, 0.4)
+  }
+
+  /** A sky-whale arrives (Loop 3): a slow, deep, gliding song with a sub swell under it, heavy in the reverb. */
+  sfxWhaleSong(delayMs = 0): void {
+    const v = this.slot(delayMs, 3)
+    if (!v) return
+    const g = v.ctx.createGain()
+    g.gain.setValueAtTime(0.0001, v.t)
+    g.gain.exponentialRampToValueAtTime(0.32, v.t + 1.2)
+    g.gain.setTargetAtTime(0.22, v.t + 2.2, 0.8)
+    g.gain.exponentialRampToValueAtTime(0.0001, v.t + 6.5)
+    g.connect(v.dry)
+    g.connect(v.wet)
+    const vib = v.ctx.createOscillator()
+    vib.frequency.value = 4.2
+    const vibDepth = v.ctx.createGain()
+    vibDepth.gain.value = 3
+    vib.connect(vibDepth)
+    // Two calls: a long rising moan that bends down, then a higher answering cry.
+    const calls: [number, number, number, number, number][] = [[0, 118, 196, 92, 3.4], [3.2, 230, 310, 170, 2.6]]
+    for (const [at, f0, f1, f2, len] of calls) {
+      const t0 = v.t + at
+      for (const [mult, level] of [[1, 0.8], [2.01, 0.22], [3.02, 0.08]] as const) {
+        const o = v.ctx.createOscillator()
+        o.type = 'sine'
+        o.frequency.setValueAtTime(f0 * mult, t0)
+        o.frequency.exponentialRampToValueAtTime(f1 * mult, t0 + len * 0.45)
+        o.frequency.exponentialRampToValueAtTime(f2 * mult, t0 + len)
+        vibDepth.connect(o.frequency)
+        const og = v.ctx.createGain()
+        og.gain.setValueAtTime(0.0001, t0)
+        og.gain.exponentialRampToValueAtTime(level, t0 + len * 0.3)
+        og.gain.exponentialRampToValueAtTime(0.0001, t0 + len)
+        o.connect(og).connect(g)
+        o.start(t0)
+        o.stop(t0 + len + 0.05)
+      }
+    }
+    vib.start(v.t)
+    vib.stop(v.t + 6.6)
+    tone(v, 'sine', 46, 40, 1.4, 4.5, 0.3, true)
+  }
+
   /** Teleport in: a warm open chord blooming as the new place appears. */
   sfxArrive(delayMs = 0): void {
     const v = this.slot(delayMs, 3)

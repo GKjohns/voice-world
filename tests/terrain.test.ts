@@ -118,10 +118,13 @@ test('integration: lanterns in a room stay under its ceiling and fill the room',
   const ls = state.entities.filter(e => e.kind === 'lantern')
   assert.equal(ls.length, 30)
   for (const l of ls) {
-    assert.ok(l.pos[1] + 1.15 < 4, `lantern top ${l.pos[1] + 1.15} under the 4 m ceiling`)
+    const top = l.pos[1] + 1.15 * (l.props.scale ?? 1)
+    assert.ok(top < 4, `lantern top ${top} under the 4 m ceiling`)
     assert.ok(Math.abs(l.pos[0] - lid.pos[0]) <= 6 && Math.abs(l.pos[2] - lid.pos[2]) <= 5, `lantern at ${l.pos} inside the room`)
   }
   // "Higher" on a lantern indoors is still capped.
   const up = run(state, [{ op: 'modify', target: { kind: 'lantern' }, set: { altitude: 40 } }]).state
-  assert.ok(up.entities.filter(e => e.kind === 'lantern').every(l => l.pos[1] + 1.15 < 4))
+  assert.ok(up.entities.filter(e => e.kind === 'lantern').every(l => l.pos[1] + 1.15 * (l.props.scale ?? 1) < 4))
+  // Loop 3: indoor lanterns are small (about 0.45×), so a room of them doesn't white out.
+  assert.ok(ls.every(l => (l.props.scale ?? 1) < 0.6), JSON.stringify(ls.map(l => l.props.scale)))
 })

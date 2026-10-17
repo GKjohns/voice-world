@@ -17,12 +17,13 @@ const BOX = 48 // metres of rain around the camera (x and z)
 const TOP = 26 // drops fall from this high
 const RAIN_N = 14000
 const SNOW_N = 7000
+const SNOW_NIGHT = new THREE.Color('#dfe8ff')
 
 interface Blend { cur: number, to: number }
 
 const PRECIP_VERT = `
 attribute float aSeed;
-uniform float uTime, uFall, uSize, uSway, uBox, uTop, uCount;
+uniform float uTime, uFall, uSize, uSway, uBox, uTop, uCount, uMinPx;
 uniform vec3 uCam;
 varying float vAlpha;
 void main() {
@@ -38,7 +39,10 @@ void main() {
   vec4 mv = viewMatrix * vec4(p, 1.0);
   float d = -mv.z;
   vAlpha = smoothstep(0.5, 2.5, d) * (1.0 - smoothstep(uBox * 0.22, uBox * 0.5, length(p.xz - uCam.xz)));
-  gl_PointSize = clamp(uSize * 300.0 / max(d, 0.5), 2.0, 72.0);
+  float px = uSize * 300.0 / max(d, 0.5);
+  // Snow (Loop 3): a flake too far to be bigger than a few pixels reads as a star, so it fades out.
+  vAlpha *= smoothstep(uMinPx * 0.5, uMinPx * 1.6, px);
+  gl_PointSize = clamp(px, 2.0, 72.0);
   gl_Position = projectionMatrix * mv;
 }`
 
@@ -61,9 +65,14 @@ uniform float uOpacity;
 uniform sampler2D uMap;
 varying float vAlpha;
 void main() {
-  float a = texture2D(uMap, gl_PointCoord).a * vAlpha * uOpacity;
+  // A soft flake with a brighter core: big and blurry near you, so night snow reads as snow, not stars.
+  // A touch taller than wide: a flake caught falling, not a star.
+  vec2 q = vec2(0.5 + (gl_PointCoord.x - 0.5) * 1.35, gl_PointCoord.y);
+  float m = texture2D(uMap, q).a;
+  float core = 1.0 - smoothstep(0.0, 0.3, length(q - 0.5));
+  float a = max(m * 0.8, core) * vAlpha * uOpacity;
   if (a < 0.01) discard;
-  gl_FragColor = vec4(uColor, a);
+  gl_FragColor = vec4(uColor * (0.85 + 0.35 * core), a);
 }`
 
 // Overcast: a dome of drifting fbm clouds, dark underneath, lit from within by lightning.
@@ -141,6 +150,8 @@ export class WeatherFx {
   private eclipseDisc: THREE.Sprite
   private corona: THREE.Sprite
   private nextStrike = 0
+  /** Strikes left in a storm's opening flurry (the gap after them is short). */
+  private opening = 0
   private weather: Weather | undefined
   private t = 0
 
@@ -157,7 +168,7 @@ export class WeatherFx {
       geo.setAttribute('aSeed', new THREE.BufferAttribute(seed, 1))
       const uniforms: Record<string, THREE.IUniform> = {
         uTime: { value: 0 }, uFall: { value: 1 }, uSize: { value: 1 }, uSway: { value: 0 }, uBox: { value: BOX }, uTop: { value: TOP },
-        uCount: { value: 0 }, uCam: { value: new THREE.Vector3() }, uColor: { value: new THREE.Color() }, uOpacity: { value: 0 }, ...extra
+        uCount: { value: 0 }, uMinPx: { value: 0 }, uCam: { value: new THREE.Vector3() }, uColor: { value: new THREE.Color() }, uOpacity: { value: 0 }, ...extra
       }
       const pts = new THREE.Points(geo, new THREE.ShaderMaterial({ uniforms, vertexShader: PRECIP_VERT, fragmentShader: frag, transparent: true, depthWrite: false, blending }))
       pts.frustumCulled = false
@@ -271,8 +282,11 @@ export class WeatherFx {
     this.blend.storm.to = w === 'storm' ? 1 : 0
     this.blend.snow.to = w === 'snow' ? 1 : 0
     this.blend.aurora.to = w === 'aurora' ? 1 : 0
-    // A storm opens with a strike.
-    if (w === 'storm') this.nextStrike = this.t + 1.2
+    // A storm opens with a strike almost at once, then a second soon after (Loop 3: 4–9 s from there).
+    if (w === 'storm') {
+      this.nextStrike = this.t + 0.7
+      this.opening = 1
+    }
   }
 
   /** A one-shot sky event. `at` is where lightning strikes (else somewhere ahead in the distance). */
@@ -312,10 +326,17 @@ export class WeatherFx {
       this.snowU.uTime!.value = t
       ;(this.snowU.uCam!.value as THREE.Vector3).copy(cp)
       this.snowU.uCount!.value = this.blend.snow.cur
+      // At night, bigger, brighter, softer flakes and no distant pinpricks (they read as stars).
+      const night = 1 - Math.min(1, luminance(sky.skyTop) / 0.12)
       this.snowU.uOpacity!.value = 0.95
+      this.snowU.uSize!.value = 0.24 + 0.26 * night
+      this.snowU.uMinPx!.value = 2.5 + 7 * night
+      ;(this.snowU.uColor!.value as THREE.Color).set('#f4f7ff').lerp(SNOW_NIGHT, night * 0.5)
     }
     // Clouds close over the sky for rain, storm and snow.
-    const cover = Math.max(this.blend.storm.cur, this.blend.rain.cur * 0.75, this.blend.snow.cur * 0.6)
+    // A snowy night is fully overcast (a starry gap behind falling flakes reads as more stars).
+    const snowNight = 1 - Math.min(1, luminance(sky.skyTop) / 0.12)
+    const cover = Math.max(this.blend.storm.cur, this.blend.rain.cur * 0.75, this.blend.snow.cur * (0.6 + 0.35 * snowNight))
     this.clouds.visible = cover > 0.01
     if (this.clouds.visible) {
       const u = (this.clouds.material as THREE.ShaderMaterial).uniforms
@@ -341,7 +362,8 @@ export class WeatherFx {
     // Storm: a strike every few seconds, somewhere around you.
     if (this.weather === 'storm' && t >= this.nextStrike) {
       this.strike(cam, undefined, false)
-      this.nextStrike = t + 3.5 + Math.random() * 7
+      this.nextStrike = t + (this.opening ? 2.6 + Math.random() * 1.2 : 4 + Math.random() * 5)
+      this.opening = Math.max(0, this.opening - 1)
     }
     // Flash decays fast; bolts flicker and die.
     if (this.flash > 0) {
@@ -425,7 +447,8 @@ export class WeatherFx {
       out.ground = '#' + new THREE.Color(out.ground).lerp(new THREE.Color(night ? '#8d98ad' : '#e9eef5'), snow * 0.75).getHexString()
       out.fogFar *= 1 - 0.35 * snow
       out.sunIntensity *= 1 - 0.35 * snow
-      out.hemiIntensity *= 1 + 0.15 * snow
+      // Snow light: a night under fresh snow is never pitch dark (a soft fill off the white ground).
+      out.hemiIntensity *= 1 + (night ? 0.6 : 0.15) * snow
       out.stars *= 1 - snow
       out.grid *= 1 - snow
     }
@@ -482,11 +505,11 @@ export class WeatherFx {
       x = cp.x + dx * k
       z = cp.z + dz * k
     } else {
-      // Somewhere in front-ish, 60–220 m away, so you see it.
+      // Somewhere in front-ish, 60–220 m away, so you see it. A storm's opening strike lands square in view.
       const f = new THREE.Vector3()
       cam.getWorldDirection(f)
-      const a = Math.atan2(f.x, f.z) + (Math.random() - 0.5) * 2.2
-      const d = 60 + Math.random() * 160
+      const a = Math.atan2(f.x, f.z) + (Math.random() - 0.5) * (this.opening ? 0.8 : 2.2)
+      const d = this.opening ? 70 + Math.random() * 50 : 60 + Math.random() * 160
       x = cp.x + Math.sin(a) * d
       z = cp.z + Math.cos(a) * d
     }

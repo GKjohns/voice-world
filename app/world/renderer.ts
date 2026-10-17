@@ -10,6 +10,7 @@ import type { Fall, KindDescriptor } from '#shared/world/kinds'
 import type { Vec3 } from '#shared/world/ops'
 import { kindOf } from '#shared/world/select'
 import { groundHeight } from '#shared/world/terrain'
+import { ceilingOver } from '#shared/world/layout'
 import type { Effects, Entity, GazeSnapshot, Player, WorldState } from '#shared/world/types'
 import { ATMOSPHERES } from './atmosphere'
 import type { AtmospherePreset } from './atmosphere'
@@ -21,18 +22,28 @@ import { Gathering } from './fx/anticipate'
 import { Placeholder } from './fx/placeholder'
 import { beam, dissolve, shimmer, shockwave, sparkle } from './fx/arrival'
 import type { Fx } from './fx/common'
-import { solveFrame } from './fx/frame'
+import { skyTilt, solveFrame } from './fx/frame'
 import type { FrameBox, View } from './fx/frame'
 import { Vortex } from './fx/vortex'
-import { applyPose, blendedPose } from './fx/motion'
+import { applyPose, blendedPose, driveOf, motionPose } from './fx/motion'
+import type { Drive, MotionStyle } from './fx/motion'
 import { WeatherFx } from './fx/weather'
 import { softDot } from './fx/common'
+import { LightPool } from './perf/lights'
+import { precompile, warmKit } from './perf/precompile'
 
 const EYE = 1.6
 const WALK = 6
 const RUN = 14
 const MAX_SLOPE = 1 // rise per metre (over a 2.5 m stride) you can walk up (45°): hills yes, a peak's flanks slide you along them
 const MAX_LIGHTS = 10
+// Loop 3: things you can stand on (the camera rides their top surface), and how high a step up may be (m).
+const WALKABLE_TAGS = new Set(['floor', 'rug', 'carpet', 'dock', 'pier', 'road', 'path', 'bridge', 'deck', 'platform', 'stage', 'boardwalk', 'walkway', 'stairs', 'plaza', 'patio'])
+const WALKABLE_KIND = /bridge|dock|pier|deck|floor|platform|stage|walkway|boardwalk|stair|plaza|patio|terrace|rug|carpet/
+const STEP_UP = 0.75
+const INDOOR_GLOW = 8 // glowing floaters a room takes at full halo before they share the budget
+const INDOOR_CAST = 2 // floaters under a ceiling that may keep a real point light
+const DOWN = new THREE.Vector3(0, -1, 0)
 const REVEAL_TIGHT = 4.5 // fog radius (m) around the player while a place is being summoned
 const BIG = 8 // metres tall: arrivals this big get the beam from the sky, the thump and the shake
 const MID = 3
@@ -140,6 +151,8 @@ export class WorldRenderer {
   /** Where you stood before the god view lifted you, and where it put you (to land you again later). */
   private preLift: { from: View, to: View } | null = null
   private wallRay = new THREE.Raycaster()
+  private downRay = new THREE.Raycaster()
+  private upN = new THREE.Vector3()
   /** The terrain under your feet, smoothed (the camera rides on it). */
   private groundY = 0
   private lastInput = 0
@@ -155,6 +168,9 @@ export class WorldRenderer {
   private forming = new Placeholder()
   private revealChord = false
   private rings = 0 // heavy-landing budget per sync, so a global scale-up isn't 40 overlapping shockwaves
+  // Loop 3 (perf): a constant set of real lights fed by the kit's lamps, and bodies built this sync to precompile.
+  private lightPool = new LightPool()
+  private fresh: THREE.Object3D[] = []
 
   constructor(host: HTMLElement) {
     this.host = host
@@ -250,7 +266,7 @@ export class WorldRenderer {
     this.ghost = ring(1.5, 1.8, 0x7dd3a8, 0)
     this.scene.add(this.reticle, this.highlight, this.ghost)
     this.scene.add(this.vortex.obj, this.gathering.obj, this.forming.obj)
-    this.scene.add(this.weather.obj)
+    this.scene.add(this.weather.obj, this.lightPool.obj)
     this.weather.onThunder = (d, ms) => this.sound.sfxThunder(d, ms)
     this.weather.onStar = () => this.sound.sfxStar()
 
@@ -264,6 +280,10 @@ export class WorldRenderer {
     this.ro = new ResizeObserver(() => this.resize())
     this.ro.observe(host)
     this.renderer.setAnimationLoop(now => this.frame(now))
+    // Compile every kit kind's shaders in the background, so the first pool hall doesn't (perf/precompile.ts).
+    // The scene's own hidden fx (the vortex, the floor patch, weather) too: they first show mid-teleport.
+    void this.renderer.compileAsync(this.scene, this.camera)
+    void warmKit(this.renderer, this.camera, this.scene, KIT_BUILDERS, () => this.warmExtras())
   }
 
   // ---------- reconcile ----------
@@ -380,19 +400,51 @@ export class WorldRenderer {
       }
     }
     this.budgetLights()
+    precompile(this.renderer, this.fresh.splice(0), this.camera, this.scene)
 
     // Always frame the wish: what just arrived or changed shape should end up in shot, foot to top.
     if (fanfare && !this.reveal && !fx?.teleport) {
       const news = fanfare ? spawned.map(id => wanted.get(id)!) : []
-      const framed = [...news, ...reshaped].filter(e => this.frameable(e))
+      // Inside a room its own shell (floor, walls, ceiling) is all around you: frame what's in it, not the box.
+      const shell = (e: Entity) => !!ceilingOver(state, this.camera.position.x, this.camera.position.z) && ['floor', 'wall', 'ceiling', 'roof'].some(t => this.desc(e).tags.includes(t))
+      const framed = [...news, ...reshaped].filter(e => this.frameable(e) && !shell(e))
       // Lifted by a scale-up and this wish isn't another one: come back down first (undo puts you back exactly).
       // An undo always lands you; otherwise stay up only if the landing spot is inside scaled-up geometry.
       const undid = state.log.length < (prev?.log.length ?? 0)
       const land = !swelling && this.lift > 0.5 ? this.landing(undid) : undefined
       const base = land && (undid || !this.engulfed(land.x, land.z)) ? land : undefined
+      // Loop 3: a batch that lands mostly in the sky (or a storm, an aurora) tilts you up to it instead.
+      if (!base && !swelling && this.skyLook(state, prev, spawned, modified, now)) return
       if (framed.length) this.frameWish(framed, swelling, base)
       else if (base) this.camMove = { from: this.view(), to: base, start: now, dur: 1400 }
     }
+  }
+
+  /**
+   * Loop 3, "look up": when what just arrived (or just took flight) is mostly above your eye, or the sky
+   * itself turned (a storm, an aurora), tilt up to it over two seconds from where you stand. Returns true
+   * when it took the shot (so the ground framing doesn't fight it).
+   */
+  private skyLook(state: WorldState, prev: WorldState | null, spawned: string[], modified: Set<string>, now: number): boolean {
+    if (!prev || this.userActive()) return false
+    const before = new Map(prev.entities.map(e => [e.id, e]))
+    const eye = this.camera.position
+    const cand = state.entities.filter((e) => {
+      if (spawned.includes(e.id)) return true
+      const b = before.get(e.id)
+      return modified.has(e.id) && !!b && (e.pos[1] > b.pos[1] + 1 || e.props.motion !== b.props.motion)
+    }).filter(e => !this.desc(e).tags.includes('particles') && !isTerrain(this.desc(e)))
+    const high = cand.filter(e => e.pos[1] + kindHeight(this.desc(e), e.props) * 0.5 > eye.y + 3)
+    const w = state.atmosphere.weather
+    const sky = w !== prev.atmosphere.weather && (w === 'storm' || w === 'aurora') ? (w === 'aurora' ? 0.5 : 0.34) : 0
+    if (!sky && (!high.length || high.length < cand.length * 0.6)) return false
+    const pts = high.map(e => [e.pos[0], e.pos[1] + kindHeight(this.desc(e), e.props) * 0.5, e.pos[2]] as [number, number, number])
+    const t = skyTilt([eye.x, eye.y, eye.z], this.yaw, this.pitch, pts)
+    const pitch = Math.max(t?.pitch ?? this.pitch, sky)
+    if (pitch <= this.pitch + 0.04 && !t) return !!high.length
+    const cur = this.view()
+    this.camMove = { from: cur, to: { ...cur, yaw: t?.yaw ?? cur.yaw, pitch }, start: now + 250, dur: 2100 }
+    return true
   }
 
   // ---------- framing, shake, lift ----------
@@ -429,7 +481,10 @@ export class WorldRenderer {
     const now = this.view()
     const cur = base ?? now
     const free = (x: number, z: number, dx: number, dz: number, max: number) => this.freeDist(x, z, dx, dz, max)
-    const to = (preferLift ? this.godView(boxes, cur) : solveFrame(this.camera, cur, boxes, this.eyeAt(cur.x, cur.z), { free })) ?? base
+    // Inside a room (a ceiling over you), framing only turns and tilts: a step back would leave through a
+    // wall that may not even have arrived yet (the room's own build backed players 6 m out of it).
+    const indoors = !!ceilingOver(this.state, cur.x, cur.z)
+    const to = (preferLift && !indoors ? this.godView(boxes, cur) : solveFrame(this.camera, cur, boxes, this.eyeAt(cur.x, cur.z), { free, maxBack: indoors ? 0 : undefined })) ?? base
     if (!to) return
     if (base) {
       this.camMove = { from: now, to, start: performance.now(), dur: 1400 }
@@ -496,6 +551,34 @@ export class WorldRenderer {
       if (Math.hypot(x - e.pos[0], z - e.pos[2]) < entityReach(d, e) * 0.9) return true
     }
     return false
+  }
+
+  /**
+   * Loop 3: what you stand on at (x, z). The terrain, or the top of a walkable structure there (a dock deck,
+   * a floor, a rug, a bridge) if it's within a step of your feet: a short ray straight down against its
+   * visible meshes. So "make me tiny" on a dock keeps you on the planks, never under them.
+   */
+  private standAt(x: number, z: number): number {
+    const terrain = this.groundAt(x, z)
+    const step = STEP_UP * Math.max(1, this.playerScale)
+    const top = Math.max(terrain, this.groundY) + step
+    const targets: THREE.Object3D[] = []
+    for (const item of this.items.values()) {
+      const e = item.entity
+      if (!WALKABLE_KIND.test(e.kind) && !e.tags.some(t => WALKABLE_TAGS.has(t))) continue
+      if (Math.abs(item.holder.position.x - x) + Math.abs(item.holder.position.z - z) > 90) continue
+      item.holder.traverseVisible((o) => {
+        if ((o as THREE.Mesh).isMesh) targets.push(o)
+      })
+    }
+    if (!targets.length) return terrain
+    this.downRay.set(new THREE.Vector3(x, top, z), DOWN)
+    this.downRay.far = top - terrain + 0.05
+    for (const h of safeHits(this.downRay, targets)) {
+      if (!h.face) continue
+      if (this.upN.copy(h.face.normal).transformDirection(h.object.matrixWorld).y > 0.6) return Math.max(terrain, h.point.y)
+    }
+    return terrain
   }
 
   /** Ground height at (x, z): the terrain surface, or 0 on the flat world. */
@@ -611,8 +694,9 @@ export class WorldRenderer {
     this.patch.visible = true
     this.revealChord = false
     this.sound.sfxPortal()
-    // You arrive standing: any god's-eye lift comes down while the vortex spins up.
-    if (this.lift > 0.05) {
+    // You arrive standing and looking ahead: any god's-eye lift comes down and a sky tilt (lanterns, a storm)
+    // levels out while the vortex spins up, so the new place is revealed at eye level, not as a strip of sky.
+    if (this.lift > 0.05 || this.pitch > 0.1 || this.pitch < -0.2) {
       const cur = this.view()
       this.camMove = { from: cur, to: { ...cur, lift: 0, pitch: Math.max(-0.2, Math.min(0.1, cur.pitch)) }, start: now, dur: 700 }
     }
@@ -678,6 +762,7 @@ export class WorldRenderer {
     this.applyLook(item, e, false)
     holder.visible = false
     this.scene.add(holder)
+    this.fresh.push(holder)
     this.arrive(item, this.desc(e).fall, at, cue)
   }
 
@@ -733,7 +818,40 @@ export class WorldRenderer {
       this.playFx(sparkle(new THREE.Vector3(center.x, y0 + y, center.z), Math.max(0.5, reach), color, tier === 'small' ? 26 : 40), when, 800)
     }
 
-    if (airborne) {
+    // Creatures with an entrance (Loop 3): the dragon stoops out of the sky and roars, the whale sinks slowly down.
+    const theatre = item.body.userData.arrival as 'dive' | 'descend' | undefined
+    if (theatre === 'dive') {
+      fallDur = 2600
+      const style = item.body.userData.motionStyle as MotionStyle | undefined
+      // From high behind where it will be heading, so it dives nose first into its flight.
+      const yaw = motionPose(e, 0.6, tall, style)?.yaw ?? e.rotY
+      const D = 48
+      const H = 40
+      const body = item.body
+      holder.scale.setScalar(s)
+      stretch.scale.y = h
+      body.userData.dive = 1
+      this.tween(at, fallDur, (t) => {
+        const back = 1 - ease.out(t)
+        holder.position.set(e.pos[0] - Math.sin(yaw) * D * back, y0 + H * back * back, e.pos[2] - Math.cos(yaw) * D * back)
+        body.userData.dive = Math.max(0, 1 - t * 1.3)
+      }, () => {
+        holder.position.set(...e.pos)
+        body.userData.dive = 0
+        body.userData.roarAt = performance.now()
+      }, show)
+      if (loud || cue.index === 0) this.sound.sfxDragon(at - now, fallDur)
+    } else if (theatre === 'descend') {
+      fallDur = 6500
+      holder.scale.setScalar(s)
+      stretch.scale.y = h
+      this.tween(at, fallDur, (t) => {
+        holder.position.y = y0 + 32 * (1 - ease.inOut(t))
+      }, () => {
+        holder.position.y = y0
+      }, show)
+      if (loud || cue.index === 0) this.sound.sfxWhaleSong(at - now)
+    } else if (airborne) {
       const rise = Math.min(14, y0 * 0.6)
       fallDur = 1900
       holder.scale.setScalar(0.001)
@@ -915,6 +1033,7 @@ export class WorldRenderer {
     disposeObject(item.body)
     item.stretch.remove(item.body)
     item.stretch.add(body)
+    this.fresh.push(body)
     item.body = body
     item.buildKey = key
     item.entity = e
@@ -1034,15 +1153,67 @@ export class WorldRenderer {
   /** Real lights are expensive; keep the nearest few lamps lit and let emissive bulbs carry the rest. */
   private budgetLights(): void {
     const lights: { l: THREE.Light, d: number }[] = []
+    const indoor = this.dimIndoorGlow()
+    let indoorCast = 0
     for (const item of this.items.values()) {
+      const inside = indoor.has(item)
       item.body.traverse((o) => {
-        if ((o as THREE.Light).isLight) lights.push({ l: o as THREE.Light, d: item.holder.position.distanceTo(this.camera.position) })
+        if (!(o as THREE.Light).isLight) return
+        // Indoors, at most two floating things keep a real light; the rest glow without casting (Loop 3).
+        if (inside && o.userData.cast && ++indoorCast > INDOOR_CAST) {
+          o.visible = false
+          return
+        }
+        lights.push({ l: o as THREE.Light, d: item.holder.position.distanceTo(this.camera.position) })
       })
     }
     lights.sort((a, b) => a.d - b.d)
     lights.forEach(({ l }, i) => {
       l.visible = i < MAX_LIGHTS
     })
+    // The kit's lights are only sources: the pool's constant set of real lights copies the nearest (perf/lights.ts).
+    this.lightPool.collect([...[...this.items.values()].map(i => i.body), ...[...this.leaving].map(i => i.body)])
+  }
+
+  /** One of each arrival effect, the dust puff and a label blob, for the shader warm-up (perf/precompile.ts). */
+  private warmExtras(): THREE.Object3D[] {
+    const o = new THREE.Vector3(0, -50, 0)
+    const fx = [beam(o, 1, '#ffffff'), shockwave(o, 1), sparkle(o, 1, '#ffffff', 4), shimmer(o, 1, 1, '#ffffff'), dissolve(o, 1, 1, '#ffffff', 4)]
+    const dust = new THREE.Points(new THREE.BufferGeometry(), new THREE.PointsMaterial({ color: 0xd8d0c0, size: 0.3, transparent: true, opacity: 0.7, depthWrite: false, alphaMap: radialTexture() }))
+    return [...fx.map(f => f.obj), dust, blob({ text: 'warm' }), contactShadow(1)]
+  }
+
+  /**
+   * Loop 3: glowing floating things under a ceiling (lanterns in a pool hall) share a fixed light budget, so
+   * a room of them reads as warm lanterns, not a white-out: halos shrink and dim, the paper glows softer.
+   * Returns the items that are indoors.
+   */
+  private dimIndoorGlow(): Set<Item> {
+    const inside = new Set<Item>()
+    if (!this.state) return inside
+    const glowing: Item[] = []
+    for (const item of this.items.values()) {
+      const e = item.entity
+      if (e.pos[1] <= 0.5 && !e.tags.includes('lantern')) continue
+      if (!e.tags.includes('lantern') && !((e.props.glow ?? 0) > 0) && !((e.props.light ?? 0) > 0)) continue
+      glowing.push(item)
+      const lid = ceilingOver(this.state, e.pos[0], e.pos[2])
+      if (lid && e.pos[1] < lid.y) inside.add(item)
+    }
+    const k = Math.min(1, INDOOR_GLOW / Math.max(1, inside.size))
+    for (const item of glowing) {
+      const dim = inside.has(item) ? 0.3 + 0.35 * k : 1
+      item.body.traverse((o) => {
+        if (o.userData.animate) o.userData.dim = inside.has(item) ? 0.55 : 1
+        if (o.userData.halo !== undefined) {
+          o.userData.haloBase ??= o.userData.halo
+          o.userData.halo = (o.userData.haloBase as number) * dim
+        }
+      })
+      const gh = item.body.userData.glowHalo as THREE.Sprite | undefined
+      if (gh && inside.has(item)) gh.material.opacity = Math.min(gh.material.opacity, 0.6 * dim)
+    }
+    return inside
   }
 
   // ---------- atmosphere ----------
@@ -1197,7 +1368,7 @@ export class WorldRenderer {
     }
     if (this.preLift && !this.camMove && this.lift < 0.5) this.preLift = null
     // Ride the terrain: ease toward the ground under you (quick up a rise, a touch slower dropping off it).
-    const gy = this.groundAt(this.camera.position.x, this.camera.position.z)
+    const gy = this.standAt(this.camera.position.x, this.camera.position.z)
     this.groundY += (gy - this.groundY) * (1 - Math.exp(-dt * (gy > this.groundY ? 12 : 7)))
     if (Math.abs(gy - this.groundY) > 60) this.groundY = gy // a teleport or a mountain rising under you: no long glide
     this.camera.position.y = this.groundY + EYE * this.playerScale + this.lift
@@ -1305,6 +1476,7 @@ export class WorldRenderer {
       }
     }
 
+    this.lightPool.update(this.camera, now)
     this.renderer.render(this.scene, this.camera)
     const w = window as unknown as { __sceneReady?: boolean }
     if (!w.__sceneReady) w.__sceneReady = true
@@ -1358,8 +1530,12 @@ export class WorldRenderer {
     for (const item of this.items.values()) {
       const e = item.entity
       const m = e.props.motion
+      // Creatures (Loop 3) are posed every frame, moving or not: wings, legs, tail and head follow the drive.
+      const drive = item.body.userData.drive as ((d: Drive) => void) | undefined
+      const style = item.body.userData.motionStyle as MotionStyle | undefined
       if (!m) {
         if (this.motionStart.delete(e.id)) applyPose(item, null)
+        if (drive) this.driveCreature(item, drive, now / 1000, style)
         continue
       }
       // The clock restarts when the motion (or where it is) changes, so a modify blends in from where it stands.
@@ -1369,8 +1545,19 @@ export class WorldRenderer {
         clock = { key, t0: now }
         this.motionStart.set(e.id, clock)
       }
-      applyPose(item, blendedPose(e, (now - clock.t0) / 1000, kindHeight(this.desc(e), e.props)))
+      const t = (now - clock.t0) / 1000
+      applyPose(item, blendedPose(e, t, kindHeight(this.desc(e), e.props), style))
+      if (drive) this.driveCreature(item, drive, t, style)
     }
+  }
+
+  private driveCreature(item: Item, drive: (d: Drive) => void, t: number, style?: MotionStyle): void {
+    const e = item.entity
+    const c = this.camera.position
+    const d = driveOf(e, t, kindHeight(this.desc(e), e.props), style, [c.x, c.y, c.z], this.groundAt(e.pos[0], e.pos[2]))
+    // An arrival tween lifts the holder (the dragon's dive): it's flying then, whatever the pose says.
+    d.air += item.holder.position.y - e.pos[1]
+    drive(d)
   }
 
   /**
@@ -1537,6 +1724,7 @@ export class WorldRenderer {
     this.gathering.dispose()
     this.weather.dispose()
     this.forming.dispose()
+    this.lightPool.dispose()
     this.renderer.setAnimationLoop(null)
     this.ro.disconnect()
     for (const fn of this.cleanup) fn()
