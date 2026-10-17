@@ -18,7 +18,8 @@ export default defineEventHandler(async (event) => {
     scene: typeof body.scene === 'string' ? body.scene : '',
     doing: typeof body.doing === 'string' ? body.doing : 'standing about',
     utterance: typeof body.utterance === 'string' ? body.utterance : undefined,
-    mode: body.mode === 'greet' ? 'greet' : 'talk'
+    mode: body.mode === 'greet' ? 'greet' : 'talk',
+    playerName: typeof body.playerName === 'string' && body.playerName.trim() ? body.playerName.trim().slice(0, 32) : undefined
   }
   const ctrl = new AbortController()
   event.node.req.on('close', () => ctrl.abort())

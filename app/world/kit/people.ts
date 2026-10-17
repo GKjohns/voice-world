@@ -54,6 +54,9 @@ const geo = once(() => ({
   eye: share(new THREE.SphereGeometry(0.018, 6, 4)),
   mouth: share(new THREE.BoxGeometry(0.045, 0.01, 0.01)),
   brow: share(new THREE.BoxGeometry(0.04, 0.009, 0.01)),
+  // Mood mouths: a smile arc (a frown is the same arc upside down) and an open "o" for fright.
+  smile: share(new THREE.TorusGeometry(0.024, 0.0055, 3, 8, Math.PI).rotateZ(Math.PI)),
+  gasp: share(new THREE.CylinderGeometry(0.014, 0.014, 0.01, 8).rotateX(Math.PI / 2)),
   upper: limb(UPPER, 0.05, 0.042),
   fore: limb(FORE, 0.042, 0.034),
   hand: share(new THREE.IcosahedronGeometry(0.046, 0).scale(0.8, 1.1, 0.7).translate(0, -0.035, 0)),
@@ -63,7 +66,8 @@ const geo = once(() => ({
   long: share(new THREE.BoxGeometry(0.22, 0.26, 0.08).translate(0, 0.07, -0.085)),
   bun: share(new THREE.SphereGeometry(0.06, 6, 4).translate(0, 0.25, -0.08)),
   spikes: share(new THREE.ConeGeometry(0.11, 0.1, 6).translate(0, 0.27, -0.01)),
-  beard: share(new THREE.ConeGeometry(0.075, 0.13, 6).rotateX(Math.PI).translate(0, 0.02, 0.085)),
+  // A rounded chin beard (a hard black triangle read as a mask on pale skin).
+  beard: share(new THREE.SphereGeometry(0.085, 7, 4, 0, Math.PI * 2, Math.PI * 0.45, Math.PI * 0.55).scale(0.95, 0.85, 0.75).translate(0, 0.085, 0.035)),
   // hats and gear
   bucket: share(new THREE.CylinderGeometry(0.11, 0.13, 0.09, 8).translate(0, 0.27, 0)),
   brim: share(new THREE.CylinderGeometry(0.2, 0.2, 0.012, 10).translate(0, 0.225, 0)),
@@ -73,7 +77,8 @@ const geo = once(() => ({
   crest: share(new THREE.BoxGeometry(0.02, 0.07, 0.2).translate(0, 0.3, 0)),
   cone: share(new THREE.ConeGeometry(0.15, 0.42, 8).translate(0, 0.42, -0.01)),
   coneBrim: share(new THREE.CylinderGeometry(0.24, 0.24, 0.014, 12).translate(0, 0.21, 0)),
-  apron: share(new THREE.BoxGeometry(0.28, 0.5, 0.02).translate(0, -0.03, 0.115)),
+  // A shallow tapered front panel (theta 0 is +z, the front).
+  apron: share(new THREE.CylinderGeometry(0.17, 0.21, 0.5, 4, 1, true, -Math.PI * 0.3, Math.PI * 0.6).scale(1, 1, 0.66).translate(0, -0.03, 0.01)),
   robe: share(new THREE.CylinderGeometry(0.19, 0.33, 0.86, 8, 1, true).translate(0, -0.42, 0)),
   vest: share(new THREE.CylinderGeometry(0.205, 0.17, 0.3, 7, 1, true).scale(1, 1, 0.66).translate(0, 0.33, 0)),
   strap: share(new THREE.BoxGeometry(0.04, 0.32, 0.015)),
@@ -85,6 +90,8 @@ const geo = once(() => ({
   line: share(new THREE.CylinderGeometry(0.002, 0.002, 1.8, 3).translate(0, -0.9, 0)),
   book: share(new THREE.BoxGeometry(0.18, 0.025, 0.13)),
   broom: share(new THREE.CylinderGeometry(0.012, 0.014, 1.15, 4).translate(0, -0.35, 0)),
+  cue: share(new THREE.CylinderGeometry(0.007, 0.013, 1.3, 5).rotateX(Math.PI / 2).translate(0, -0.03, 0.45)),
+  rag: share(new THREE.BoxGeometry(0.1, 0.02, 0.08)),
   bristles: share(new THREE.ConeGeometry(0.09, 0.22, 6).translate(0, -1.0, 0))
 }))
 
@@ -126,7 +133,7 @@ function dress(role: Role, seed: string, name?: string): Dress {
     case 'fisherman': return { ...base, shirt: pick(['#3f5a6a', '#5a6a4a', '#6a4a3a']), hat: 'bucket', hatColor: '#d9a63a', over: 'vest', overColor: '#c9a13a', beard: !fem && r() < 0.7 }
     case 'shopkeeper': return { ...base, over: 'apron', overColor: '#efe8da' }
     case 'child': return { ...base, height: 0.6 + r() * 0.08, build: 0.95, headScale: 1.22, beard: false, shirt: pick(['#d9603a', '#3a8ad9', '#e0b23a', '#5ab05a', '#c05aa0']) }
-    case 'elder': return { ...base, hairColor: pick(GREY), hair: r() < 0.5 ? 'bald' : fem ? 'bun' : 'cap', stoop: 0.22, height: 0.9 + r() * 0.06, hold: 'cane', shirt: pick(['#6a5a4a', '#5a5a6a', '#7a6a5a']) }
+    case 'elder': return { ...base, hairColor: pick(GREY), hair: fem ? (r() < 0.5 ? 'bun' : 'long') : r() < 0.3 ? 'bald' : 'cap', stoop: 0.22, height: 0.9 + r() * 0.06, hold: 'cane', shirt: pick(['#6a5a4a', '#5a5a6a', '#7a6a5a']) }
     case 'guard': return { ...base, hat: 'helmet', hatColor: '#9aa0a8', over: 'tabard', overColor: pick(['#9e2a2b', '#22355e', '#2f5d3c']), hold: 'spear', build: 1.05 + r() * 0.15, beard: !fem && r() < 0.3 }
     case 'wizard': return { ...base, hat: 'cone', hatColor: pick(['#3a2f7a', '#22355e', '#5a2a6a']), over: 'robe', overColor: pick(['#3a2f7a', '#22355e', '#5a2a6a']), hold: 'staff', beard: !fem, hairColor: pick(GREY), hair: 'long' }
     case 'farmer': return { ...base, hat: 'straw', hatColor: '#d8c07a', over: 'straps', overColor: '#3f5f8a', shirt: pick(['#c9b79a', '#b05a3a', '#8a9a6a']) }
@@ -159,11 +166,14 @@ export interface PersonPose {
   workKind: string
   /** Lying low for the night: head down, still. */
   sleep: number
+  /** How they feel (shared/npc/reply.ts MOODS) and how much it shows (0..1, blended by the runtime). */
+  mood: string
+  moodW: number
   seed: number
 }
 
 export function restPose(): PersonPose {
-  return { t: 0, speed: 0, stride: 0, headYaw: 0, headPitch: 0, wave: 0, talk: 0, sit: 0, dance: 0, point: 0, pointYaw: 0, pointPitch: 0, cheer: 0, bow: 0, flinch: 0, work: 0, workKind: '', sleep: 0, seed: 0 }
+  return { t: 0, speed: 0, stride: 0, headYaw: 0, headPitch: 0, wave: 0, talk: 0, sit: 0, dance: 0, point: 0, pointYaw: 0, pointPitch: 0, cheer: 0, bow: 0, flinch: 0, work: 0, workKind: '', sleep: 0, mood: 'calm', moodW: 0, seed: 0 }
 }
 
 const pivot = (x = 0, y = 0, z = 0, ...children: THREE.Object3D[]): THREE.Group => {
@@ -185,7 +195,7 @@ export const person: Build = (props) => {
   const shirt = mat(d.shirt, { flatShading: true, roughness: 0.85 })
   const pants = mat(d.pants, { flatShading: true, roughness: 0.9 })
   const shoe = mat('#2a221c', { flatShading: true, roughness: 0.8 })
-  const dark = mat('#141210', { roughness: 0.4 })
+  const dark = mat('#141210', { roughness: 0.85 })
 
   // ---- legs ----
   const legs = ([1, -1] as const).map((s) => {
@@ -204,19 +214,31 @@ export const person: Build = (props) => {
   const spine = pivot(0, 0.04, 0, torso, shoulders)
   hips.add(spine)
   const head = pivot(0, 0.08, 0, mesh(G.head, skin, null), mesh(G.nose, skin, null))
+  const eyes: THREE.Mesh[] = []
+  const brows: THREE.Mesh[] = []
   for (const s of [1, -1]) {
-    head.add(mesh(G.eye, dark, null, 0.042 * s, 0.142, 0.103))
+    const eye = mesh(G.eye, dark, null, 0.042 * s, 0.142, 0.103)
+    eyes.push(eye)
+    head.add(eye)
     const brow = mesh(G.brow, hair, null, 0.042 * s, 0.172, 0.107)
     brow.rotation.z = 0.12 * s
+    brows.push(brow)
     head.add(brow)
   }
-  const mouth = mesh(G.mouth, mat('#5a2a22', { roughness: 0.6 }), null, 0, 0.075, 0.108)
-  head.add(mouth)
+  const lipM = mat('#5a2a22', { roughness: 0.6 })
+  const mouth = mesh(G.mouth, lipM, null, 0, 0.075, 0.108)
+  const smile = mesh(G.smile, lipM, null, 0, 0.082, 0.106)
+  const gasp = mesh(G.gasp, lipM, null, 0, 0.072, 0.11)
+  smile.visible = false
+  gasp.visible = false
+  head.add(mouth, smile, gasp)
+  const hairMeshes: THREE.Mesh[] = []
   if (d.hair !== 'bald') head.add(mesh(G.cap, hair, null))
   if (d.hair === 'long') head.add(mesh(G.long, hair, null))
   if (d.hair === 'bun') head.add(mesh(G.bun, hair, null))
   if (d.hair === 'spikes') head.add(mesh(G.spikes, hair, null))
   if (d.beard) head.add(mesh(G.beard, hair, null))
+  head.traverse(o => (o as THREE.Mesh).isMesh && (o as THREE.Mesh).material === hair && hairMeshes.push(o as THREE.Mesh))
   if (d.hat) {
     const hatM = mat(d.hatColor ?? '#7a5233', { flatShading: true, roughness: d.hat === 'helmet' ? 0.35 : 0.9, metalness: d.hat === 'helmet' ? 0.7 : 0 })
     if (d.hat === 'bucket') head.add(mesh(G.bucket, hatM, null), mesh(G.brim, hatM, null))
@@ -267,17 +289,20 @@ export const person: Build = (props) => {
 
   // ---- held things (in the right hand) ----
   let staffOrb: THREE.Mesh | null = null
+  // The held pole hangs off a grip pivot that the pose keeps upright (a spear stands, never juts out).
+  const grip = pivot(0, -0.04, 0.02)
   if (d.hold) {
     const wood = mat(d.hold === 'spear' ? '#6b4a30' : '#5a3d28', { flatShading: true, roughness: 0.9 })
-    const stick = mesh(G.stick, wood, null, 0, -0.04, 0.02)
+    const stick = mesh(G.stick, wood, null, 0, d.hold === 'spear' ? 0.15 : 0, 0)
     if (d.hold === 'cane') stick.scale.y = 0.72
-    right.hand.add(stick)
-    if (d.hold === 'spear') right.hand.add(mesh(G.spearTip, mat('#c0c4c8', { metalness: 0.8, roughness: 0.3, flatShading: true }), null, 0, 0.36, 0.02))
+    grip.add(stick)
+    if (d.hold === 'spear') grip.add(mesh(G.spearTip, mat('#c0c4c8', { metalness: 0.8, roughness: 0.3, flatShading: true }), null, 0, 0.18, 0))
     if (d.hold === 'staff') {
-      staffOrb = mesh(G.orb, glowMat('#9fd0ff', 2.2), null, 0, 0.42, 0.02)
+      staffOrb = mesh(G.orb, glowMat('#9fd0ff', 2.2), null, 0, 0.42, 0)
       staffOrb.castShadow = false
-      right.hand.add(staffOrb)
+      grip.add(staffOrb)
     }
+    right.hand.add(grip)
   }
   // Props for the routine's work: hidden until that work begins.
   const rod = group(mesh(G.rod, mat('#6b4a30', { flatShading: true }), null), mesh(G.line, mat('#e8e2d0'), null, 0, 2.1, 0))
@@ -291,12 +316,37 @@ export const person: Build = (props) => {
   const broom = group(mesh(G.broom, mat('#8a6a48', { flatShading: true }), null), mesh(G.bristles, mat('#c9a86a', { flatShading: true }), null))
   broom.visible = false
   right.hand.add(broom)
+  const cue = mesh(G.cue, mat('#c9a06a', { flatShading: true }), null)
+  cue.visible = false
+  right.hand.add(cue)
+  const rag = mesh(G.rag, mat('#e8e0cc', { flatShading: true }), null, 0, -0.05, 0.02)
+  rag.visible = false
+  right.hand.add(rag)
 
   const bodyScale = pivot(0, 0, 0, hips)
   bodyScale.scale.set(d.height * d.build, d.height, d.height * (0.5 + d.build * 0.5))
   const root = group(bodyScale)
   root.userData.personHeight = (HIP_Y + 0.04 + NECK_Y + 0.08 + 0.26 * d.headScale) * d.height
   root.userData.mouthY = (HIP_Y + 0.04 + NECK_Y + 0.08 + 0.12 * d.headScale) * d.height
+
+  // ---- age (the persona's, once it's known): grey hair and a stoop past sixty, a child's size under thirteen ----
+  const baseScale = bodyScale.scale.clone()
+  const baseHeight = root.userData.personHeight as number
+  let stoop = d.stoop
+  root.userData.setAge = (age: number) => {
+    if (root.userData.age === age) return
+    root.userData.age = age
+    if (age >= 60 && role !== 'child') {
+      const g = GREY[Math.floor(seeded(`${props.seed}:grey`)() * GREY.length) % GREY.length]!
+      const greyM = mat(age >= 70 ? g : '#9a958c', { flatShading: true, roughness: 0.9 })
+      for (const m of hairMeshes) m.material = greyM
+      stoop = Math.max(d.stoop, Math.min(0.24, (age - 55) * 0.009))
+    }
+    const kid = age < 13 && role !== 'child'
+    bodyScale.scale.copy(baseScale).multiplyScalar(kid ? 0.66 : 1)
+    head.scale.setScalar(kid ? 1.2 : d.headScale)
+    root.userData.personHeight = baseHeight * (kid ? 0.7 : 1)
+  }
 
   // ---- the pose ----
   const holdArm = d.hold ? 1 : 0
@@ -335,7 +385,13 @@ export const person: Build = (props) => {
     hips.position.x = dance * 0.06 * Math.sin(t * 5)
 
     // Spine: upright, a stoop with age, a lean into the walk, a bow, a flinch, a little breath.
-    spine.rotation.x = d.stoop + 0.06 * step + 0.12 * run + 0.75 * p.bow + 0.25 * p.flinch + 0.18 * sleep + 0.2 * p.work * (p.workKind === 'sweep' || p.workKind === 'tend' ? 1 : 0) - 0.02 * breath
+    const mw = p.moodW
+    const afraid = p.mood === 'afraid' ? mw : 0
+    const sad = p.mood === 'sad' ? mw : 0
+    const annoyed = p.mood === 'annoyed' ? mw : 0
+    const glad = p.mood === 'happy' || p.mood === 'amused' ? mw : 0
+    const curious = p.mood === 'curious' ? mw : 0
+    spine.rotation.x = stoop + 0.06 * step + 0.12 * run + 0.75 * p.bow + 0.25 * p.flinch + 0.18 * sleep + 0.2 * p.work * (p.workKind === 'sweep' || p.workKind === 'tend' ? 1 : 0) + 0.55 * p.work * (p.workKind === 'play' ? 1 : 0) + 0.15 * p.work * (p.workKind === 'serve' ? 1 : 0) + 0.1 * afraid + 0.12 * sad - 0.04 * glad - 0.02 * breath
     spine.rotation.y = -hips.rotation.y * 0.8 + 0.35 * p.point * Math.max(-1, Math.min(1, p.pointYaw))
     spine.rotation.z = dance * -0.22 * Math.sin(t * 5)
     spine.scale.set(1 + 0.012 * breath, 1, 1 + 0.015 * breath)
@@ -344,10 +400,30 @@ export const person: Build = (props) => {
     const talkBob = p.talk * (0.05 * Math.sin(t * 7.3 + ph) + 0.03 * Math.sin(t * 3.1))
     neck.rotation.y = Math.max(-1.2, Math.min(1.2, p.headYaw - spine.rotation.y)) * 0.5
     head.rotation.y = Math.max(-1.2, Math.min(1.2, p.headYaw - spine.rotation.y)) * 0.5
-    head.rotation.x = -p.headPitch * 0.6 - d.stoop * 0.7 - talkBob + 0.5 * sleep + 0.35 * p.flinch + 0.25 * p.work * (p.workKind === 'read' ? 1 : 0)
-    neck.rotation.x = -p.headPitch * 0.3 - d.stoop * 0.3
-    head.rotation.z = dance * 0.12 * Math.sin(t * 3 + 1) + 0.05 * p.talk * Math.sin(t * 2.3 + ph)
+    head.rotation.x = -p.headPitch * 0.6 - stoop * 0.7 - talkBob + 0.5 * sleep + 0.35 * p.flinch + 0.25 * p.work * (p.workKind === 'read' ? 1 : 0)
+    neck.rotation.x = -p.headPitch * 0.3 - stoop * 0.3
+    head.rotation.x += 0.22 * sad - 0.08 * glad - 0.3 * p.work * (p.workKind === 'play' ? 1 : 0)
+    head.rotation.z = dance * 0.12 * Math.sin(t * 3 + 1) + 0.05 * p.talk * Math.sin(t * 2.3 + ph) + 0.16 * curious
+    // The face: brows (inner ends down when annoyed, up and raised when afraid or sad), eyes (wide with
+    // fright, a squint when amused), and the mouth (a smile, a frown, a gasp, or the talking box).
+    brows.forEach((b, i) => {
+      const side = i === 0 ? 1 : -1
+      // + on the left brow (and - on the right) drops the inner end: a scowl; the other way is worry.
+      b.rotation.z = side * (0.12 + 0.42 * annoyed - 0.38 * (afraid + sad) - 0.05 * glad) + (i === 0 ? -0.25 * curious : 0)
+      b.position.y = 0.172 + 0.012 * afraid + 0.006 * sad - 0.006 * annoyed + (i === 0 ? 0.014 * curious : 0) + 0.004 * glad
+    })
+    for (const e of eyes) e.scale.set(1 + 0.3 * afraid, 1 + 0.45 * afraid - 0.4 * (p.mood === 'amused' ? mw : 0), 1)
+    const smiling = glad > 0.3 && p.talk < 0.6
+    const frowning = (sad > 0.3 || annoyed > 0.3) && p.talk < 0.6
+    const gasping = afraid > 0.5 && p.talk < 0.3
+    smile.visible = smiling || frowning
+    smile.rotation.z = frowning ? Math.PI : 0
+    smile.position.y = frowning ? 0.066 : 0.082
+    smile.scale.set(1 + 0.25 * glad, 1, 1)
+    gasp.visible = gasping
+    mouth.visible = !smile.visible && !gasp.visible
     mouth.scale.y = 1 + p.talk * 3.5 * Math.max(0, Math.sin(t * 13 + ph) * Math.sin(t * 5.3))
+    mouth.scale.x = 1 + 0.3 * glad
 
     // Arms: counter-swing, then whatever they're doing on top.
     arms.forEach((a, i) => {
@@ -368,6 +444,20 @@ export const person: Build = (props) => {
         sx += (-0.55 - 0.25 * Math.sin(t * 4.1 + i)) * g
         ex += -0.9 * g
         sz += 0.1 * a.s * g
+      }
+      // Feelings in the arms: folded when annoyed, pulled in and up when afraid (only when idle).
+      const idle = (1 - step) * (1 - p.talk) * (1 - p.work)
+      if (annoyed * idle > 0) {
+        const w = annoyed * idle
+        sx += (-0.5 - sx) * w
+        sz += (0.1 * a.s - sz) * w
+        ex += (-1.95 - ex) * w
+      }
+      if (afraid * idle > 0) {
+        const w = afraid * idle * 0.7
+        sx += (-0.55 - sx) * w
+        sz += (0.06 * a.s - sz) * w
+        ex += (-1.6 - ex) * w
       }
       // Sitting: hands on the knees.
       sx += (-0.55 - sx) * sit * 0.9
@@ -419,11 +509,24 @@ export const person: Build = (props) => {
           } else if (p.workKind === 'read') {
             sx += (-0.7 - sx) * w
             ex += (-1.3 - ex) * w
+          } else if (p.workKind === 'play') {
+            // Lining up a shot: the cue held low and level, drawn back and forth.
+            sx += (-0.35 + 0.12 * Math.sin(t * 2.2 + ph) - sx) * w
+            ex += (-1.1 - ex) * w
+          } else if (p.workKind === 'serve') {
+            // Wiping the counter in slow circles.
+            sx += (-0.75 + 0.15 * Math.sin(t * 3 + ph) - sx) * w
+            ex += (-0.9 + 0.2 * Math.cos(t * 3 + ph) - ex) * w
+            sz += (-0.15 * Math.sin(t * 3 + ph) - sz) * w
           } else {
             sx += (-0.6 + 0.4 * Math.sin(t * 2.6 + ph) - sx) * w
             ex += (-1.0 + 0.4 * Math.sin(t * 2.6 + ph + 1) - ex) * w
           }
         }
+      } else if (p.work > 0 && p.workKind === 'play') {
+        // The bridge hand rests forward on the table.
+        sx += (-1.0 - sx) * p.work
+        ex += (-0.25 - ex) * p.work
       } else if (p.work > 0 && (p.workKind === 'read' || p.workKind === 'fish' || p.workKind === 'tend' || p.workKind === 'work')) {
         const w = p.work
         sx += ((p.workKind === 'read' ? -0.7 : -0.5 + 0.35 * Math.sin(t * 2.6 + ph + 2)) - sx) * w
@@ -438,11 +541,15 @@ export const person: Build = (props) => {
       }
       a.shoulder.rotation.set(sx, ey, sz, 'YXZ')
       a.elbow.rotation.x = ex
+      // The pole stays upright whatever the arm does (spine and arm pitch undone at the grip).
+      if (isRight && holdArm) grip.rotation.set(-(sx + ex + spine.rotation.x), 0, -sz)
     })
     // Sleeping: arms limp, nothing moves.
     rod.visible = p.workKind === 'fish' && p.work > 0.3
     broom.visible = p.workKind === 'sweep' && p.work > 0.3 && !d.hold
     book.visible = p.workKind === 'read' && p.work > 0.3
+    cue.visible = p.workKind === 'play' && p.work > 0.3 && !d.hold
+    rag.visible = p.workKind === 'serve' && p.work > 0.3 && !d.hold
     if (staffOrb) {
       const m = staffOrb.material as THREE.MeshStandardMaterial
       m.emissiveIntensity = 1.6 + 1.2 * Math.max(p.work * (p.workKind === 'cast' ? 1 : 0), p.point) * (0.7 + 0.3 * Math.sin(t * 8))

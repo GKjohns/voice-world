@@ -3,7 +3,8 @@
  * clocks, the positions and the bodies; this decides what they should be doing). Priority, highest first:
  *
  *   flee      something burning or monstrous landed right next to them
- *   (act)     the genie told them to dance or sit: even mid-conversation
+ *   (react)   a dragon or a thunderclap stops even a commanded dancer, for a moment
+ *   (act)     the genie told them to dance or sit: even mid-conversation (until it runs its course)
  *   talk      a conversation is open and you're still close
  *   act       the genie told them to (dance, sit, follow) or they agreed to follow you
  *   react     a big event just happened (a dragon, thunder): they stop and look
@@ -32,6 +33,7 @@ export const TALK_LEAVE_RANGE = 8
 
 export function chooseMode(i: ModeInput): Mode {
   if (i.fleeing) return 'flee'
+  if (i.commanded && i.reacting) return 'react'
   if (i.commanded) return 'act'
   if (i.talking && i.playerDist <= TALK_LEAVE_RANGE) return 'talk'
   if (i.lasting) return 'act'

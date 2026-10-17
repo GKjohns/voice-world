@@ -10,15 +10,15 @@ import { parseOps } from '../shared/world/ops.ts'
 import { select } from '../shared/world/select.ts'
 import { buildContext } from '../shared/world/context.ts'
 import type { OpContext, WorldState } from '../shared/world/types.ts'
-import { fallbackPersona, parsePersona, addTurn, emptyMemory, MAX_TURNS, KEEP_TURNS, addEvent } from '../shared/npc/persona.ts'
-import { parseReply, spokenSoFar, speakableCut, cleanSpoken } from '../shared/npc/reply.ts'
-import { currentSlot, pickBlock, resolvePlace, standPoint, slotsFor, SLOT_SECONDS } from '../shared/npc/routine.ts'
-import { routeUtterance, isEcho, isWorldCommand } from '../shared/npc/routing.ts'
+import { fallbackPersona, parseCast, parsePersona, addTurn, emptyMemory, MAX_TURNS, KEEP_TURNS, addEvent } from '../shared/npc/persona.ts'
+import { capSpoken, parseBanter, parseReply, spokenSoFar, speakableCut, cleanSpoken } from '../shared/npc/reply.ts'
+import { cleanTarget, currentSlot, pickBlock, resolvePlace, standPoint, slotsFor, SLOT_SECONDS } from '../shared/npc/routine.ts'
+import { routeUtterance, isEcho, isWorldCommand, isGenieHail } from '../shared/npc/routing.ts'
 import type { RouteContext } from '../shared/npc/routing.ts'
 import { deckAt, inWater, canStand, steer } from '../shared/npc/ground.ts'
 import { chooseMode, shouldGreet, viewAngle } from '../shared/npc/behavior.ts'
-import { personWord, rolePreset } from '../shared/npc/people.ts'
-import { npcScene, wishEvent } from '../shared/npc/scene.ts'
+import { genderOfWords, personGender, personWord, rolePreset } from '../shared/npc/people.ts'
+import { describeChange, howFar, npcScene, wishEvent } from '../shared/npc/scene.ts'
 import { honestSay } from '../shared/world/honesty.ts'
 
 function ctx(over: Partial<OpContext> = {}): OpContext {
@@ -245,6 +245,8 @@ test('behaviour: fleeing beats talking beats acts beats reacting beats noticing 
   assert.equal(chooseMode({ ...base, talking: true, playerDist: 12 }), 'routine') // you walked away
   assert.equal(chooseMode({ ...base, talking: true, fleeing: true, playerDist: 2 }), 'flee')
   assert.equal(chooseMode({ ...base, talking: true, playerDist: 2, lasting: true, commanded: true }), 'act') // the genie said dance
+  assert.equal(chooseMode({ ...base, lasting: true, commanded: true, reacting: true }), 'react') // …but a dragon stops the dance
+  assert.equal(chooseMode({ ...base, lasting: true, commanded: true, fleeing: true }), 'flee')
   assert.ok(shouldGreet(1, 200, 100))
   assert.ok(!shouldGreet(0.3, 200, 100))
   assert.ok(!shouldGreet(1, 30, 100))
@@ -259,8 +261,9 @@ test('scene: a person\'s view lists what\'s near, the sky, other people and the 
   assert.match(text, /near you: .*dock/)
   assert.match(text, /in the sky: dragon/)
   assert.match(text, /other people: /)
-  assert.match(text, /the stranger: \d+ m away/)
-  assert.equal(wishEvent('a dragon', { dragon: 1 }, 0, 0, []), 'the stranger said "a dragon" and a dragon appeared out of nowhere')
+  assert.match(text, /the visitor: (close by|a short walk off|a few steps away|a fair way off)/)
+  assert.doesNotMatch(text, /\d+ m\b/)
+  assert.equal(wishEvent('a dragon', { dragon: 1 }, 0, 0, []), 'the visitor said "a dragon" and a dragon appeared out of nowhere')
   assert.equal(wishEvent('nothing', {}, 0, 0, []), null)
 })
 
@@ -278,4 +281,132 @@ test('routine: the lake\'s stand point is on its shore nearest them, never in th
     assert.ok(!inWater([water], sp.x, sp.z), `${from} → ${sp.x.toFixed(1)},${sp.z.toFixed(1)}`)
     assert.ok((sp.x / 22) ** 2 + ((sp.z + 34) / 18) ** 2 < 1.4, `${from} → too far: ${sp.x.toFixed(1)},${sp.z.toFixed(1)}`)
   }
+})
+
+// ---------- loop 1 fixes: routing on ordinary speech ----------
+
+function to(t: string, c: RouteContext = lake()): string {
+  const r = routeUtterance(t, c)
+  return r.to === 'npc' ? r.id : 'genie'
+}
+
+const lake = (over: Partial<RouteContext> = {}): RouteContext => ({
+  people: [
+    { id: 'pia', name: 'Pia', dist: 2.5, gazed: true },
+    { id: 'mara', name: 'Mara', dist: 8, gazed: false },
+    { id: 'hilde', name: 'Hilde', dist: 10, gazed: false }
+  ],
+  talkingTo: 'pia',
+  ...over
+})
+
+test('routing: talking about someone is not talking to them', () => {
+  assert.equal(to('What do you think of Mara?'), 'pia')
+  assert.equal(to('Can you introduce me to Hilde?'), 'pia')
+  assert.equal(to('Hello. Do you know Mara?'), 'pia')
+  assert.equal(to('Is Hilde your sister?'), 'pia')
+  assert.equal(to('what\'s Mara up to?'), 'pia')
+  assert.equal(to('Mara\'s boat looks old'), 'pia')
+  // A real vocative still works: at the start, or after a comma at the end.
+  assert.equal(to('Mara, what are you doing?'), 'mara')
+  assert.equal(to('what are you doing over there, Mara?'), 'mara')
+  assert.equal(to('hey Hilde'), 'hilde')
+  // Nobody in focus: a question about Mara goes to a neighbour, never the genie.
+  const far = lake({ talkingTo: undefined, people: [{ id: 'mara', name: 'Mara', dist: 14, gazed: false }, { id: 'tomas', name: 'Tomas', dist: 9, gazed: false }] })
+  assert.equal(to('what\'s Mara up to?', far), 'tomas')
+})
+
+test('routing: idioms with a genie verb said to a person stay with them; "take me to your…" never teleports', () => {
+  for (const t of ['Take me to your favorite spot', 'Fill me in on the town gossip.', 'Make yourself comfortable', 'Put your rod down', 'Light up your pipe', 'Remove your hat', 'Raise your hand', 'Let it go', 'Set the table', 'Change the subject, please', 'Can you take me to your house?', 'Show me where you fish', 'take me to her boat'])
+    assert.equal(to(t), 'pia', t)
+  // Still wishes: magic on their things, and the world.
+  for (const t of ['make your hat glow', 'turn your rod into gold', 'make it night', 'give her a dog', 'put a tree over there', 'take me to the moon', 'a thunderstorm'])
+    assert.equal(to(t), 'genie', t)
+  // Nobody in focus, someone near: "your" is them, not a teleport to "favorite spot".
+  const near = lake({ talkingTo: undefined, people: [{ id: 'pia', name: 'Pia', dist: 7, gazed: false }] })
+  assert.equal(to('Can you show me your favorite spot?', near), 'pia')
+  assert.equal(to('Can you show me your favorite spot?', { people: [] }), 'genie')
+})
+
+test('routing: a wish wrapped in talk is split (wish to the genie, the rest to the person)', () => {
+  const r = routeUtterance('Let me show you something. Make the pool table glow like lava.', lake())
+  assert.equal(r.to, 'genie')
+  assert.equal(r.text, 'Make the pool table glow like lava.')
+  assert.deepEqual(r.to === 'genie' && r.rest, { id: 'pia', text: 'Let me show you something.' })
+  assert.equal(routeUtterance('Let me show you something. Make the pool table glow like lava.', { people: [] }).to, 'genie')
+})
+
+test('routing: the genie\'s name, misheard (Jeannie, Jeanie, Gene, hey genie), still reaches the genie', () => {
+  for (const t of ['Jeannie. May.', 'Jeanie, make it night', 'Gene, a storm', 'hey genie', 'Hey Genie make it rain', 'make it snow, Jeannie', 'Genie\'s here?'])
+    assert.equal(routeUtterance(t, lake()).to, 'genie', t)
+  assert.equal(routeUtterance('Jeannie. May.', lake()).text, 'May.')
+  assert.ok(isGenieHail('Jeannie.') && isGenieHail('hey genie') && !isGenieHail('genie, make it night'))
+  // A person really called Gene wins over the fuzzy form.
+  assert.equal(routeUtterance('Gene, how are you?', { people: [{ id: 'g', name: 'Gene', dist: 4, gazed: false }] }).to, 'npc')
+  assert.equal(routeUtterance('Genie, how are you?', { people: [{ id: 'g', name: 'Gene', dist: 4, gazed: false }] }).to, 'genie')
+})
+
+// ---------- loop 1 fixes: the world's people ----------
+
+test('people: "two guys" are men, "an old woman" is a woman, named (and so dressed and voiced) to match', () => {
+  const guys = run(createWorld(), [{ op: 'spawn', kind: 'person', count: 2, at: { anchor: 'gaze' }, set: { role: 'pool player' } }], ctx(), 'two guys playing pool').state
+  assert.ok(guys.entities.every(e => e.props.gender === 'm' && personGender(e.id, e.props.name) === 'm'), JSON.stringify(guys.entities.map(e => e.props.name)))
+  const woman = run(createWorld(), [{ op: 'spawn', kind: 'old_woman', at: { anchor: 'gaze' } }]).state.entities[0]!
+  assert.equal(woman.props.gender, 'f')
+  assert.equal(personGender(woman.id, woman.props.name), 'f')
+  assert.equal(genderOfWords('a man and a woman'), undefined)
+  for (let seed = 1; seed < 30; seed++) {
+    const s = run(createWorld(), [{ op: 'spawn', kind: 'person', count: 3, at: { anchor: 'gaze' } }], ctx({ seed }), 'some girls skipping stones').state
+    assert.ok(s.entities.every(e => personGender(e.id, e.props.name) === 'f'))
+  }
+})
+
+test('wish events say what actually changed: "the dock turned orange and began to glow", not "1 thing changed"', () => {
+  const dock = { kind: 'dock', props: {}, pos: [0, 0, 0] as [number, number, number] }
+  const lava = { ...dock, props: { color: '#ff5a1a', glow: 2 } }
+  assert.deepEqual(describeChange(dock, lava), ['turned orange', 'began to glow'])
+  assert.deepEqual(describeChange(dock, { ...dock, props: { scale: 4 } }), ['grew huge'])
+  assert.deepEqual(describeChange(dock, { ...dock, props: { motion: 'fly' } }), ['took off flying'])
+  assert.deepEqual(describeChange({ kind: 'person', props: { act: 'none' }, pos: [0, 0, 0] }, { kind: 'person', props: { act: 'dance', actId: 3 }, pos: [0, 0, 0] }), ['started to dance'])
+  assert.equal(wishEvent('turn the dock into lava', {}, [{ kind: 'dock', what: ['turned orange', 'began to glow'] }], [], []), 'the visitor said "turn the dock into lava" and the dock turned orange and began to glow')
+  assert.equal(wishEvent('make everyone dance', {}, [{ kind: 'person', name: 'Hilde', what: ['started to dance'] }, { kind: 'person', name: 'Ines', what: ['started to dance'] }], [], [], 'Kyle'), 'Kyle said "make everyone dance" and Hilde and Ines started to dance')
+  assert.equal(wishEvent('remove the boat', {}, [], ['boat'], []), 'the visitor said "remove the boat" and the boat vanished')
+  assert.equal(howFar(3), 'a few steps away')
+})
+
+test('reply: a mood rides the >> line; lines past ~34 words are cut at a sentence end', () => {
+  const r = parseReply('Ha, you again.\n>> {"do":[{"act":"wave"}],"mood":"Delighted"}')
+  assert.equal(r.mood, 'happy')
+  assert.equal(parseReply('Hm.\n>> {"do":[],"mood":"bogus"}').mood, undefined)
+  const long = 'The lake was calm this morning. ' + 'and then the wind came up over the hills and the reeds all bent down low and the boats knocked together like old bones in a sack '.repeat(2)
+  const cut = capSpoken(long)
+  assert.equal(cut, 'The lake was calm this morning.')
+  assert.equal(capSpoken('Short and sweet.'), 'Short and sweet.')
+})
+
+test('banter: lines by known speakers only, cleaned and short; a cast matches entries by name', () => {
+  const lines = parseBanter('{"lines":[{"who":"Hilde","to":"Ines","line":"*gasps* Did you SEE that?!","mood":"scared","act":"point","target":"sky"},{"who":"Nobody","line":"hi"},{"who":"ines","line":"I am a night guard, Hilde!","mood":"annoyed"}]}', ['Hilde', 'Ines'])
+  assert.equal(lines.length, 2)
+  assert.deepEqual(lines[0], { who: 'Hilde', line: 'Did you SEE that?!', to: 'Ines', mood: 'afraid', act: 'point', target: 'sky' })
+  assert.equal(lines[1]!.who, 'Ines')
+  const cast = parseCast('{"cast":[{"name":"Ines","age":34,"occupation":"night guard","temperament":"dry","ties":["Hilde\'s younger sister"]},{"name":"Hilde","age":41,"occupation":"baker","temperament":"loud","ties":["Ines\'s older sister"]}]}', [{ id: 'p1', name: 'Hilde' }, { id: 'p2', name: 'Ines' }])
+  assert.equal(cast[0]!.id, 'p1')
+  assert.equal(cast[0]!.occupation, 'baker')
+  assert.deepEqual(cast[1]!.ties, ['Hilde\'s younger sister'])
+})
+
+test('routine: walk_to targets copied from the scene ("Maeve the villager") resolve to the person', () => {
+  assert.equal(cleanTarget('Maeve the villager'), 'maeve')
+  assert.equal(cleanTarget('the dock'), 'dock')
+  assert.equal(cleanTarget('Tomas the old fisherman.'), 'tomas')
+})
+
+test('routine: a word of a compound kind finds it ("pool" → pool_table, "counter" → bar_counter)', () => {
+  const ents = [
+    { id: 'pool_table#1', kind: 'pool_table', tags: ['table', 'game'], pos: [0, 0, -6] as [number, number, number], rotY: 0, props: {} },
+    { id: 'bar_counter#2', kind: 'bar_counter', tags: ['furniture'], pos: [-6, 0, 0] as [number, number, number], rotY: 0, props: {} }
+  ]
+  assert.equal(resolvePlace('pool', ents, [0, 0], 'me')?.id, 'pool_table#1')
+  assert.equal(resolvePlace('counter', ents, [0, 0], 'me')?.id, 'bar_counter#2')
+  assert.equal(resolvePlace('bar', ents, [0, 0], 'me')?.id, 'bar_counter#2')
 })

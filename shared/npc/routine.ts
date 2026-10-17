@@ -52,6 +52,11 @@ export interface PlaceEntity {
   props: { name?: string, length?: number, width?: number }
 }
 
+/** A target as the model writes it → a place word: "Maeve the villager" → "maeve", "the old dock" → "old dock". */
+export function cleanTarget(target: string): string {
+  return target.toLowerCase().trim().replace(/[.!?]+$/, '').replace(/^(?:the|a|an)\s+/, '').replace(/\s+the\s+[\w ]{2,24}$/, '')
+}
+
 /** What a place word finds: the nearest entity (to `home`) of that kind, then tag, then a person by name, within `range` m. */
 export function resolvePlace(place: string, entities: PlaceEntity[], home: [number, number], selfId: string, range = 90): PlaceEntity | undefined {
   // "the dock", "3 reeds", "12_pine": the scene lists counts, and models copy them.
@@ -73,6 +78,11 @@ export function resolvePlace(place: string, entities: PlaceEntity[], home: [numb
   for (const f of forms) {
     const byTag = near(others.filter(e => e.tags.includes(f) && !(e.kind === 'person' && f !== 'person' && f !== 'people')))
     if (byTag) return byTag
+  }
+  // "pool" → pool_table, "bar" / "counter" → bar_counter: a word of a compound kind.
+  for (const f of forms) {
+    const byPart = near(others.filter(e => e.kind !== 'person' && e.kind.split('_').includes(f)))
+    if (byPart) return byPart
   }
   return undefined
 }

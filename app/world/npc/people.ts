@@ -15,7 +15,7 @@ import { chooseMode, FLEE_RANGE, NOTICE_RANGE, SCARY, SPEED, STARTLING, viewAngl
 import type { Mode } from '#shared/npc/behavior'
 import { canStand, deckAt, obstacles, steer } from '#shared/npc/ground'
 import type { RoutineBlock, DaySlot } from '#shared/npc/persona'
-import { currentSlot, pickBlock, resolvePlace, standPoint } from '#shared/npc/routine'
+import { cleanTarget, currentSlot, pickBlock, resolvePlace, standPoint } from '#shared/npc/routine'
 import type { PlaceEntity } from '#shared/npc/routine'
 import { applyPose } from '../fx/motion'
 import { restPose } from '../kit/people'
@@ -78,15 +78,36 @@ export interface Live {
   stall: number
   hidden: boolean
   bornAt: number
+  /** When the genie's dance or sit runs out (then the routine takes over again). */
+  actUntil: number
+  /** When their own "I'll sit" / "I'll dance" runs out. */
+  ownActUntil: number
+  /** Following: since when, and the last time you spoke to them (a follower drifts off after a minute of silence). */
+  lastTouch: number
+  /** Passing the time with a neighbour (banter): who, and until when. */
+  chatWith: string | null
+  chatUntil: number
+  mood: string
+  moodUntil: number
 }
 
 export interface PeopleHooks {
   routineOf: (id: string) => RoutineBlock[]
   onNotice?: (id: string, lookedFor: number) => void
-  /** Who's mid-conversation, and who's speaking aloud right now. */
+  /** Who's mid-conversation, and whether this person is speaking aloud right now. */
   talkingTo: () => string | null
-  speaking: () => string | null
+  isSpeaking: (id: string) => boolean
+  /** They stopped following you (a minute without a word, or you left them behind). */
+  onFollowEnd?: (id: string, why: 'quiet' | 'far') => void
+  /** Their age, once the persona knows it (the rig greys and stoops past sixty). */
+  ageOf?: (id: string) => number | undefined
 }
+
+/** How long the genie's lasting acts last before the routine takes over (seconds). */
+export const ACT_SECONDS = { dance: [15, 25], sit: [35, 50], own_dance: [15, 22], own_sit: [40, 60] } as const
+/** A follower with no word from you for this long, or this far behind, heads back to their day. */
+export const FOLLOW_QUIET_S = 60
+export const FOLLOW_FAR = 20
 
 const TAU = Math.PI * 2
 const STRIDE_LEN = 1.35 // metres per full stride cycle at a walk
@@ -106,7 +127,7 @@ function approach(cur: number, to: number, rate: number, dt: number): number {
 }
 
 const ACTIVITY_DOING: Record<string, string> = {
-  fish: 'fishing', sit: 'sitting', work: 'working', sweep: 'sweeping', chat: 'chatting', sleep: 'asleep', patrol: 'on patrol', wander: 'strolling about', read: 'reading', cast: 'practising spells', tend: 'tending plants', stand: 'standing about'
+  fish: 'fishing', sit: 'sitting', work: 'working', sweep: 'sweeping', chat: 'chatting', sleep: 'asleep', patrol: 'on patrol', wander: 'strolling about', read: 'reading', cast: 'practising spells', tend: 'tending plants', stand: 'standing about', play: 'playing a game', serve: 'serving'
 }
 
 export class People {
@@ -158,21 +179,49 @@ export class People {
     else if (act === 'follow') {
       l.following = true
       l.ownAct = null
+      l.lastTouch = now
     } else if (act === 'stay') {
       l.following = false
       l.suppressAct = true
     } else if (act === 'stand' || act === 'none') {
       l.ownAct = null
       l.suppressAct = true
-    } else if (act === 'sit' || act === 'dance') l.ownAct = act
+    } else if (act === 'sit' || act === 'dance') {
+      l.ownAct = act
+      const [a, b] = act === 'sit' ? ACT_SECONDS.own_sit : ACT_SECONDS.own_dance
+      l.ownActUntil = now + (a + (b - a) * l.seed) * 1000
+    }
+  }
+
+  /** You spoke to them (a follower stays with you while you keep talking). */
+  touch(id: string): void {
+    const l = this.live.get(id)
+    if (l) l.lastTouch = performance.now()
+  }
+
+  /** How they feel for the next `secs` seconds (the face and the posture show it). */
+  setMood(id: string, mood: string | undefined, secs = 10): void {
+    const l = this.live.get(id)
+    if (!l || !mood) return
+    l.mood = mood
+    l.moodUntil = performance.now() + secs * 1000
+  }
+
+  /** Stop and pass the time with a neighbour: face them, stay put, for `secs` seconds. */
+  chat(id: string, withId: string, secs: number): void {
+    const l = this.live.get(id)
+    if (!l) return
+    l.chatWith = withId
+    l.chatUntil = performance.now() + secs * 1000
   }
 
   walkTo(id: string, target: string): boolean {
     const l = this.live.get(id)
     if (!l || !this.state) return false
-    const t = target.toLowerCase()
+    // "maeve the villager", "the dock": the scene's labels, copied back.
+    const t = cleanTarget(target)
     const cam = this.r.camera.position
-    if (/^(player|me|you|stranger|here)$/.test(t)) {
+    if (/^(player|me|you|stranger|visitor|here)$/.test(t)) {
       l.goal = { x: cam.x, z: cam.z, activity: 'stand', doing: 'coming over to you', hold: 15, key: `walk:${t}` }
       l.arrived = false
       return true
@@ -195,9 +244,9 @@ export class People {
 
   /** Where a place word is right now (for pointing and looking). */
   where(target: string, from: string): Vec3 | undefined {
-    const t = target.toLowerCase()
+    const t = cleanTarget(target)
     const cam = this.r.camera.position
-    if (/^(player|me|you|stranger)$/.test(t)) return [cam.x, cam.y, cam.z]
+    if (/^(player|me|you|stranger|visitor)$/.test(t)) return [cam.x, cam.y, cam.z]
     if (t === 'sky' || t === 'up') {
       const l = this.live.get(from)
       return l ? [l.x + Math.sin(l.yaw) * 6, 30, l.z + Math.cos(l.yaw) * 6] : undefined
@@ -212,11 +261,24 @@ export class People {
   // ---------- events from the world ----------
 
   /** Something just appeared (or the sky turned): everyone nearby stops and looks; scary things close by send them running. */
-  witness(spawned: Entity[], skyChanged: boolean): void {
+  witness(spawned: Entity[], skyChanged: boolean, scaryAt: Vec3[] = []): void {
     const now = performance.now()
     for (const l of this.live.values()) {
       if (now - l.bornAt < 1500) continue
       let looked = false
+      // Something already here turned to lava or fire: close by, they run; further off, they stare.
+      for (const at of scaryAt) {
+        const d = Math.hypot(at[0] - l.x, at[2] - l.z)
+        if (d < FLEE_RANGE + 2) {
+          l.fleeFrom = at
+          l.fleeUntil = now + 4000
+        }
+        if (d < 30 && !looked) {
+          l.reactAt = [at[0], at[1] + 0.8, at[2]]
+          l.reactUntil = now + 2600
+          looked = true
+        }
+      }
       for (const e of spawned) {
         if (e.kind === 'person' && e.id === l.id) continue
         const d = Math.hypot(e.pos[0] - l.x, e.pos[2] - l.z)
@@ -225,6 +287,11 @@ export class People {
         if (scary && d < FLEE_RANGE + (e.tags.includes('dragon') ? 6 : 0)) {
           l.fleeFrom = e.pos
           l.fleeUntil = now + 4500
+          l.mood = 'afraid'
+          l.moodUntil = now + 9000
+        } else if (startling && d < 60 && now > l.moodUntil) {
+          l.mood = scary ? 'afraid' : 'curious'
+          l.moodUntil = now + 6000
         }
         if (!looked && (startling || d < 25)) {
           l.reactAt = [e.pos[0], Math.max(1.5, e.pos[1] + (startling ? 6 : 0.8)), e.pos[2]]
@@ -282,6 +349,9 @@ export class People {
       this.posePerson(l, e, eye, now, dt)
       // Apply: the live spot on the stretch group (holder stays at the entity's spot).
       applyPose(item, { x: l.x, y: l.y, z: l.z, yaw: l.yaw, roll: 0, pitch: 0 })
+      // The age the persona settled on (grey hair and a stoop past sixty, a child's size under thirteen).
+      const age = this.hooks.ageOf?.(e.id)
+      if (age !== undefined && item.body.userData.age !== age) (item.body.userData.setAge as ((a: number) => void) | undefined)?.(age)
       const fn = item.body.userData.person as ((p: PersonPose) => void) | undefined
       fn?.(l.pose)
       item.body.visible = !l.hidden
@@ -297,7 +367,8 @@ export class People {
       reactUntil: 0, reactAt: null, fleeFrom: null, fleeUntil: 0, lookAt: null, lookUntil: 0, lookedFor: 0,
       // A person born with an act does it once at birth; one already standing when the page loads doesn't replay it.
       seenActId: now - this.t0 < 2500 ? e.props.actId : undefined,
-      seed: hash(e.id, 'seed'), doing: 'looking around', lastPos: [...e.pos], footT: 0, blockKey: '', stall: 0, hidden: false, bornAt: now
+      seed: hash(e.id, 'seed'), doing: 'looking around', lastPos: [...e.pos], footT: 0, blockKey: '', stall: 0, hidden: false, bornAt: now,
+      actUntil: 0, ownActUntil: 0, lastTouch: now, chatWith: null, chatUntil: 0, mood: 'calm', moodUntil: 0
     }
   }
 
@@ -313,10 +384,19 @@ export class People {
         l.lookAt = this.eye()
         l.lookUntil = now + 3200
       }
-      if (act === 'follow') l.following = true
+      if (act === 'follow') {
+        l.following = true
+        l.lastTouch = now
+      }
+      if (act === 'dance' || act === 'sit') {
+        const [a, b] = ACT_SECONDS[act]
+        l.actUntil = now + (a + (b - a) * l.seed) * 1000
+        l.ownAct = null
+      }
       if (act === 'none') {
         l.following = false
         l.ownAct = null
+        l.actUntil = 0
       }
     }
   }
@@ -329,10 +409,20 @@ export class People {
   private think(l: Live, e: Entity, eye: Vec3, now: number, dt: number, ents: PlaceEntity[]): void {
     const pd = Math.hypot(eye[0] - l.x, eye[2] - l.z)
     const head: Vec3 = [l.x, l.y + 1.6, l.z]
-    const looking = viewAngle(eye, this.r.yaw, this.r.pitch, head) < 0.22 || this.r.gazeNow?.entity === l.id
+    // A looser cone for someone walking past (the crosshair can't track a moving head).
+    const looking = viewAngle(eye, this.r.yaw, this.r.pitch, head) < (l.speed > 0.3 ? 0.34 : 0.22) || this.r.gazeNow?.entity === l.id
     l.lookedFor = pd <= NOTICE_RANGE && looking ? l.lookedFor + dt : 0
-    const act = l.suppressAct ? undefined : e.props.act
-    const lasting = act === 'dance' || act === 'sit' || act === 'follow' || l.following || l.ownAct === 'sit' || l.ownAct === 'dance'
+    // Acts end: the genie's dance or sit runs its course, their own too, and then the day takes over.
+    if (l.ownAct && now > l.ownActUntil) l.ownAct = null
+    const genieAct = l.suppressAct ? undefined : e.props.act
+    const act = (genieAct === 'dance' || genieAct === 'sit') && now > l.actUntil ? undefined : genieAct
+    if (l.following && (pd > FOLLOW_FAR || (now - l.lastTouch) / 1000 > FOLLOW_QUIET_S)) {
+      l.following = false
+      if (genieAct === 'follow') l.suppressAct = true
+      this.hooks.onFollowEnd?.(l.id, pd > FOLLOW_FAR ? 'far' : 'quiet')
+    }
+    const following = l.following
+    const lasting = act === 'dance' || act === 'sit' || following || l.ownAct === 'sit' || l.ownAct === 'dance'
     const prev = l.mode
     l.mode = chooseMode({
       fleeing: !!l.fleeFrom && now < l.fleeUntil,
@@ -344,6 +434,10 @@ export class People {
       reacting: now < l.reactUntil
     })
     if (l.mode === 'notice' && this.hooks.onNotice) this.hooks.onNotice(l.id, l.lookedFor)
+    if (l.mode === 'flee' && now > l.moodUntil - 3000) {
+      l.mood = 'afraid'
+      l.moodUntil = now + 6000
+    }
     if (prev !== l.mode && l.mode === 'routine') l.goal = l.goal?.hold ? l.goal : null
 
     switch (l.mode) {
@@ -359,7 +453,7 @@ export class People {
         // Mid-conversation they stay with you, unless they said they'd show you something or come along.
         if (l.following) this.followGoal(l, eye)
         else if (!l.goal?.hold) l.goal = null
-        l.doing = l.following ? 'walking with the stranger, talking' : 'talking with the stranger'
+        l.doing = l.following ? 'walking with the visitor, talking' : 'talking with the visitor'
         return
       case 'notice':
       case 'react':
@@ -367,9 +461,9 @@ export class People {
         l.doing = l.mode === 'react' ? 'staring up at what just happened' : l.doing
         return
       case 'act': {
-        if (act === 'follow' || l.following) {
+        if (l.following) {
           this.followGoal(l, eye)
-          l.doing = 'following the stranger'
+          l.doing = 'following the visitor'
         } else {
           l.goal = null
           l.doing = (act ?? l.ownAct) === 'dance' ? 'dancing' : 'sitting down'
@@ -379,6 +473,19 @@ export class People {
       default:
         break
     }
+
+    // Passing the time with a neighbour: stay put and face them.
+    if (l.chatWith && now < l.chatUntil) {
+      const o = this.live.get(l.chatWith)
+      if (o) {
+        if (l.goal && !l.arrived) l.goal = { ...l.goal, x: l.x, z: l.z }
+        l.arrived = true
+        l.lookAt = [o.x, o.y + 1.55, o.z]
+        l.lookUntil = now + 400
+        l.doing = `chatting with ${o.name}`
+        return
+      }
+    } else if (l.chatWith) l.chatWith = null
 
     // Routine: the block for this time of day → a place → a spot; then linger, then idle wander near it.
     if (l.goal?.hold) {
@@ -410,7 +517,7 @@ export class People {
       l.doing = l.goal.doing || ACTIVITY_DOING[l.goal.activity] || l.doing
       l.linger -= dt
       // Fishing, sitting and sleeping stay put; everything else potters about now and then.
-      const stays = ['fish', 'sit', 'sleep', 'read', 'chat'].includes(l.goal.activity)
+      const stays = ['fish', 'sit', 'sleep', 'read', 'chat', 'play', 'serve'].includes(l.goal.activity)
       if (l.linger <= 0 && !stays) {
         l.goal = this.idleSpot(l, l.goal.activity === 'patrol' || l.goal.activity === 'wander' ? l.goal.activity : 'stand', l.goal.doing, key, [l.goal.x, l.goal.z], l.goal.activity === 'patrol' || l.goal.activity === 'wander' ? 9 : 3.5)
         l.arrived = false
@@ -427,7 +534,7 @@ export class People {
     const gx = eye[0] + Math.sin(yaw) * 1.2 - Math.cos(yaw) * 1.7 * side
     const gz = eye[2] + Math.cos(yaw) * 1.2 + Math.sin(yaw) * 1.7 * side
     if (Math.hypot(gx - l.x, gz - l.z) > 1.4) {
-      l.goal = { ...this.safeSpot(gx, gz, l), activity: 'stand', doing: 'following the stranger', key: 'follow' }
+      l.goal = { ...this.safeSpot(gx, gz, l), activity: 'stand', doing: 'following the visitor', key: 'follow' }
       l.arrived = false
     }
   }
@@ -549,9 +656,11 @@ export class People {
     p.t = now / 1000
     p.speed = l.speed
     p.stride = l.stride
-    const act = l.suppressAct ? undefined : e.props.act
+    const act0 = l.suppressAct ? undefined : e.props.act
+    const act = (act0 === 'dance' || act0 === 'sit') && now > l.actUntil ? undefined : act0
     const atGoal = !!l.goal && l.arrived
-    const activity = l.mode === 'routine' && atGoal ? l.goal!.activity : ''
+    const chatting0 = !!l.chatWith && now < l.chatUntil
+    const activity = l.mode === 'routine' && atGoal && !chatting0 ? l.goal!.activity : chatting0 ? 'chat' : ''
     const lastingAct: string | null = act === 'dance' || act === 'sit' ? act : l.ownAct
 
     // Face: you when talking or noticed; the thing that startled them; the routine's direction once there.
@@ -592,9 +701,9 @@ export class People {
     // Gesture weights blend toward what the moment wants.
     const shot = l.oneShot && now < l.oneShot.until ? l.oneShot.kind : null
     if (l.oneShot && now >= l.oneShot.until) l.oneShot = null
-    const speaking = this.hooks.speaking() === l.id
+    const speaking = this.hooks.isSpeaking(l.id)
     const sitting = l.speed < 0.2 && (lastingAct === 'sit' || activity === 'sit' || (activity === 'sleep' && !l.goal?.inside))
-    const working = l.speed < 0.2 && ['fish', 'work', 'sweep', 'read', 'cast', 'tend'].includes(activity)
+    const working = l.speed < 0.2 && ['fish', 'work', 'sweep', 'read', 'cast', 'tend', 'play', 'serve'].includes(activity)
     const chatting = l.speed < 0.2 && activity === 'chat'
     p.wave = approach(p.wave, shot === 'wave' ? 1 : 0, 6, dt)
     p.bow = approach(p.bow, shot === 'bow' ? 1 : 0, 4, dt)
@@ -613,6 +722,14 @@ export class People {
     if (working) p.workKind = activity
     p.sleep = approach(p.sleep, activity === 'sleep' && l.speed < 0.2 && l.mode === 'routine' ? 1 : 0, 1.5, dt)
     p.flinch = approach(p.flinch, l.mode === 'flee' ? 0.6 : 0, 2.2, dt)
+    // Mood: shows while it lasts, then fades back to calm.
+    const feeling = now < l.moodUntil && l.mood !== 'calm'
+    if (feeling && p.mood !== l.mood) {
+      if (p.moodW < 0.05) p.mood = l.mood
+      else p.moodW = approach(p.moodW, 0, 6, dt)
+    } else {
+      p.moodW = approach(p.moodW, feeling ? 1 : 0, feeling ? 4 : 1.5, dt)
+    }
     l.hidden = activity === 'sleep' && !!l.goal?.inside && atGoal && l.mode === 'routine' && (now - l.arrivedAt) > 1500
   }
 }

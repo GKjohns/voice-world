@@ -16,6 +16,7 @@
  * stream so echo cancellation is on (speaker bleed would otherwise barge in on the voice itself) and AGC
  * is off (it pumps room noise over the VAD threshold), the two capture lessons from Camera Shy.
  */
+import { isGenieHail } from '#shared/npc/routing'
 import { gateway } from '@ai-sdk/gateway'
 import { Experimental_AbstractRealtimeSession } from 'ai'
 import type { Experimental_RealtimeServerEvent as RealtimeServerEvent, Experimental_RealtimeState as RealtimeState } from 'ai'
@@ -310,8 +311,13 @@ function routeHeard(text: string) {
   // teleport) and its own voice, even when the transcript was cut short ("Genie." for "Genie. Make it night.").
   ignoreToolsUntil = 0
   cancelNext = 0
-  if (/^\W*(?:hey |oh |ok )?(?:genie|djinn|spirit)\W*$/i.test(text)) genieHailUntil = performance.now() + 8000
+  if (isGenieHail(text)) genieHailUntil = performance.now() + 8000
   session?.requestResponse()
+  // "Let me show you something. Make it glow.": once the genie has granted it, the person hears the rest.
+  if (r.rest) {
+    const rest = r.rest
+    setTimeout(() => void npc.talk(rest.id, rest.text, ctx), 3500)
+  }
 }
 
 function safeJson(s: string): unknown {

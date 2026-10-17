@@ -12,7 +12,7 @@ export const DAY_SLOTS = ['dawn', 'morning', 'midday', 'afternoon', 'evening', '
 export type DaySlot = typeof DAY_SLOTS[number]
 
 /** What the body does while they're at a routine place. */
-export const ACTIVITIES = ['stand', 'sit', 'work', 'fish', 'sweep', 'chat', 'sleep', 'patrol', 'wander', 'read', 'cast', 'tend'] as const
+export const ACTIVITIES = ['stand', 'sit', 'work', 'fish', 'sweep', 'chat', 'sleep', 'patrol', 'wander', 'read', 'cast', 'tend', 'play', 'serve'] as const
 export type Activity = typeof ACTIVITIES[number]
 
 export interface RoutineBlock {
@@ -36,8 +36,21 @@ export interface Persona {
   secret: string
   voice: 'f' | 'm'
   routine: RoutineBlock[]
+  /** Who they are to the others here (from the cast call, so both sides agree): "Ines's older brother". */
+  ties?: string[]
   /** True when the model wrote it; false while the seeded stand-in is in use. */
   generated: boolean
+}
+
+/** One person's place in a crowd, decided by one cast call for the whole group (varied jobs, shared ties). */
+export interface CastEntry {
+  id: string
+  name: string
+  age: number
+  occupation: string
+  temperament: string
+  /** "Ines's older brother", "owes Hugo money", "best friends with Pia". */
+  ties: string[]
 }
 
 export interface PersonSeed {
@@ -53,7 +66,7 @@ const TEMPLATES: Record<Role, { occupation: string, age: [number, number], perso
     occupation: 'villager', age: [24, 58],
     personality: ['curious and warm, a little nosy', 'cheerful, easily amazed', 'wary of strangers but kind underneath'],
     speech: ['chatty, asks questions back', 'plain words, the odd local saying', 'quick, laughs at their own jokes'],
-    backstory: ['grew up right here and has never left', 'came for a summer and stayed twenty years', 'lost a sibling to the sea years ago'],
+    backstory: ['grew up right here and has never left', 'came for a summer and stayed twenty years', 'lost a sibling to a fever years ago'],
     secret: ['wants to see the world beyond the hills', 'is afraid of the dark', 'once saw a light in the sky nobody believed'],
     routine: [['dawn', 'waking slowly at home', 'home', 'stand'], ['morning', 'fetching water', 'water', 'work'], ['midday', 'chatting with neighbours', 'person', 'chat'], ['afternoon', 'tending the garden', 'bush', 'tend'], ['evening', 'sitting on a bench', 'bench', 'sit'], ['night', 'asleep at home', 'home', 'sleep']]
   },
@@ -216,6 +229,22 @@ export function parsePersona(text: string, seed: PersonSeed): Persona {
     routine: routine.length >= 3 ? routine : base.routine,
     generated: true
   }
+}
+
+/** The cast call's text → one entry per seed, matched by name (order as a fallback). Unknown names are dropped. */
+export function parseCast(text: string, seeds: PersonSeed[]): CastEntry[] {
+  const raw = firstJsonObject(text)
+  const list = raw && Array.isArray(raw.cast) ? raw.cast as unknown[] : []
+  const out: CastEntry[] = []
+  seeds.forEach((seed, i) => {
+    const byName = list.find(c => c && typeof c === 'object' && String((c as Record<string, unknown>).name ?? '').toLowerCase() === (seed.name ?? '').toLowerCase())
+    const c = (byName ?? list[i]) as Record<string, unknown> | undefined
+    if (!c || typeof c !== 'object') return
+    const age = typeof c.age === 'number' && c.age > 0 && c.age < 400 ? Math.round(c.age) : 0
+    const ties = Array.isArray(c.ties) ? c.ties.filter((t): t is string => typeof t === 'string' && !!t.trim()).map(t => t.trim().slice(0, 80)).slice(0, 3) : []
+    out.push({ id: seed.id, name: seed.name ?? str(c.name, 32) ?? '', age, occupation: str(c.occupation, 40) ?? '', temperament: str(c.temperament, 40) ?? '', ties })
+  })
+  return out
 }
 
 // ---------- memory ----------

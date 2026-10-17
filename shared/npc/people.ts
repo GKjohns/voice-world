@@ -57,9 +57,20 @@ export function personGender(id: string, name?: string): 'f' | 'm' {
   return hash(id, 'g') < 0.5 ? 'f' : 'm'
 }
 
-/** A name nobody else in `taken` has, seeded from the id and the sentence's seed. */
-export function personName(id: string, seed: number, taken: Set<string>): string {
-  const g = personGender(id)
+/** Words that say a person's gender ("two guys", "an old woman"). */
+const MALE = /\b(?:guys?|men|man|gentlem[ae]n|boys?|brothers?|lads?|fellows?|dudes?|kings?|fathers?|husbands?|grandpas?|grandfathers?|sons?|uncles?|old_man|monks?|sirs?)\b/i
+const FEMALE = /\b(?:women|woman|ladies|lady|girls?|sisters?|gals?|queens?|mothers?|wives|wife|grandmas?|grandmothers?|daughters?|aunts?|old_woman|witch(?:es)?|nuns?|madams?)\b/i
+
+/** 'f' | 'm' when the words say so (and only one way), else undefined. */
+export function genderOfWords(text: string): 'f' | 'm' | undefined {
+  const m = MALE.test(text)
+  const f = FEMALE.test(text)
+  return m && !f ? 'm' : f && !m ? 'f' : undefined
+}
+
+/** A name nobody else in `taken` has, seeded from the id and the sentence's seed (from the right list when the gender is given). */
+export function personName(id: string, seed: number, taken: Set<string>, gender?: 'f' | 'm'): string {
+  const g = gender ?? personGender(id)
   const list = g === 'f' ? FEMININE : MASCULINE
   const start = Math.floor(hash(id, seed, 'n') * list.length)
   for (let i = 0; i < list.length; i++) {

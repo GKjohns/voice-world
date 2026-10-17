@@ -82,6 +82,8 @@ export const PropsSchema = z.object({
   name: z.string().trim().min(1).max(32).optional(),
   persona: z.string().trim().min(1).max(240).optional(),
   act: z.string().trim().transform(toAct).optional(),
+  /** A person's gender when the sentence says ("two guys", "an old woman"): f | m. */
+  gender: z.string().trim().transform(g => (/^(f|female|woman|women|girl|lady|she)/i.test(g) ? 'f' as const : 'm' as const)).optional(),
   /** Set by the kernel on every act (the sentence's seed), so "wave again" replays even when act is unchanged. */
   actId: z.number().optional()
 })
