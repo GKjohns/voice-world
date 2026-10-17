@@ -1,0 +1,608 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Conjure Verification Report</title>
+<style>
+:root {
+  --bg: #fbfaf8; --fg: #1d1c1a; --muted: #6b6760; --line: #e3dfd8; --card: #ffffff;
+  --accent: #8a5a00; --l1: #c9c2b6; --l2: #a89d8a; --l3: #c48a2a; --fin: #7a4a00;
+  --good: #2f6b3a; --bad: #9b2f2f; --code: #f1ede6;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #161514; --fg: #ebe7e0; --muted: #a29d94; --line: #33302c; --card: #1e1d1b;
+    --accent: #e0aa4a; --l1: #4a4640; --l2: #6f685d; --l3: #b88428; --fin: #f0be5c;
+    --good: #7fc28a; --bad: #e08a8a; --code: #262421;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #161514; --fg: #ebe7e0; --muted: #a29d94; --line: #33302c; --card: #1e1d1b;
+  --accent: #e0aa4a; --l1: #4a4640; --l2: #6f685d; --l3: #b88428; --fin: #f0be5c;
+  --good: #7fc28a; --bad: #e08a8a; --code: #262421;
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg);
+  font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+main { max-width: 900px; margin: 0 auto; padding: 48px 16px 96px; }
+h1 { font-size: 2rem; line-height: 1.2; margin: 0 0 8px; letter-spacing: -0.01em; }
+h2 { font-size: 1.45rem; margin: 64px 0 12px; padding-top: 16px; border-top: 1px solid var(--line); }
+h3 { font-size: 1.1rem; margin: 40px 0 8px; }
+h4 { font-size: 0.95rem; margin: 24px 0 6px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+p, li { max-width: 72ch; }
+.sub { color: var(--muted); margin: 0 0 24px; }
+.lede { font-size: 1.08rem; }
+code { overflow-wrap: anywhere; font: 0.86em ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--code); padding: 1px 5px; border-radius: 4px; }
+a { color: var(--accent); }
+nav.toc { margin: 24px 0 8px; padding: 14px 18px; background: var(--card); border: 1px solid var(--line); border-radius: 8px; font-size: 0.95rem; }
+nav.toc ol { margin: 0; padding-left: 20px; columns: 2; column-gap: 32px; }
+@media (max-width: 600px) { nav.toc ol { columns: 1; } }
+figure { margin: 20px 0 28px; }
+figure img { display: block; width: 100%; max-width: 100%; height: auto; border-radius: 6px; border: 1px solid var(--line); background: #000; }
+figcaption { font-size: 0.9rem; color: var(--muted); margin-top: 8px; }
+figcaption b { color: var(--fg); }
+.pair { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.pair figure { margin: 0; }
+.pair + .pair, .pair + figure, figure + .pair { margin-top: 18px; }
+.ba-label { display: inline-block; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; padding: 1px 7px; border-radius: 10px; margin-right: 6px; }
+.before { background: color-mix(in srgb, var(--bad) 18%, transparent); color: var(--bad); }
+.after { background: color-mix(in srgb, var(--good) 18%, transparent); color: var(--good); }
+@media (max-width: 640px) { .pair { grid-template-columns: 1fr; } }
+.table-wrap { overflow-x: auto; margin: 16px 0 24px; }
+table { border-collapse: collapse; width: 100%; font-size: 0.9rem; }
+th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-weight: 600; color: var(--muted); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.03em; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+tr.total td { font-weight: 700; }
+.kv { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin: 16px 0 24px; }
+.kv > div { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; }
+.kv .v { font-size: 1.35rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.kv .k { font-size: 0.82rem; color: var(--muted); }
+.callout { background: var(--card); border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 6px; padding: 12px 16px; margin: 16px 0; }
+.callout p { margin: 4px 0; }
+ul.dev li { margin-bottom: 4px; }
+/* score chart */
+.chart { margin: 16px 0 8px; }
+.legend { display: flex; gap: 18px; flex-wrap: wrap; font-size: 0.85rem; color: var(--muted); margin-bottom: 12px; }
+.legend span::before { content: ""; display: inline-block; width: 11px; height: 11px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; background: var(--c); }
+.row { display: grid; grid-template-columns: 170px 1fr; gap: 12px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.row .lab { font-size: 0.88rem; }
+.row.total .lab { font-weight: 700; }
+.bars { display: grid; gap: 2px; }
+.bar { height: 9px; border-radius: 2px; background: var(--c); width: calc(var(--v) * 10%); position: relative; }
+.bar i { position: absolute; left: calc(100% + 6px); top: -4px; font: normal 0.72rem/1 ui-monospace, Menlo, monospace; color: var(--muted); }
+.row.total .bar { height: 12px; }
+.row.total .bar i { top: -2px; }
+@media (max-width: 560px) { .row { grid-template-columns: 1fr; gap: 4px; } }
+.beat { counter-increment: beat; }
+ol.beats { padding-left: 22px; }
+ol.beats li { margin-bottom: 6px; }
+.human li { margin-bottom: 10px; }
+footer { margin-top: 64px; color: var(--muted); font-size: 0.85rem; border-top: 1px solid var(--line); padding-top: 16px; }
+</style>
+</head>
+<body>
+<main>
+
+<h1>Conjure: voice-built worlds</h1>
+<p class="sub">Phase 5 verification report · plan <code>internal_docs/20261016_voice_world/implementation_plan.md</code> · Oct 16–17, 2026 · local only, not deployed</p>
+
+<nav class="toc" aria-label="Contents">
+<ol>
+  <li><a href="#built">What was built</a></li>
+  <li><a href="#scores">Scores across the loops</a></li>
+  <li><a href="#sprints">Sprints 1–5</a></li>
+  <li><a href="#loop1">Improvement loop 1</a></li>
+  <li><a href="#loop2">Improvement loop 2</a></li>
+  <li><a href="#loop3">Improvement loop 3</a></li>
+  <li><a href="#e2e">End-to-end demo</a></li>
+  <li><a href="#remaining">Remaining issues and human checks</a></li>
+</ol>
+</nav>
+
+<!-- ============================================================ -->
+<h2 id="built">1. What was built</h2>
+<p class="lede">Conjure is a first-person 3D world in desktop Chrome that you change by talking. You say a sentence and something new falls into the world, in a spot that makes sense, in about 1.5 s. "Take me to X" builds a whole place around you in about 10 s. Models never draw. The fast intent model (Haiku 5.5) turns each sentence into small JSON ops: selectors for sets, counts and arrangements, and <code>define</code> for anything not in the kit. A Sonnet Director streams scene recipes for teleports. A deterministic engine handles placement, geometry and the arrival animation. Voice runs through <code>gpt-realtime-mini</code> on the AI Gateway with <code>build</code> and <code>teleport</code> tools, and an optional webcam handles head-look and pointing. Kyle set the north star on Oct 17: <em>"I want the player to almost feel like they're god or they have a genie. It should be a 'holy shit' experience."</em> Every improvement loop was scored against that, not against "works correctly": fast responses that seem to anticipate you, spectacular arrivals, and a world that feels alive and answers to you.</p>
+
+<div class="kv">
+  <div><div class="v">4 → 8.5</div><div class="k">Overall "holy shit" score, L1 → Final</div></div>
+  <div><div class="v">1.4–1.9 s</div><div class="k">Speech end → world changed (final demo)</div></div>
+  <div><div class="v">0.5–0.9 s</div><div class="k">Speech end → first genie audio</div></div>
+  <div><div class="v">60 fps</div><div class="k">Every demo beat, worst gap 126 ms</div></div>
+  <div><div class="v">66/67</div><div class="k">Intent bench, Haiku (99%)</div></div>
+  <div><div class="v">100/100</div><div class="k"><code>npm test</code>, typecheck and lint clean</div></div>
+</div>
+
+<h4>Commits (git log --oneline)</h4>
+<div class="table-wrap"><table>
+<tr><th>Hash</th><th>Message</th></tr>
+<tr><td><code>e17ffeb</code></td><td>Conjure v0: world kernel, intent brain, realtime voice, Director teleport, head tracking</td></tr>
+<tr><td><code>95e1875</code></td><td>Loop 1: streaming text-JSON intent, genie voice + teleport tool, spectacle and framing, immersive HUD</td></tr>
+<tr><td><code>da179b4</code></td><td>Loop 2: sky/motion/weather, camera restraint + typing fix + anticipation, terrain at scale, integration fixes</td></tr>
+<tr><td><code>96f6241</code></td><td>Loop 3: conjure-missing + honesty, sky framing + tiny on structures, light pool + shader warmup (60fps builds), hand-built creatures, final integration</td></tr>
+</table></div>
+
+<!-- ============================================================ -->
+<h2 id="scores">2. Scores across the loops</h2>
+<p>Each evaluator played the app headless against the real models and scored it from 0 to 10 on each dimension. L1 and L2 ran on swiftshader (about 16 fps). L3 and Final ran on the real GPU (ANGLE Metal, M4 Pro). Source: <code>loops/final_eval.md</code>.</p>
+
+<div class="chart" role="img" aria-label="Grouped bar chart of scores per dimension for L1, L2, L3 and Final">
+  <div class="legend">
+    <span style="--c: var(--l1)">Loop 1</span>
+    <span style="--c: var(--l2)">Loop 2</span>
+    <span style="--c: var(--l3)">Loop 3</span>
+    <span style="--c: var(--fin)">Final</span>
+  </div>
+  <div id="score-rows"></div>
+</div>
+
+<div class="table-wrap"><table>
+<tr><th>Dimension</th><th class="num">L1</th><th class="num">L2</th><th class="num">L3</th><th class="num">Final</th><th>What moved it</th></tr>
+<tr><td>Speed / anticipation</td><td class="num">5</td><td class="num">6</td><td class="num">7</td><td class="num">8</td><td>Streaming ops, speak-first genie, 60 fps builds</td></tr>
+<tr><td>Arrival spectacle</td><td class="num">4</td><td class="num">7</td><td class="num">8</td><td class="num">9</td><td>Sky beams, terrain heave, dragon dive, whale sink</td></tr>
+<tr><td>Scale and ambition</td><td class="num">3</td><td class="num">4</td><td class="num">8</td><td class="num">9</td><td>Terrain kit, horizon anchor, sky flocks</td></tr>
+<tr><td>Understanding of intent</td><td class="num">6</td><td class="num">5</td><td class="num">7</td><td class="num">9</td><td>Typing fix, conjure-missing, weather keeps time</td></tr>
+<tr><td>World aliveness</td><td class="num">3</td><td class="num">3</td><td class="num">7</td><td class="num">8</td><td>Motion ops, weather, animated creatures</td></tr>
+<tr><td>Sense of power / agency</td><td class="num">4</td><td class="num">5</td><td class="num">7</td><td class="num">8</td><td>Camera restraint, tiny stays on the dock</td></tr>
+<tr><td>Voice and personality</td><td class="num">5</td><td class="num">7</td><td class="num">7</td><td class="num">8</td><td>Genie persona, honesty filter, no offers</td></tr>
+<tr><td>Visual beauty</td><td class="num">6</td><td class="num">6</td><td class="num">7</td><td class="num">8</td><td>Storm + lanterns + creatures in one frame</td></tr>
+<tr><td>Immersion (HUD)</td><td class="num">4</td><td class="num">8</td><td class="num">8</td><td class="num">8</td><td>Orb + captions replaced the dev HUD</td></tr>
+<tr class="total"><td>Overall "holy shit"</td><td class="num">4</td><td class="num">5</td><td class="num">7</td><td class="num">8.5</td><td>Full 60 s demo runs with no broken beats</td></tr>
+</table></div>
+
+<!-- ============================================================ -->
+<h2 id="sprints">3. Sprints 1–5</h2>
+
+<h3>Sprint 1: World kernel and kit</h3>
+<p>A first-person world you change by typing raw JSON ops: the <code>WorldOp</code> contract in <code>shared/world/ops.ts</code>, a selector engine, a layout engine (cluster, line, ring, grid, scatter, along), 12 kit prefabs plus learned kinds from parts, arrival animations, an op log with undo per batch, and localStorage save and replay.</p>
+<div class="kv">
+  <div><div class="v">22</div><div class="k">tests (parse, select, layout, applyOp)</div></div>
+  <div><div class="v">12 + blob</div><div class="k">kit kinds</div></div>
+</div>
+<figure><img src="screenshots/sprint1_empty.webp" alt="Empty world at dusk with grid"><figcaption><b>Proves the baseline renders:</b> full-bleed WebGL, analytic ground grid, sky dome blending into the fog at the horizon, dev HUD.</figcaption></figure>
+<div class="pair">
+  <figure><img src="screenshots/sprint1_trees_cluster.webp" alt="Cluster of pines"><figcaption><b>Proves counts and arrangements:</b> <code>count: 9, arrange: cluster</code> gives a jittered grove, not one tree (the storyboard's first failure).</figcaption></figure>
+  <figure><img src="screenshots/sprint1_trees_red.webp" alt="All trees red, house untouched"><figcaption><b>Proves selectors address sets:</b> <code>{tag: 'tree'}</code> turned every tree red and left the house alone (the storyboard's second failure).</figcaption></figure>
+</div>
+<div class="pair">
+  <figure><img src="screenshots/sprint1_houses.webp" alt="Houses"><figcaption><b>Proves placement keeps the viewer clear:</b> a 4-house cluster lands on the far side of the gaze disc instead of swallowing the camera.</figcaption></figure>
+  <figure><img src="screenshots/sprint1_houses_tall.webp" alt="Houses twice as tall"><figcaption><b>Proves relative modify:</b> "twice as tall" multiplies <code>height</code> on the selected set.</figcaption></figure>
+</div>
+<div class="pair">
+  <figure><img src="screenshots/sprint1_clock_learned.webp" alt="Six learned grandfather clocks"><figcaption><b>Proves <code>define</code> + parts:</b> a grandfather clock built from primitive parts, remembered as a kind, then spawned ×6.</figcaption></figure>
+  <figure><img src="screenshots/sprint1_after_undo.webp" alt="World after undo"><figcaption><b>Proves undo per batch:</b> the last sentence's whole batch is gone; the log replays minus that batch.</figcaption></figure>
+</div>
+<figure><img src="screenshots/sprint1_night_road.webp" alt="Night road with lamps"><figcaption><b>Proves invalid ops are dropped, not thrown:</b> a batch with a bad op still built the night road and lamps; the bad op was logged and skipped.</figcaption></figure>
+<h4>Notable deviations</h4>
+<ul class="dev">
+  <li>Unknown kinds spawn a labelled placeholder that keeps the requested name, so a later <code>define</code> morphs every placeholder in place.</li>
+  <li><code>undo</code> replays the log minus the last batch; no-op batches aren't logged, so undo always undoes something visible.</li>
+  <li>Selector leniency: plurals and <code>kind</code> falling back to a tag (<code>kind: 'tree'</code> finds pines and oaks).</li>
+</ul>
+
+<h3>Sprint 2: The op brain (text)</h3>
+<p>Plain English in, ops out: <code>/api/intent</code> on Haiku 5.5 with a cached ~8k-token digest, a text bar, an op log, and <code>bench/intent.ts</code> (34 utterances × 8 scenes, applied with the real <code>applyBatch</code> and checked on the resulting state).</p>
+<div class="table-wrap"><table>
+<tr><th>Model</th><th class="num">Pass</th><th class="num">Median</th><th class="num">p90</th><th class="num">Plain edits</th><th class="num">Define</th><th class="num">$/call</th></tr>
+<tr><td>Haiku 5.5 (default)</td><td class="num">34/34</td><td class="num">1.43 s</td><td class="num">2.65 s</td><td class="num">1.31 s</td><td class="num">2.6 s</td><td class="num">$0.0002</td></tr>
+<tr><td>Sonnet 5.5</td><td class="num">34/34</td><td class="num">1.57 s</td><td class="num">4.0 s</td><td class="num">1.42 s</td><td class="num">4.0 s</td><td class="num">$0.0049</td></tr>
+</table></div>
+<p>Full bench output: <a href="samples/sprint2_bench.txt"><code>samples/sprint2_bench.txt</code></a>.</p>
+<div class="pair">
+  <figure><img src="screenshots/sprint2_trees.webp" alt="Bunch of trees from text"><figcaption><b>Proves English → ops works live:</b> "make a bunch of trees" became 9 pines through the real model.</figcaption></figure>
+  <figure><img src="screenshots/sprint2_trees_red.webp" alt="All trees red from text"><figcaption><b>Proves the model emits set selectors:</b> "make all the trees red" → <code>modify {tag:'tree'}</code>.</figcaption></figure>
+</div>
+<div class="pair">
+  <figure><img src="screenshots/sprint2_clock_thinking.webp" alt="Thinking state with ghost ring"><figcaption><b>Proves the wait is covered:</b> the ghost ring at the snapshot and the pending caption show while the define is in flight.</figcaption></figure>
+  <figure><img src="screenshots/sprint2_clock.webp" alt="Grandfather clock beside the grove"><figcaption><b>Proves <code>define</code> from English:</b> "a grandfather clock next to the trees" → a 6-part define plus a spawn beside the grove.</figcaption></figure>
+</div>
+<div class="pair">
+  <figure><img src="screenshots/sprint2_five_more.webp" alt="Five more clocks"><figcaption><b>Proves learned-kind reuse:</b> "make five more of those" means the last batch's kind, even with the crosshair on something else.</figcaption></figure>
+  <figure><img src="screenshots/sprint2_night.webp" alt="Night"><figcaption><b>Proves atmosphere ops:</b> "make it night" switches the preset (no moon or stars yet; that came later).</figcaption></figure>
+</div>
+<h4>Notable deviations</h4>
+<ul class="dev">
+  <li><b>Missed the &lt;1 s target:</b> plain edits ran ~1.3 s median through the gateway. Fixed later in loop 1 by streaming text-JSON.</li>
+  <li>Haiku sometimes returned <code>ops</code> as a JSON string on long defines; salvage in <code>callStructured</code> + <code>parseOps</code> took define from 4/6 to 100%.</li>
+  <li>A browser-speech mic (V2 fallback) was added early, ahead of Sprint 3.</li>
+</ul>
+
+<h3>Sprint 3: Voice</h3>
+<p>Realtime voice through the gateway with one <code>build({request})</code> tool. The client attaches the gaze snapshot taken at <code>speech-started</code>, so "there" means where you were looking when you said it. The spike confirmed the gateway forwards function calls for <code>gpt-realtime-mini</code>, so V1 is the main path, with browser speech as the fallback.</p>
+<div class="kv">
+  <div><div class="v">1.15 s</div><div class="k">Speech end → build call (600 ms VAD + model)</div></div>
+  <div><div class="v">177–510 ms</div><div class="k">VAD stop → tool call (4 browser calls)</div></div>
+  <div><div class="v">0.9 m</div><div class="k">Trees from speech-start gaze, camera turned 1.6 rad away</div></div>
+  <div><div class="v">2–3.5 s</div><div class="k">Speech end → ops landed (missed 1.5 s goal)</div></div>
+</div>
+<p>Live check output: <a href="samples/sprint3_realtime_check.txt"><code>samples/sprint3_realtime_check.txt</code></a>.</p>
+<div class="pair">
+  <figure><img src="screenshots/sprint3_connecting.webp" alt="Connecting pill"><figcaption><b>Proves the token route + session start:</b> pill in <code>connecting</code> while the realtime socket opens.</figcaption></figure>
+  <figure><img src="screenshots/sprint3_listening.webp" alt="Listening pill"><figcaption><b>Proves the session is live:</b> connected and quiet, <code>listening</code>.</figcaption></figure>
+</div>
+<div class="pair">
+  <figure><img src="screenshots/sprint3_hearing.webp" alt="Hearing pill"><figcaption><b>Proves server VAD fires:</b> <code>hearing</code> on speech start, which is also when the gaze snapshot is taken.</figcaption></figure>
+  <figure><img src="screenshots/sprint3_thinking.webp" alt="Thinking pill"><figcaption><b>Proves the tool call reached <code>/api/intent</code>:</b> <code>thinking</code> with the tool's request text as the pending caption.</figcaption></figure>
+</div>
+<div class="pair">
+  <figure><img src="screenshots/sprint3_building.webp" alt="Building"><figcaption><b>Proves deixis survives a camera turn:</b> the script turned the camera 1.6 rad after <code>speech-started</code>; the pines still land at the speech-start gaze.</figcaption></figure>
+  <figure><img src="screenshots/sprint3_speaking.webp" alt="Speaking"><figcaption><b>Proves the voice confirms from the tool result:</b> <code>speaking</code>, caption from what the voice actually said.</figcaption></figure>
+</div>
+<div class="pair">
+  <figure><img src="screenshots/sprint3_after.webp" alt="Trees all red after second sentence"><figcaption><b>Proves multi-turn voice:</b> "now make them all red" resolved "them" to the grove.</figcaption></figure>
+  <figure><img src="screenshots/sprint3_fallback.webp" alt="Fallback toast"><figcaption><b>Proves the fallback:</b> with the token route forced to 502, a toast appears and browser speech takes over.</figcaption></figure>
+</div>
+<h4>Notable deviations</h4>
+<ul class="dev">
+  <li>No custom audio class: <code>ai@7.0.143</code> creates audio lazily in <code>connect()</code>, so Camera Shy's seam didn't apply. The SDK audio gets our own <code>getUserMedia</code> stream.</li>
+  <li>No <code>session-update</code> after connect, so no <code>baseConfig</code>; tools come only from the token route.</li>
+  <li>VAD silence 600 ms (later 400 ms). One of 4 runs missed the first sentence and didn't reproduce.</li>
+</ul>
+
+<h3>Sprint 4: Teleport mode (Director and atmosphere)</h3>
+<p>"Take me to X" goes to a Sonnet Director that streams a scene recipe in build order. The engine plays each op as it arrives, outward from the player, while the fog recedes. Added 28 interior, outdoor and city kinds plus synthesized ambient sound beds.</p>
+<div class="table-wrap"><table>
+<tr><th>Place</th><th class="num">Director first op</th><th class="num">Director done</th><th class="num">From Enter: first / done</th><th class="num">Ops</th><th class="num">Cost</th></tr>
+<tr><td>Pool hall</td><td class="num">1.37 s</td><td class="num">8.5 s</td><td class="num">2.7 / 9.9 s</td><td class="num">34</td><td class="num">$0.015</td></tr>
+<tr><td>Tranquil lake</td><td class="num">1.35 s</td><td class="num">10.4 s</td><td class="num">2.7 / 11.7 s</td><td class="num">25 (103 entities)</td><td class="num">$0.013</td></tr>
+<tr><td>Neon street</td><td class="num">1.30 s</td><td class="num">10.4 s</td><td class="num">3.0 / 12.1 s</td><td class="num">36</td><td class="num">$0.017</td></tr>
+</table></div>
+<p>Intent bench 37/37 (Haiku), including 3 new teleport cases. 56 tests.</p>
+<div class="pair">
+  <figure><img src="screenshots/sprint4_pool_fog.webp" alt="Fog-out"><figcaption><b>Proves the transition:</b> the old world fogs out and the floor patch stays under you.</figcaption></figure>
+  <figure><img src="screenshots/sprint4_pool_mid.webp" alt="Pool hall mid-build"><figcaption><b>Proves streaming build:</b> ops land while Sonnet is still writing; the hall assembles outward.</figcaption></figure>
+</div>
+<div class="pair">
+  <figure><img src="screenshots/sprint4_pool_hall.webp" alt="Finished pool hall"><figcaption><b>Proves the pool hall reads as the place:</b> tables, hanging lamps, bar, jukebox, neon, warm and dim, in under 10 s from the Director.</figcaption></figure>
+  <figure><img src="screenshots/sprint4_pool_lamps_blue.webp" alt="Pool hall lamps blue"><figcaption><b>Proves fast edits work inside Director scenes:</b> "make all the lamps blue" in the built hall.</figcaption></figure>
+</div>
+<div class="pair">
+  <figure><img src="screenshots/sprint4_lake_mid.webp" alt="Lake mid-build"><figcaption><b>Proves outward stagger:</b> near things first, fog frontier receding at ≤ 9 m/s.</figcaption></figure>
+  <figure><img src="screenshots/sprint4_tranquil_lake.webp" alt="Tranquil lake"><figcaption><b>Proves intent reading of mood:</b> "somewhere tranquil" → dock on a still lake at golden hour with fog, pines and fireflies, chosen by the model.</figcaption></figure>
+</div>
+<div class="pair">
+  <figure><img src="screenshots/sprint4_street_mid.webp" alt="Street mid-build"><figcaption><b>Proves the third scene type builds:</b> neon street mid-stream.</figcaption></figure>
+  <figure><img src="screenshots/sprint4_neon_street.webp" alt="Neon street"><figcaption><b>Proves city kit + night lighting:</b> storefronts with blade signs, towers, cars, lamps.</figcaption></figure>
+</div>
+<figure><img src="screenshots/sprint4_street_replayed.webp" alt="Street replayed after reload"><figcaption><b>Proves the world is its op log:</b> after reload the street replays with zero Director calls.</figcaption></figure>
+<h4>Notable deviations</h4>
+<ul class="dev">
+  <li><b>Structured-output grammar limits</b> shaped the Director schema (13 optionals; ~50 was refused by Anthropic and Bedrock streamed nothing). Grammar warm-up took 25–66 s at boot. Loop 1 later replaced all of this with text-JSON streaming.</li>
+  <li>No <code>define</code> in Director recipes; one batch per teleport so one undo removes the place.</li>
+  <li>Ambient sound is synthesized WebAudio noise beds, not CC0 files. Never verified by ear.</li>
+  <li>Fixed a Sprint 1 bug: the sky dome was never tone-mapped, so it couldn't match the fog.</li>
+</ul>
+
+<h3>Sprint 5: Hands-free (webcam)</h3>
+<p>MediaPipe Face Landmarker for head-look (dead zone ±4°, direct offset to 15°, then a turn rate) and Hand Landmarker for pointing as a gaze override. Lazy-loaded only when the camera toggle is pressed. 19 tracking tests.</p>
+<div class="pair">
+  <figure><img src="screenshots/sprint5_noface.webp" alt="No face detected"><figcaption><b>Proves graceful no-face:</b> Chromium's fake camera gives status <code>no face detected</code> with no crash.</figcaption></figure>
+  <figure><img src="screenshots/sprint5_face.webp" alt="Face tracking"><figcaption><b>Proves the face pipeline:</b> a y4m clip of a public-domain portrait gives <code>tracking</code>, a face oval, yaw ±2.7° (inside the dead zone, so the camera holds).</figcaption></figure>
+</div>
+<div class="pair">
+  <figure><img src="screenshots/sprint5_pointing.webp" alt="Pointing override"><figcaption><b>Proves the pointing seam:</b> a forced point at (0.45, −0.35) moves the amber reticle and ghost ring, and "spawn tower at gaze" lands at the pointed spot (5.6, −5.1).</figcaption></figure>
+  <figure><img src="screenshots/sprint5_denied.webp" alt="Camera denied"><figcaption><b>Proves permission denial is handled:</b> <code>NotAllowedError</code> → status <code>denied</code> + "Camera blocked" toast.</figcaption></figure>
+</div>
+<div class="callout"><p><b>Not verified:</b> turning and pointing with a real head and hand. A still image can't fake a head turn; the rate band is covered only by unit tests. See <a href="#remaining">needs a human</a>.</p></div>
+<h4>Notable deviations</h4>
+<ul class="dev">
+  <li>One-line edit in <code>renderer.ts</code>: <code>gaze()</code> casts through <code>gazeNdc()</code>, so every gaze consumer uses the pointed spot.</li>
+  <li>Pointing reticle is a DOM ring; pointing at the sky still falls back to 14 m ahead along the camera yaw.</li>
+  <li>Lean-to-walk moved to Later.</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="loop1">4. Improvement loop 1 (overall 4/10)</h2>
+<p>The evaluator played 17 + 10 typed commands and 2 spoken ones on swiftshader. Teleports earned an "oh, nice". The two biggest wishes produced the two ugliest frames.</p>
+
+<h4>Top awe-killers</h4>
+<ol>
+  <li><b>Results land out of frame, inside the camera, or too small to matter.</b> Huge dragon: camera between its legs. Giant tower: 3 m away, top cut off. 10×: black screen.</li>
+  <li><b>Nothing moves, and nothing comes from the sky.</b> No altitude, no motion, no weather. Lanterns sat on the floor, and the <code>say</code> line claimed it worked.</li>
+  <li><b>Arrivals are polite, not divine.</b> The same 7 m drop for a chair and a castle; "ready" pill during a 10 s Director build.</li>
+</ol>
+<div class="pair">
+  <figure><img src="../loops/loop1/01_dragon_blob.webp" alt="Dragon as a green blob"><figcaption><span class="ba-label before">Before</span><b>Learned creatures were crude:</b> "a dragon" → a 12-part green frog-blob with stick wings.</figcaption></figure>
+  <figure><img src="../loops/loop1/02_huge_camera_inside.webp" alt="Camera inside the huge dragon"><figcaption><span class="ba-label before">Before</span><b>No framing:</b> "make it huge" left the camera between the dragon's legs.</figcaption></figure>
+</div>
+<div class="pair">
+  <figure><img src="../loops/loop1/03_teleport_dead_air_fog.webp" alt="Blank fog during teleport"><figcaption><span class="ba-label before">Before</span><b>Dead air:</b> about 1 s of blank beige fog with a "ready" pill before the Director's first op.</figcaption></figure>
+  <figure><img src="../loops/loop1/04_tranquil_lake_settled.webp" alt="Tranquil lake settled"><figcaption><b>What already worked:</b> the golden-hour lake was the best moment of the session.</figcaption></figure>
+</div>
+<div class="pair">
+  <figure><img src="../loops/loop1/05_city_street_settled.webp" alt="City street"><figcaption><b>Ambition gap:</b> "build a city around me" gave one street in front of you, not 360°.</figcaption></figure>
+  <figure><img src="../loops/loop1/06_ten_times_blackout.webp" alt="Black screen after 10x"><figcaption><span class="ba-label before">Before</span><b>Global scale wrecked the view:</b> "ten times bigger" put the camera inside geometry.</figcaption></figure>
+</div>
+<div class="pair">
+  <figure><img src="../loops/loop1/07_lanterns_on_ground.webp" alt="Lanterns on the ground"><figcaption><span class="ba-label before">Before</span><b>No altitude:</b> "fill the sky with lanterns" → 30 yellow squares at ground level.</figcaption></figure>
+  <figure><img src="../loops/loop1/08_giant_tower_clipping.webp" alt="Giant tower clipping"><figcaption><span class="ba-label before">Before</span><b>Size-blind placement:</b> a scale-3 tower landed 3 m away with its top out of frame.</figcaption></figure>
+</div>
+
+<h4>What changed</h4>
+<ul>
+  <li><b>Immersive HUD:</b> an orb with state-driven colour and motion, serif captions, a hidden wish field (type-to-start), dev mode behind backtick, and a <code>summoning</code> phase during Director builds.</li>
+  <li><b>Framing and spectacle:</b> size-aware placement (<code>fitDistance</code>), a camera glide that frames every wish, tiered arrivals (sparkle → dust → sky beam + shockwave + shake), synthesized sfx, a light-tunnel vortex for teleports, lamp light following lamp colour, and a god view for global scale-ups.</li>
+  <li><b>Brain and voice:</b> intent moved from <code>Output.object</code> (served by Bedrock) to streamed text-JSON pinned to Anthropic, with NDJSON per op. The Director uses the same scanner and the grammar warm-up was deleted. A realtime <code>teleport</code> tool, VAD 400 ms, honest tool results, and a genie persona (voice <code>cedar</code>) that speaks a 1–3 word acknowledgement first.</li>
+</ul>
+
+<div class="pair">
+  <figure><img src="../loops/loop1/hud_idle.webp" alt="New HUD idle"><figcaption><span class="ba-label after">After</span><b>Proves the machine is hidden:</b> world, crosshair and orb only.</figcaption></figure>
+  <figure><img src="../loops/loop1/hud_onboarding.webp" alt="Onboarding whisper"><figcaption><span class="ba-label after">After</span><b>Proves first-run guidance:</b> "Speak, and it shall be." on an empty world.</figcaption></figure>
+</div>
+<div class="pair">
+  <figure><img src="../loops/loop1/hud_summoning.webp" alt="Summoning state"><figcaption><span class="ba-label after">After</span><b>Proves no more "ready" during teleports:</b> sigil + caption while the Director builds.</figcaption></figure>
+  <figure><img src="../loops/loop1/after_teleport_vortex.webp" alt="Teleport vortex"><figcaption><span class="ba-label after">After</span><b>Proves no dead-air frame:</b> the light tunnel spins up within 300 ms of a teleport.</figcaption></figure>
+</div>
+<div class="pair">
+  <figure><img src="../loops/loop1/after_giant_tower_beam.webp" alt="Giant tower through a beam"><figcaption><span class="ba-label after">After</span><b>Proves big arrivals have weight and are framed:</b> the tower comes down a sky beam ~50 m out, top in shot.</figcaption></figure>
+  <figure><img src="../loops/loop1/after_huge_dragon_framed.webp" alt="Huge dragon framed"><figcaption><span class="ba-label after">After</span><b>Proves the framing glide:</b> "make it huge" backs you out to a full view.</figcaption></figure>
+</div>
+<figure><img src="../loops/loop1/after_blue_lamps.webp" alt="Blue lamps in pool hall"><figcaption><span class="ba-label after">After</span><b>Proves light follows lamp colour:</b> "all the lamps blue" now turns the pools of light blue-lavender, not just the shades.</figcaption></figure>
+
+<h4>Latency (loop1_latency.md and loop1_changes.md)</h4>
+<p>The latency study found <code>/api/intent</code> was being served by Bedrock in tool mode, because Anthropic refused the 49-optional schema and gateway affinity overrode <code>order</code>. Only <code>only: ['anthropic']</code> pins a provider.</p>
+<div class="table-wrap"><table>
+<tr><th>Path</th><th class="num">Before</th><th class="num">After loop 1</th></tr>
+<tr><td>Intent, same-run A/B (6 sentences × 3)</td><td class="num">structured, done 1,339 ms</td><td class="num">first op 886 ms, done 982 ms</td></tr>
+<tr><td>Intent bench medians (plain / define)</td><td class="num">done 1,066 / 2,313 ms</td><td class="num">first op 896 / 2,047 ms</td></tr>
+<tr><td>Director first op</td><td class="num">1,360–1,782 ms (grammar)</td><td class="num">1,234–1,607 ms</td></tr>
+<tr><td>Voice: VAD stop → tool call</td><td class="num">—</td><td class="num">241–499 ms</td></tr>
+<tr><td>Voice: speech end → first audio</td><td class="num">~5.1 s</td><td class="num">1.0–1.8 s</td></tr>
+<tr><td>Voice: speech end → first op, plain</td><td class="num">~2.1–4 s</td><td class="num">~1.7–2.1 s</td></tr>
+<tr><td>VAD silence 600 → 400 ms (speech end → tool)</td><td class="num">958–1,034 ms</td><td class="num">819–895 ms</td></tr>
+<tr><td><code>bench:intent</code> (Haiku)</td><td class="num">37/37</td><td class="num">37/37 twice, all anthropic</td></tr>
+</table></div>
+<p>Rejected options: a flat <code>{op, json}</code> schema (slower), speculation from partial transcripts (the protocol has no transcript deltas), Gemini flash-class models (thinking tokens couldn't be turned off).</p>
+
+<!-- ============================================================ -->
+<h2 id="loop2">5. Improvement loop 2 (overall 5/10)</h2>
+<p>Arrival spectacle jumped +3 and immersion +4. Voice teleport became a real "oh wow". But everything that should be the climax was still static, refused, or lost to the camera.</p>
+
+<h4>Top awe-killers</h4>
+<ol>
+  <li><b>The sky and motion half of wishes still did nothing.</b> 5 weather wishes, 2 flights, a gallop, an eruption and 3 lantern wishes all got "not yet".</li>
+  <li><b>The camera fought you.</b> The framing dolly moved the player 22, 40, then 100 m, sometimes through walls; after 10× and undo you stayed 40–160 m up.</li>
+  <li><b>Typing broke the first word.</b> Type-to-start ate leading W, A, S, D, M and space: "a dragon" was sent as "ragon", and M toggled mute.</li>
+</ol>
+<div class="pair">
+  <figure><img src="../loops/loop2/01_typed_wish_eaten.webp" alt="Typed wish eaten"><figcaption><span class="ba-label before">Before</span><b>Input regression:</b> "a dragon" arrived as "ragon" → "The words are unclear."</figcaption></figure>
+  <figure><img src="../loops/loop2/02_voice_castle_beam.webp" alt="Voice castle beam"><figcaption><b>Loop 1 fix confirmed:</b> a voice castle lands through the sky beam, in frame.</figcaption></figure>
+</div>
+<div class="pair">
+  <figure><img src="../loops/loop2/03_voice_teleport_vortex.webp" alt="Voice teleport vortex"><figcaption><b>Loop 1 fix confirmed:</b> voice <code>teleport</code> tool → light tunnel immediately; the best moment of loop 2.</figcaption></figure>
+  <figure><img src="../loops/loop2/04_lanterns_on_ground.webp" alt="Lanterns still on the ground"><figcaption><span class="ba-label before">Before</span><b>Still no altitude:</b> lanterns at the horizon on the ground; the sky is empty.</figcaption></figure>
+</div>
+<div class="pair">
+  <figure><img src="../loops/loop2/05_mountains_pulled_out_of_city.webp" alt="Pulled out of city"><figcaption><span class="ba-label before">Before</span><b>Camera relocates you:</b> mountains made the camera dolly 100 m out of the city.</figcaption></figure>
+  <figure><img src="../loops/loop2/06_ten_times_grey.webp" alt="10x grey fog"><figcaption><span class="ba-label before">Before</span><b>God view isn't beautiful:</b> 10× is a flat grey fog screen.</figcaption></figure>
+</div>
+<div class="pair">
+  <figure><img src="../loops/loop2/07_stuck_at_160m_horses_gone.webp" alt="Stuck at 160 m"><figcaption><span class="ba-label before">Before</span><b>Stuck aloft after undo:</b> at 161 m every later wish (8 horses) is invisible.</figcaption></figure>
+  <figure><img src="../loops/loop2/08_volcano_horses_static.webp" alt="Static volcano and horses"><figcaption><span class="ba-label before">Before</span><b>Nothing moves:</b> a ~6 m cone volcano with yellow blobs, frozen horses.</figcaption></figure>
+</div>
+
+<h4>What changed</h4>
+<ul>
+  <li><b>Camera, input and anticipation:</b> W/A/S/D/M/space are "maybe typing" for 350 ms. The dolly is capped at 7 m with a wall stop, otherwise it tilts ("awe from below"). The god view records and restores your pose. A gathering glow while you speak or type, and a mote placeholder spindle after 700 ms or on a define. A 19-part dragon example.</li>
+  <li><b>Terrain and scale:</b> mountain, mountain_range, hill, cliff, volcano, waterfall, river, island, canyon, giant_moon, planet; aerial perspective; far plane 3200 m; <code>anchor: 'horizon'</code> and <code>dir: 'around'</code>; terrain snap; a Director example for 360° cities.</li>
+  <li><b>Sky, motion and weather:</b> <code>altitude</code>, <code>motion</code> (hover, drift, orbit, fly, wander, gallop, spin, sway), <code>weather</code> (rain, snow, storm, fog, aurora), events (lightning, meteors, eclipse, sunrise), <code>playerScale</code>, glow on everything, lantern and bird kinds, and an honesty filter that strips claims the ops didn't make.</li>
+  <li><b>Integration:</b> walking rides terrain height, mesh-only raycasters, interiors cap airborne spawns under the ceiling, and a castle on a missing hill raises the hill first.</li>
+</ul>
+<div class="kv">
+  <div><div class="v">58/58</div><div class="k"><code>bench:intent</code> Haiku after integration</div></div>
+  <div><div class="v">88/88</div><div class="k">tests</div></div>
+  <div><div class="v">0.00 m</div><div class="k">player moved by lanterns, statue, range in a pool hall</div></div>
+</div>
+<div class="pair">
+  <figure><img src="../loops/loop2/after_cam_glow_while_typing.webp" alt="Gathering glow while typing"><figcaption><span class="ba-label after">After</span><b>Proves the world listens:</b> motes gather at the gaze point while you type.</figcaption></figure>
+  <figure><img src="../loops/loop2/after_cam_placeholder_dragon.webp" alt="Placeholder spindle"><figcaption><span class="ba-label after">After</span><b>Proves defines aren't inert:</b> the spindle is visible from ~0.7 s; the dragon arrived at 5.0 s.</figcaption></figure>
+</div>
+<div class="pair">
+  <figure><img src="../loops/loop2/after_cam_hall_statue_no_dolly.webp" alt="Statue in hall, no dolly"><figcaption><span class="ba-label after">After</span><b>Proves camera restraint:</b> a giant statue in the pool hall framed by tilting, with no wall crossing.</figcaption></figure>
+  <figure><img src="../loops/loop2/after_terrain_1_range_golden.webp" alt="Mountain range golden hour"><figcaption><span class="ba-label after">After</span><b>Proves the colossal tier:</b> a range on the horizon at golden hour with aerial haze.</figcaption></figure>
+</div>
+<div class="pair">
+  <figure><img src="../loops/loop2/after_terrain_2_castle_on_hill.webp" alt="Castle on a hill"><figcaption><span class="ba-label after">After</span><b>Proves terrain snap + <code>on_top</code>:</b> the castle sits on the hill's crown.</figcaption></figure>
+  <figure><img src="../loops/loop2/after_terrain_3_waterfall.webp" alt="Waterfall"><figcaption><span class="ba-label after">After</span><b>Proves animated materials:</b> a waterfall off a cliff with a scrolling sheet and mist, not a white slab.</figcaption></figure>
+</div>
+<figure><img src="../loops/loop2/after_terrain_4_city_around_me_4dirs.webp" alt="City in four directions"><figcaption><span class="ba-label after">After</span><b>Proves "around me" means 360°:</b> a real Director run (36 ops) with city in all four directions.</figcaption></figure>
+<div class="pair">
+  <figure><img src="../loops/loop2/after_sky_lanterns_sky.webp" alt="Lanterns in the sky"><figcaption><span class="ba-label after">After</span><b>Proves altitude:</b> 50 warm lanterns in the sky over a night lake.</figcaption></figure>
+  <figure><img src="../loops/loop2/after_sky_storm_lightning.webp" alt="Storm with lightning"><figcaption><span class="ba-label after">After</span><b>Proves weather + events:</b> a lightning strike lights the clouds through the rain.</figcaption></figure>
+</div>
+<div class="pair">
+  <figure><img src="../loops/loop2/after_sky_snow.webp" alt="Snow"><figcaption><span class="ba-label after">After</span><b>Proves snow grading:</b> overcast, white ground, lamp pools.</figcaption></figure>
+  <figure><img src="../loops/loop2/after_sky_aurora.webp" alt="Aurora"><figcaption><span class="ba-label after">After</span><b>Proves sky shaders:</b> aurora curtains plus a meteor.</figcaption></figure>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="loop3">6. Improvement loop 3 (overall 7/10)</h2>
+<p>The first loop on the real GPU, so frame-time numbers mean something. Scale and aliveness each jumped +4. The 60-second demo still broke on 3 of its 6 beats, all for small, fixable reasons.</p>
+
+<h4>Top awe-killers</h4>
+<ol>
+  <li><b>"Make me tiny" on a dock went under the deck:</b> the rest of the demo was a brown screen.</li>
+  <li><b>A missing subject was refused:</b> "Summon a dragon to fly around me" got "Alas, nothing here answers to 'dragon'. Shall I summon one?" (a butler, not a genie).</li>
+  <li><b>Sky arrivals weren't framed:</b> only 1–4 of 50 lanterns were in frame at eye level.</li>
+  <li><b>Weather reset the time of day</b> (a storm flipped night to dusk), and <b>Director builds hitched</b> down to 2 fps with 988 ms frames.</li>
+</ol>
+<div class="pair">
+  <figure><img src="../loops/loop3/01_lanterns_fill_the_sky.webp" alt="Lanterns fill the sky"><figcaption><b>Loop 2 fix confirmed, framing missing:</b> 50 lanterns 15–44 m up, but you only see them if you look up.</figcaption></figure>
+  <figure><img src="../loops/loop3/02_storm_lightning.webp" alt="Storm lightning"><figcaption><b>Loop 2 fix confirmed:</b> the storm opens with a bolt and a whole-world flash 1.4 s after onset.</figcaption></figure>
+</div>
+<div class="pair">
+  <figure><img src="../loops/loop3/03_castle_on_hill_volcano_range.webp" alt="Castle, volcano, range"><figcaption><b>Proves scale composes:</b> volcano, castle on a hill and a range in one frame.</figcaption></figure>
+  <figure><img src="../loops/loop3/04_sky_whales.webp" alt="Sky whales"><figcaption><b>First-timer wish landed:</b> three (still learned) whales crossing the sky, a genuine "whoa".</figcaption></figure>
+</div>
+<div class="pair">
+  <figure><img src="../loops/loop3/05_demo_peak_frame.webp" alt="Lanterns over peaks"><figcaption><b>Best frame of loop 3:</b> lanterns over snowy peaks, partly by accident (the range's framing tilted the camera up).</figcaption></figure>
+  <figure><img src="../loops/loop3/06_demo_dragon_refused.webp" alt="Dragon refused"><figcaption><span class="ba-label before">Before</span><b>Anti-genie moment:</b> the placeholder sparkles and nothing arrives; the line offers instead of conjuring.</figcaption></figure>
+</div>
+<div class="pair">
+  <figure><img src="../loops/loop3/07_demo_tiny_under_dock.webp" alt="Tiny under the dock"><figcaption><span class="ba-label before">Before</span><b>Demo breaker:</b> eye at 0.16 m under the Director's dock deck.</figcaption></figure>
+  <figure><img src="../loops/loop3/08_poolhall_lanterns_blowout.webp" alt="Pool hall lanterns blowout"><figcaption><span class="ba-label before">Before</span><b>Indoor white-out:</b> 50 lanterns capped at head height blow out the hall.</figcaption></figure>
+</div>
+
+<h4>What changed</h4>
+<ul>
+  <li><b>Intent and honesty:</b> rule 12 (a named missing thing gets spawned), a ban on offers, a kernel <code>conjure</code> fallback (a modify of a missing known kind becomes a spawn), <code>keepTime</code> so weather never sets the time unless asked, and the honesty filter on every path with <code>effectLine</code> replacing fragments.</li>
+  <li><b>Performance:</b> a fixed <code>LightPool</code> (6 point + 6 spot lights always present, kit lights become sources on layer 31) so the light count never changes and nothing recompiles; <code>warmKit</code> precompiles 497 materials via <code>compileAsync</code> after load; per-sync precompile of hidden holders.</li>
+  <li><b>Camera and sky:</b> <code>standAt</code> rides walkable structures (dock, floor, rug, road); <code>skyLook</code> tilts toward sky flocks and storms; a <code>skyDome</code> layout puts lanterns 10–35° above the eye; indoor floaters scaled 0.45× with a halo budget; storm strikes at 0.7 s then 2.6–3.8 s; readable night snow.</li>
+  <li><b>Creatures:</b> a hand-built kit dragon (16 m, 19 m wingspan, jointed membrane wings, embers), a 25 m sky-whale with flank lights, horse and deer on one articulated quadruped, a fish school and butterflies, all rigged and animated in <code>motion.ts</code>, with dive and sink arrivals plus <code>sfxDragon</code> and <code>sfxWhaleSong</code>.</li>
+</ul>
+
+<h4>Frame time during Director builds (loop3_changes.md)</h4>
+<p>Headless Chromium, ANGLE Metal, M4 Pro, 1440×900, replaying saved recipes with original op timings, with a cold shader cache.</p>
+<div class="table-wrap"><table>
+<tr><th>Build</th><th>Cache</th><th class="num">Before: avg / min 1 s / worst</th><th class="num">After: avg / min 1 s / worst</th><th class="num">Frames &gt; 50 ms</th></tr>
+<tr><td>Pool hall (fresh world)</td><td>cold</td><td class="num">37 fps / 2 fps / 885 ms</td><td class="num">60 / 60 / 23 ms</td><td class="num">11 → 0</td></tr>
+<tr><td>City (fresh world)</td><td>cold</td><td class="num">53 / 3 / 390 ms</td><td class="num">60 / 60 / 30 ms</td><td class="num">6 → 0</td></tr>
+<tr><td>City (after pool hall)</td><td>cold</td><td class="num">—</td><td class="num">60 / 60 / 28 ms</td><td class="num">0</td></tr>
+<tr><td>Pool hall</td><td>warm OS cache</td><td class="num">56 / 21 / 277 ms</td><td class="num">—</td><td class="num">6 → —</td></tr>
+</table></div>
+<p>Cause: three.js bakes the light count into every program's cache key, so each lamp that switched on during a build recompiled every material (6–8 <code>linkProgram</code> calls, 0.8–0.9 s frames).</p>
+
+<h4>Other loop 3 numbers</h4>
+<div class="kv">
+  <div><div class="v">63/63</div><div class="k"><code>bench:intent</code> after intent fixes</div></div>
+  <div><div class="v">43/50</div><div class="k">lanterns in frame at 3 s (was 1/50)</div></div>
+  <div><div class="v">0.71 m</div><div class="k">tiny eye height on the dock (was under it)</div></div>
+  <div><div class="v">0.74 s</div><div class="k">first storm strike</div></div>
+</div>
+<div class="pair">
+  <figure><img src="../loops/loop3/after_cam_lantern_sky_tilt.webp" alt="Lantern sky tilt"><figcaption><span class="ba-label after">After</span><b>Proves <code>skyLook</code>:</b> pitch −0.12 → 0.47 with position unchanged, 43/50 lanterns in frame.</figcaption></figure>
+  <figure><img src="../loops/loop3/after_cam_tiny_on_dock.webp" alt="Tiny on dock"><figcaption><span class="ba-label after">After</span><b>Proves <code>standAt</code>:</b> "tiny" on the dock gives eye 0.71 m on the planks.</figcaption></figure>
+</div>
+<div class="pair">
+  <figure><img src="../loops/loop3/after_cam_storm_early_bolt.webp" alt="Early storm bolt"><figcaption><span class="ba-label after">After</span><b>Proves storm cadence:</b> first strike at 0.74 s in a cone in front of you.</figcaption></figure>
+  <figure><img src="../loops/loop3/after_creatures_dragon_dusk.webp" alt="Dragon at dusk"><figcaption><span class="ba-label after">After</span><b>Proves the hero dragon:</b> orbiting at dusk, wings on a downstroke, breathing embers.</figcaption></figure>
+</div>
+<div class="pair">
+  <figure><img src="../loops/loop3/after_creatures_skywhale_night.webp" alt="Sky whale at night"><figcaption><span class="ba-label after">After</span><b>Proves the kit whale:</b> overhead at night among lanterns, flank lights glowing.</figcaption></figure>
+  <figure><img src="../loops/loop3/after_creatures_horses_gallop.webp" alt="Horses galloping"><figcaption><span class="ba-label after">After</span><b>Proves rigged gaits:</b> six horses in a transverse gallop.</figcaption></figure>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="e2e">7. End-to-end: the final demo (overall 8.5/10)</h2>
+<p>Played on the real GPU as one continuous voice session (a fake-mic WAV of six utterances about 10 s apart), then two typed wishes in the same page. A frame was captured every 2 s and a rAF tracer logged frame times. 8/8 beats did what was asked, with 7 voice tool calls, no errors, and 60 fps on every beat. Spend was about $0.30.</p>
+
+<h4>Integration fixes before the run</h4>
+<ul>
+  <li>Kit creatures in the digest: dragon, whale, horse and similar are kit spawns, never defines. 4 new bench cases.</li>
+  <li>The view (yaw, pitch, x, z) is saved on <code>pagehide</code> and unmount, so a remount no longer resets it after "make me tiny".</li>
+  <li>No stepping out of rooms: under a ceiling, framing only turns and tilts (<code>maxBack: 0</code>).</li>
+  <li>Teleports arrive level: <code>beginReveal</code> eases pitch into [−0.2, 0.1] during the vortex (found in this demo).</li>
+</ul>
+
+<h4>The sequence</h4>
+<ol class="beats">
+  <li>"Take me somewhere tranquil."</li>
+  <li>"Make it night, and fill the sky with floating lanterns."</li>
+  <li>"Put a mountain range on the horizon."</li>
+  <li>"A giant whale swimming through the sky."</li>
+  <li>"Make a dragon fly around me."</li>
+  <li>"A thunderstorm."</li>
+  <li>typed: "make me tiny"</li>
+  <li>typed: "build a city around me"</li>
+</ol>
+
+<h4>Timeline (seconds since mic click)</h4>
+<div class="table-wrap"><table>
+<tr><th>Speech end → built</th><th>Wish</th><th class="num">VAD → tool</th><th class="num">First audio</th><th class="num">Built</th><th class="num">FPS avg / min1s / gap</th></tr>
+<tr><td>0 → 1.4</td><td>(mic connects)</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">60 / 60 / 22 ms</td></tr>
+<tr><td>6.0 → 8.5 / 14.4</td><td>Take me somewhere tranquil</td><td class="num">509 ms</td><td class="num">0.9 s</td><td class="num">first op +2.5 s, done +8.4 s</td><td class="num">59 / 54 / 126 ms</td></tr>
+<tr><td>22.8 → 24.7</td><td>Night + floating lanterns</td><td class="num">561 ms</td><td class="num">0.9 s</td><td class="num">+1.9 s</td><td class="num">60 / 60 / 21 ms</td></tr>
+<tr><td>32.7 → 34.2</td><td>Mountain range on the horizon</td><td class="num">268 ms</td><td class="num">0.5 s</td><td class="num">+1.5 s</td><td class="num">60 / 60 / 22 ms</td></tr>
+<tr><td>42.9 → 44.3</td><td>Giant whale through the sky</td><td class="num">383 ms</td><td class="num">0.8 s</td><td class="num">+1.4 s</td><td class="num">60 / 60 / 28 ms</td></tr>
+<tr><td>52.6 → 54.4</td><td>Dragon fly around me</td><td class="num">295 ms</td><td class="num">0.6 s</td><td class="num">+1.8 s</td><td class="num">60 / 60 / 21 ms</td></tr>
+<tr><td>61.8 → 63.3</td><td>A thunderstorm</td><td class="num">445 ms</td><td class="num">0.7 s</td><td class="num">+1.5 s</td><td class="num">60 / 60 / 23 ms</td></tr>
+<tr><td>78.3 → 79.7</td><td>typed: make me tiny</td><td class="num">—</td><td class="num">—</td><td class="num">+1.4 s</td><td class="num">60 / 60 / 22 ms</td></tr>
+<tr><td>87.8 → 90.3 / 99.2</td><td>typed: build a city around me</td><td class="num">—</td><td class="num">—</td><td class="num">first op +2.5 s, done +11.4 s</td><td class="num">60 / 59 / 34 ms</td></tr>
+</table></div>
+
+<figure><img src="../loops/final/demo_01_lake_arrival.webp" alt="Lake arrival"><figcaption><b>Beat 1 proves the voice teleport opener:</b> "Mm. Watch…" at 0.9 s, the light tunnel, then a dock, boat and reeds at dawn, with hills, peaks, birds, fish, butterflies and fireflies building outward (122 things). "Come. Somewhere still."</figcaption></figure>
+<figure><img src="../loops/final/demo_02_night_lanterns_rise.webp" alt="Night lanterns rise"><figcaption><b>Beat 2 proves sky framing works by voice:</b> night falls, 50 lanterns rise, and the view glides up to pitch 0.55 without moving you. The first holy-shit beat.</figcaption></figure>
+<figure><img src="../loops/final/demo_03_mountains_under_lanterns.webp" alt="Mountains under lanterns"><figcaption><b>Beat 3 proves horizon terrain at 1.5 s:</b> a nearer range heaves up under the lanterns. It adds less than it could, because the Director's lake already had a range.</figcaption></figure>
+<figure><img src="../loops/final/demo_04_sky_whale.webp" alt="Sky whale"><figcaption><b>Beat 4 proves the kit whale via voice:</b> a barnacled sky-whale with glowing flank lights sinks in 32 m up. It enters at the top edge and is fully in frame by +9 s.</figcaption></figure>
+<figure><img src="../loops/final/demo_05_dragon_arrives.webp" alt="Dragon arrives"><figcaption><b>Beat 5 proves conjure-missing:</b> "fly around me" with no dragon present gives a kit dragon (no define) that dives in and orbits at 18 m. "Wings unfurl. Circle me!"</figcaption></figure>
+<figure><img src="../loops/final/demo_06_storm_dragon_whale.webp" alt="Storm with dragon and whale"><figcaption><b>Beat 6 proves weather keeps the time:</b> rain and storm clouds, still night, lanterns glowing, with the dragon and whale crossing through the rain. The evaluator called it the best frame Conjure has made.</figcaption></figure>
+<figure><img src="../loops/final/demo_07_tiny_dock_looms.webp" alt="Tiny on dock"><figcaption><b>Beat 7 proves tiny stays on the structure and holds the view:</b> the eye drops from 1.52 m to 0.16 m with pitch 0.62 / yaw 0.31 kept, and the dock's end looms like a building. "Small as a beetle. Look up."</figcaption></figure>
+<figure><img src="../loops/final/demo_08_city_around_me.webp" alt="City around me"><figcaption><b>Beat 8 proves the teleport-level fix:</b> after the sky tilt, the city reveal now eases pitch to 0.10 by 4 s, so it reads as a street (neon, storefronts, towers, cars; 100 things), not rooftops.</figcaption></figure>
+
+<div class="callout">
+<p><b>Verdict (final_eval.md):</b> about 8.5/10 as run, and the first run where every beat landed. Speech end to first audio was 0.5–0.9 s, and to a built world 1.4–1.9 s. Holding it back from 9–10: the mountain beat is redundant after a Director lake, the whale enters at the frame edge, the view stays tilted at the sky once the lanterns arrive, and nobody has listened to the sound yet.</p>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="remaining">8. Remaining issues and human checks</h2>
+<h4>Remaining issues (ranked by what they cost the demo)</h4>
+<ol>
+  <li><b>The sky tilt never eases back.</b> After the lanterns, pitch sits at 0.55–0.62, so ground-level arrivals are half out of frame. Fix in <code>renderer.ts</code> <code>skyLook</code>/<code>frameWish</code>.</li>
+  <li><b>Sky arrivals at the frame edge.</b> <code>skyTilt</code> returns null when you already look high enough, so the whale needed about 9 s to swim into view (<code>fx/frame.ts</code>).</li>
+  <li><b>Sound is still unverified</b> (thunder, whale song, dragon roar, rain bed): checked for graph errors only.</li>
+  <li><b>The mountain beat is redundant</b> after a Director place that already has a range. Keep the horizon open, or swap in "raise a volcano over there".</li>
+  <li><b>Director teleports take 8–11 s</b> (city: first op 2.5 s, done 11.4 s). Hitch-free now, but long.</li>
+  <li><b>The city caption doubled</b>: the Director's say and the voice line both get captioned (<code>useDirector.ts</code>).</li>
+  <li><b>The teleport-level fix needs a voice re-run.</b> It was verified only on a typed teleport, and it changes <code>beginReveal</code> for every teleport.</li>
+  <li><b>Tiny needs close-up props</b> (grass blades, a pebble) to sell scale on open ground.</li>
+  <li><b>Indoors, framing still tilts up toward hanging lamps</b> (about 0.27 rad). Minor.</li>
+  <li><b>One flaky bench case</b> ("make the dragon fly in circles" in a grove → <code>modify ref:gaze</code>). Not yet tested on a weaker GPU.</li>
+</ol>
+
+<h4>Needs a human</h4>
+<ul class="human">
+  <li><b>Listen to the sound.</b> Play the recommended demo once with headphones: ambient beds, arrival sfx, thunder, rain, terrain rumble, the dragon's roar, the whale song and the genie voice (<code>cedar</code>). Note levels and timing. M mutes.</li>
+  <li><b>Real-webcam head tracking.</b> Check the signs: turning your head left should turn the view left, and tilting up should look up (otherwise flip <code>HEAD_SIGN</code> in <code>app/world/tracking/math.ts</code>). Then check how the gains, the ±4° dead zone and the 15° turn-rate band feel, the pointing thresholds on a real hand (<code>POINT_TUNING</code>), and the GPU-delegate start time (13 s cold on SwiftShader).</li>
+  <li><b>VAD 400 ms with hesitant speech.</b> Every voice test used <code>say</code> fixtures. Speak "put trees… over there" with natural pauses; if sentences get clipped, raise <code>silenceDurationMs</code> to 500 in <code>shared/voice.ts</code>.</li>
+</ul>
+
+<footer>
+Generated Oct 17, 2026 from the implementation plan, <code>loops/*.md</code>, <code>verification/samples/*</code> and the repo history. All images are local captures from headless Chromium runs; the paths are relative to <code>verification/</code>.
+</footer>
+
+</main>
+<script>
+(function () {
+  var dims = [
+    ["Speed / anticipation", 5, 6, 7, 8],
+    ["Arrival spectacle", 4, 7, 8, 9],
+    ["Scale and ambition", 3, 4, 8, 9],
+    ["Understanding of intent", 6, 5, 7, 9],
+    ["World aliveness", 3, 3, 7, 8],
+    ["Sense of power / agency", 4, 5, 7, 8],
+    ["Voice and personality", 5, 7, 7, 8],
+    ["Visual beauty", 6, 6, 7, 8],
+    ["Immersion (HUD)", 4, 8, 8, 8],
+    ["Overall “holy shit”", 4, 5, 7, 8.5]
+  ];
+  var cols = ["--l1", "--l2", "--l3", "--fin"];
+  var names = ["L1", "L2", "L3", "Final"];
+  var host = document.getElementById("score-rows");
+  dims.forEach(function (d, i) {
+    var row = document.createElement("div");
+    row.className = "row" + (i === dims.length - 1 ? " total" : "");
+    var lab = document.createElement("div");
+    lab.className = "lab"; lab.textContent = d[0];
+    var bars = document.createElement("div");
+    bars.className = "bars";
+    for (var k = 0; k < 4; k++) {
+      var b = document.createElement("div");
+      b.className = "bar";
+      b.style.setProperty("--c", "var(" + cols[k] + ")");
+      b.style.setProperty("--v", d[k + 1]);
+      b.title = names[k] + ": " + d[k + 1];
+      var t = document.createElement("i"); t.textContent = d[k + 1];
+      b.appendChild(t);
+      bars.appendChild(b);
+    }
+    row.appendChild(lab); row.appendChild(bars);
+    host.appendChild(row);
+  });
+})();
+</script>
+</body>
+</html>
