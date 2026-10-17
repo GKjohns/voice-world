@@ -3,7 +3,7 @@
  *
  * `AbstractRealtimeSession.connect()` POSTs `{ sessionConfig }` here and connects with what comes back, so
  * `api.token` on the client is this path. `tools` must come from HERE: connect() overwrites
- * `sessionConfig.tools` with this list before the opening `session-update`. One tool, `build({ request })`.
+ * `sessionConfig.tools` with this list before the opening `session-update`. Two tools, `build({ request })` and `teleport({ world, brief })`.
  * Ported from camera_shy's token route, minus auth/analytics (local toy, no deploy).
  */
 import { gateway } from '@ai-sdk/gateway'

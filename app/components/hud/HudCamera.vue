@@ -5,6 +5,8 @@
  */
 import type { TrackingStatus } from '~/composables/useHeadTracking'
 
+/** `minimal`: the immersive view, just a tiny toggle (and recenter while on); no preview panel. */
+const props = defineProps<{ minimal?: boolean }>()
 const cam = useHeadTracking()
 const toast = useToast()
 const videoEl = useTemplateRef<HTMLVideoElement>('video')
@@ -106,7 +108,7 @@ onBeforeUnmount(() => cam.disable())
   />
   <div class="absolute bottom-4 left-4 flex flex-col items-start gap-2">
     <div
-      v-if="cam.enabled.value"
+      v-if="cam.enabled.value && !props.minimal"
       class="relative w-[200px] overflow-hidden rounded-xl bg-black/60 ring ring-default backdrop-blur-md"
       data-camera-preview
     >
@@ -151,9 +153,10 @@ onBeforeUnmount(() => cam.disable())
         <UButton
           :icon="cam.enabled.value ? 'i-lucide-video' : 'i-lucide-video-off'"
           :color="cam.enabled.value ? 'primary' : 'neutral'"
-          :variant="cam.enabled.value ? 'solid' : 'soft'"
+          :variant="props.minimal ? 'ghost' : cam.enabled.value ? 'solid' : 'soft'"
           :loading="busy"
-          size="sm"
+          :size="props.minimal ? 'xs' : 'sm'"
+          :class="props.minimal ? (cam.enabled.value ? 'rounded-full text-emerald-200/90' : 'rounded-full text-white/40 hover:text-white/80') : ''"
           :aria-label="cam.enabled.value ? 'Turn the camera off' : 'Turn the camera on'"
           data-camera-toggle
           @click="cam.toggle()"
@@ -166,8 +169,9 @@ onBeforeUnmount(() => cam.disable())
         <UButton
           icon="i-lucide-locate-fixed"
           color="neutral"
-          variant="soft"
-          size="sm"
+          :variant="props.minimal ? 'ghost' : 'soft'"
+          :size="props.minimal ? 'xs' : 'sm'"
+          :class="props.minimal ? 'rounded-full text-white/50 hover:text-white/80' : ''"
           aria-label="Recenter head tracking"
           :disabled="cam.status.value !== 'tracking' && cam.status.value !== 'no-face'"
           data-camera-recenter

@@ -8,13 +8,13 @@
  * the realtime session can't connect or drops, it falls back to the browser's speech recognition (the
  * Sprint 2 path: no spoken replies) with a toast.
  */
-import type { IntentPhase } from '~/composables/useIntent'
-import type { VoicePresence } from '~/composables/useRealtimeVoice'
+import type { HudPhase } from '~/composables/useHud'
 
 const world = useWorld()
 const intent = useIntent()
 const voice = useRealtimeVoice()
 const toast = useToast()
+const hud = useHud()
 const voiceOn = computed(() => voice.status.value === 'live' || voice.status.value === 'connecting')
 const text = ref('')
 const consoleOpen = ref(false)
@@ -41,29 +41,22 @@ watch(text, (v, old) => {
   else if (!v.trim()) intent.cancelTyping()
 })
 
-const PILL: Record<IntentPhase, { label: string, icon: string, color: 'neutral' | 'error' | 'warning' | 'primary' }> = {
+type PillColor = 'neutral' | 'error' | 'warning' | 'primary' | 'info'
+const PILL: Record<HudPhase, { label: string, icon: string, color: PillColor }> = {
   idle: { label: 'ready', icon: 'i-lucide-circle-dot', color: 'neutral' },
-  listening: { label: 'listening', icon: 'i-lucide-audio-lines', color: 'error' },
-  thinking: { label: 'thinking', icon: 'i-lucide-loader-circle', color: 'warning' },
-  building: { label: 'building', icon: 'i-lucide-hammer', color: 'primary' }
-}
-const VOICE_PILL: Record<VoicePresence | 'connecting', { label: string, icon: string, color: 'neutral' | 'error' | 'warning' | 'primary' | 'info' }> = {
   connecting: { label: 'connecting', icon: 'i-lucide-loader-circle', color: 'neutral' },
   listening: { label: 'listening', icon: 'i-lucide-ear', color: 'neutral' },
   hearing: { label: 'hearing', icon: 'i-lucide-audio-lines', color: 'error' },
   thinking: { label: 'thinking', icon: 'i-lucide-loader-circle', color: 'warning' },
   building: { label: 'building', icon: 'i-lucide-hammer', color: 'primary' },
+  summoning: { label: 'summoning', icon: 'i-lucide-sparkles', color: 'primary' },
   speaking: { label: 'speaking', icon: 'i-lucide-volume-2', color: 'info' }
 }
-/** One state name for the pill (and data-phase, for the shoot script). */
-const phaseKey = computed(() => voiceOn.value
-  ? (voice.status.value === 'connecting' ? 'connecting' : voice.presence.value)
-  : intent.phase.value)
-const pill = computed(() => voiceOn.value
-  ? VOICE_PILL[phaseKey.value as VoicePresence | 'connecting']
-  : PILL[intent.phase.value])
+/** One state name for the pill (and data-phase, for the shoot script): voice, typing and the Director's build (useHud). */
+const phaseKey = hud.phase
+const pill = computed(() => PILL[phaseKey.value])
 const spinning = computed(() => phaseKey.value === 'thinking' || phaseKey.value === 'connecting')
-const pulsing = computed(() => phaseKey.value === 'listening' || phaseKey.value === 'hearing' || phaseKey.value === 'speaking')
+const pulsing = computed(() => ['listening', 'hearing', 'speaking', 'summoning'].includes(phaseKey.value))
 const placeholder = computed(() => intent.interim.value
   ? `“${intent.interim.value}…”`
   : voiceOn.value
@@ -119,9 +112,8 @@ onMounted(() => {
   window.addEventListener('keydown', onWindowKey)
 })
 onBeforeUnmount(() => {
+  // The mic and the voice outlive this bar (HudLayer stops them), so toggling dev mode never hangs up.
   window.removeEventListener('keydown', onWindowKey)
-  intent.stopMic()
-  voice.stop()
 })
 </script>
 

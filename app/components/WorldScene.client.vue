@@ -68,10 +68,7 @@ function onKey(e: KeyboardEvent) {
       ref="host"
       class="absolute inset-0"
     />
-    <div class="pointer-events-none absolute top-1/2 left-1/2 size-3.5 -translate-1/2 rounded-full border-[1.5px] border-white/70" />
-    <HudStatus />
-    <HudLog />
-    <HudIntent />
-    <HudCamera />
+    <div class="pointer-events-none absolute top-1/2 left-1/2 size-2.5 -translate-1/2 rounded-full border border-white/45 shadow-[0_0_6px_rgba(0,0,0,0.35)]" />
+    <HudLayer />
   </div>
 </template>

@@ -4,7 +4,8 @@
  *   npm run bench:intent -- haiku --only tree # one model, cases whose name contains "tree"
  *   npm run bench:intent -- haiku --repeat 2  # run each case twice (flakiness)
  * Scenes are built with applyBatch from canned ops; each case applies the model's ops to its scene with
- * applyBatch and checks the resulting state (or the ops). Prints pass rate, median/p90 latency and cost.
+ * applyBatch and checks the resulting state (or the ops). Prints pass rate, first-op and done latency
+ * (the intent call streams; rows show first/done ms), cost and which provider served it.
  */
 import { applyBatch, createWorld } from '../shared/world/state.ts'
 import { trimScene } from '../shared/world/context.ts'
@@ -251,13 +252,13 @@ const repeat = Number(flag('--repeat') ?? 1)
 const conc = Number(flag('--conc') ?? 4)
 const cases = CASES.filter(c => !only || c.name.includes(only))
 
-interface Row { model: string, name: string, pass: boolean, why: string, ms: number, cost: number, cacheRead: number, out: number, ops: Op[], dropped: number, error?: string }
+interface Row { model: string, name: string, pass: boolean, why: string, ms: number, first: number, provider?: string, cost: number, cacheRead: number, out: number, ops: Op[], dropped: number, error?: string }
 
 async function runCase(model: string, c: Case): Promise<Row> {
   const before = SCENES[c.scene]()
   const ctx = c.ctx ? c.ctx(before) : CTX
   const res = await interpret({ text: c.text, scene: trimScene(before), ctx, model })
-  const base = { model: res.model, name: c.name, ms: res.ms, cost: res.costUsd ?? 0, cacheRead: res.usage?.cacheRead ?? 0, out: res.usage?.output ?? 0, ops: res.ops, dropped: res.dropped.length, error: res.error }
+  const base = { model: res.model, name: c.name, ms: res.ms, first: res.firstOpMs ?? res.ms, provider: res.provider, cost: res.costUsd ?? 0, cacheRead: res.usage?.cacheRead ?? 0, out: res.usage?.output ?? 0, ops: res.ops, dropped: res.dropped.length, error: res.error }
   if (res.error) return { ...base, pass: false, why: `call failed: ${res.error}` }
   const applied = applyBatch(before, { ops: res.ops }, ctx, c.text, 0)
   let verdict: true | string
@@ -308,17 +309,21 @@ for (const model of models.length ? models : ['haiku', 'sonnet']) {
   const rows = await pool(jobs, conc, c => runCase(model, c))
   for (const r of rows) {
     const say = r.ops.find(o => o.op === 'say')
-    console.log(`${r.pass ? 'PASS' : 'FAIL'} ${r.model.padEnd(6)} ${String(r.ms).padStart(5)}ms ${String(r.out).padStart(4)}tok  ${r.name.padEnd(36)} ${opsBrief(r.ops)}${say && say.op === 'say' ? `  “${say.text}”` : ''}`)
+    console.log(`${r.pass ? 'PASS' : 'FAIL'} ${r.model.padEnd(6)} ${String(r.first).padStart(5)}/${String(r.ms).padStart(5)}ms ${String(r.out).padStart(4)}tok  ${r.name.padEnd(36)} ${opsBrief(r.ops)}${say && say.op === 'say' ? `  “${say.text}”` : ''}`)
     if (!r.pass) console.log(`       ↳ ${r.why}`)
     else if (r.dropped) console.log(`       ↳ (passed with ${r.dropped} dropped op(s)${r.why})`)
   }
   const ms = rows.map(r => r.ms)
   const plain = rows.filter(r => !r.ops.some(o => o.op === 'define')).map(r => r.ms)
   const defs = rows.filter(r => r.ops.some(o => o.op === 'define')).map(r => r.ms)
+  const first = rows.map(r => r.first)
+  const firstPlain = rows.filter(r => !r.ops.some(o => o.op === 'define')).map(r => r.first)
+  const firstDefs = rows.filter(r => r.ops.some(o => o.op === 'define')).map(r => r.first)
+  const providers = [...new Set(rows.map(r => r.provider ?? '?'))].join('/')
   const passed = rows.filter(r => r.pass).length
   const cost = rows.reduce((s, r) => s + r.cost, 0)
   const cached = rows.filter(r => r.cacheRead > 0).length
-  const line = `${model}: ${passed}/${rows.length} pass (${Math.round(100 * passed / rows.length)}%) · latency median ${pct(ms, 0.5)} ms, p90 ${pct(ms, 0.9)} ms · plain edits median ${pct(plain, 0.5)} ms (n=${plain.length}) · define median ${pct(defs, 0.5)} ms (n=${defs.length}) · cost $${cost.toFixed(4)} ($${(cost / rows.length).toFixed(5)}/call) · cache hits ${cached}/${rows.length}`
+  const line = `${model}: ${passed}/${rows.length} pass (${Math.round(100 * passed / rows.length)}%) · first op median ${pct(first, 0.5)} ms (plain ${pct(firstPlain, 0.5)}, define ${pct(firstDefs, 0.5)}) · done median ${pct(ms, 0.5)} ms, p90 ${pct(ms, 0.9)} ms · plain edits median ${pct(plain, 0.5)} ms (n=${plain.length}) · define median ${pct(defs, 0.5)} ms (n=${defs.length}) · cost $${cost.toFixed(4)} ($${(cost / rows.length).toFixed(5)}/call) · cache hits ${cached}/${rows.length} · provider ${providers}`
   summary.push(line)
   console.log(`\n${line}\n`)
 }

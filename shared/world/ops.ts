@@ -140,9 +140,9 @@ export const OpsEnvelope = z.object({ ops: z.array(LooseOpSchema) })
  *
  * Why so flat and string-typed: Anthropic compiles structured-output schemas into a grammar, and compile
  * time explodes with optional fields (measured: 4 → 2.5 s, 10 → 11.5 s, 13 → 45 s, 20 → "Schema is too
- * complex"). Compiled grammars are cached for a day, so 13 optionals is fine after one warm-up
- * (server/plugins/directorWarmup.ts). The full loose op (~50 optionals) gets routed to a provider whose
- * streamed tool output never arrives. The intent model never sees this schema or room coordinates.
+ * complex"). Since Loop 1 the Director writes JSON in plain text (no grammar), so this schema is now the
+ * documented shape and the test's guard, not a model constraint. The intent model never sees this schema
+ * or room coordinates.
  */
 export const DirectorOpSchema = z.object({
   // Key order is the grammar's order: atmosphere keys first, then spawn keys, `text` last (say, neon),

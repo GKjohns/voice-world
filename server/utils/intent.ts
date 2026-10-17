@@ -6,12 +6,12 @@
 import { buildContext, sceneToState } from '../../shared/world/context.ts'
 import type { Scene } from '../../shared/world/context.ts'
 import { KIT } from '../../shared/world/kinds.ts'
-import { OpsEnvelope, parseOps } from '../../shared/world/ops.ts'
+import { parseOps } from '../../shared/world/ops.ts'
 import type { DroppedOp, Op } from '../../shared/world/ops.ts'
 import type { OpContext } from '../../shared/world/types.ts'
 import { resolveModel } from './aiModels.ts'
 import type { Usage } from './aiModels.ts'
-import { callStructured } from './gateway.ts'
+import { streamOps } from './gateway.ts'
 
 export interface IntentRequest {
   text: string
@@ -29,10 +29,20 @@ export interface IntentResult {
   error?: string
   usage?: Usage
   costUsd?: number
-  salvaged?: boolean
+  /** The end-of-stream parse found ops the incremental scanner missed. */
+  recovered?: boolean
+  /** When the first op closed in the stream (what the client applies first). */
+  firstOpMs?: number
+  /** Which provider the gateway actually used (should be anthropic). */
+  provider?: string
 }
 
-const ROLE = 'You are the builder inside Conjure, a 3D world the player changes by talking. Turn the one sentence you get into world ops, following the language, rules and examples in the digest exactly. Output only the JSON object { "ops": [...] }.'
+export type IntentEvent
+  = | { t: 'op', op: Op, ms: number, i: number }
+    | { t: 'drop', dropped: DroppedOp }
+    | { t: 'done', ms: number, model: string, count: number, firstOpMs?: number, error?: string, usage: Usage, costUsd: number, recovered?: boolean, provider?: string }
+
+const ROLE = 'You are the builder inside Conjure, a 3D world the player changes by talking. Turn the one sentence you get into world ops, following the language, rules and examples in the digest exactly. Output only the JSON object { "ops": [...] }: no prose, no code fences.'
 
 const KIT_NOTES: Record<string, string> = {
   house: 'small cottage; props floors (default 1), color = walls, trim = roof',
@@ -100,7 +110,7 @@ Learned kinds (made earlier with define) are listed in the context; reuse them b
 7. "undo"/"undo that"/"take that back"/"never mind" → undo. "get rid of that"/"delete that" → remove { ref: "gaze" }. "clear everything" → remove { ref: "all" }.
 8. Time and weather words go to atmosphere: night, dark, evening → night; sunset → golden; sunrise/morning → dawn; noon/daytime/bright → day; foggy/misty → fog 0.7; clear the fog → fog 0.
 9. "take me to …", "go to …", "I want to be in …", "build me a … place", "somewhere tranquil", "I want to relax", or a sentence that names a whole PLACE or scene rather than an object ("a neon city street at night", "a beach at sunset", "a cozy cabin") → one teleport (plus a say). Never try to build a whole place with spawns. The brief is what the Director builds from: one vivid sentence with the time of day, the mood, 4–6 key things and the light ("somewhere tranquil" → you choose the place: a still lake at golden hour, a quiet forest clearing…).
-10. End every response with exactly one short say (2–8 words) in a warm builder voice: "There you go.", "A little grove for you.", "Painted red.", "Night falls." No questions back; always act.
+10. End every response with exactly one say (2–8 words) in the voice of an ancient, warm, slightly theatrical genie who grants wishes with relish: "It is done.", "Behold.", "As you wish… night.", "A grove rises.", "Night falls." Never sycophantic, never a question; always act. The say may only claim what your ops actually make: never claim motion, flight, weather, sound, terrain or anything the ops don't do ("make the dragon fly" when you can only move it → "Moved. It cannot fly… yet."). If part of the wish is beyond the language, admit it playfully in the say.
 11. Ops in a response apply in order: define before its spawn; spawn before a modify that targets { ref: "last" }.
 
 ## New things (define)
@@ -116,11 +126,11 @@ Context lines are abbreviated.
 
 Context: gaze: ground, 9 m ahead · world: empty
 "make a bunch of trees"
-{"ops":[{"op":"spawn","kind":"pine","count":9,"arrange":"cluster","at":{"anchor":"gaze"},"radius":6,"vary":0.35},{"op":"say","text":"A little grove for you."}]}
+{"ops":[{"op":"spawn","kind":"pine","count":9,"arrange":"cluster","at":{"anchor":"gaze"},"radius":6,"vary":0.35},{"op":"say","text":"A grove rises."}]}
 
 Context: world: pine ×9 [tree, plant, nature, conifer] · oak ×4 [tree, plant, nature] · house ×1 [building, home]
 "make all the trees red"
-{"ops":[{"op":"modify","target":{"tag":"tree"},"set":{"color":"#c0453a"}},{"op":"say","text":"Autumn came early."}]}
+{"ops":[{"op":"modify","target":{"tag":"tree"},"set":{"color":"#c0453a"}},{"op":"say","text":"Autumn, as you wish."}]}
 
 Context: gaze: ground, 6 m ahead · world: bar ×1 [furniture, counter] (learned)
 "put a grandfather clock next to the bar"
@@ -132,7 +142,7 @@ Context: gaze: object house#4 (house [building, home]), 12 m ahead, one of house
 
 Context: gaze: ground, 8 m ahead-left · world: empty
 "put a little house over there"
-{"ops":[{"op":"spawn","kind":"house","at":{"anchor":"gaze"},"facing":"player"},{"op":"say","text":"There you go."}]}
+{"ops":[{"op":"spawn","kind":"house","at":{"anchor":"gaze"},"facing":"player"},{"op":"say","text":"It is done."}]}
 
 Context: gaze: ground · last batch: house ×1 (g1, "put a little house over there")
 "make it taller and red"
@@ -140,15 +150,15 @@ Context: gaze: ground · last batch: house ×1 (g1, "put a little house over the
 
 Context: world: road ×1 [road, street, path]
 "line some lamps along the road"
-{"ops":[{"op":"spawn","kind":"lamp","count":8,"arrange":"along","at":{"anchor":"target","of":{"kind":"road"}}},{"op":"say","text":"Lit the way."}]}
+{"ops":[{"op":"spawn","kind":"lamp","count":8,"arrange":"along","at":{"anchor":"target","of":{"kind":"road"}}},{"op":"say","text":"Let there be light."}]}
 
 Context: last batch: grandfather_clock ×1 (g3) · learned kinds: grandfather_clock [clock, furniture]
 "make five more of those"
-{"ops":[{"op":"spawn","kind":"grandfather_clock","count":5,"arrange":"line","at":{"anchor":"target","of":{"ref":"last"},"side":"right","gap":0.6},"facing":"player"},{"op":"say","text":"Five more, coming up."}]}
+{"ops":[{"op":"spawn","kind":"grandfather_clock","count":5,"arrange":"line","at":{"anchor":"target","of":{"ref":"last"},"side":"right","gap":0.6},"facing":"player"},{"op":"say","text":"Five more. Behold."}]}
 
 Context: gaze: object pine#4 (pine [tree]), 9 m ahead-left, one of pine ×7 in batch g1 · last batch: lamp ×1 (g2, "a lamp by the trees")
 "two more of those"
-{"ops":[{"op":"spawn","kind":"lamp","count":2,"arrange":"line","at":{"anchor":"target","of":{"ref":"last"},"side":"right","gap":1},"facing":"player"},{"op":"say","text":"Two more lamps."}]}
+{"ops":[{"op":"spawn","kind":"lamp","count":2,"arrange":"line","at":{"anchor":"target","of":{"ref":"last"},"side":"right","gap":1},"facing":"player"},{"op":"say","text":"Two more, as you wish."}]}
 (The crosshair is on a pine, but "more of those" means the thing just made: the lamp.)
 
 Context: gaze: ground, 10 m ahead · world: empty
@@ -157,7 +167,7 @@ Context: gaze: ground, 10 m ahead · world: empty
 
 Context: world: pine ×12 [tree] · rock ×6 [rock, stone, nature]
 "get rid of the rocks"
-{"ops":[{"op":"remove","target":{"kind":"rock"}},{"op":"say","text":"Rocks cleared."}]}
+{"ops":[{"op":"remove","target":{"kind":"rock"}},{"op":"say","text":"The stones are gone."}]}
 
 Context: world: house ×3 [building, home]
 "paint the houses blue"
@@ -165,7 +175,7 @@ Context: world: house ×3 [building, home]
 
 Context: gaze: ground, 7 m ahead · world: empty
 "plant a forest"
-{"ops":[{"op":"spawn","kind":"pine","count":32,"arrange":"scatter","at":{"anchor":"gaze"},"radius":28,"vary":0.4},{"op":"spawn","kind":"oak","count":16,"arrange":"scatter","at":{"anchor":"gaze"},"radius":28,"vary":0.4},{"op":"say","text":"A whole forest."}]}
+{"ops":[{"op":"spawn","kind":"pine","count":32,"arrange":"scatter","at":{"anchor":"gaze"},"radius":28,"vary":0.4},{"op":"spawn","kind":"oak","count":16,"arrange":"scatter","at":{"anchor":"gaze"},"radius":28,"vary":0.4},{"op":"say","text":"Behold: a forest."}]}
 
 Context: world: pine ×9
 "put a ring of rocks around me"
@@ -177,7 +187,7 @@ Context: gaze: object pine#3 (pine [tree]), 7 m ahead
 
 Context: last batch: pine ×9 (g1, "make a bunch of trees")
 "undo that"
-{"ops":[{"op":"undo"},{"op":"say","text":"Taken back."}]}
+{"ops":[{"op":"undo"},{"op":"say","text":"Unmade."}]}
 
 Context: atmosphere: dusk
 "make it night"
@@ -185,11 +195,11 @@ Context: atmosphere: dusk
 
 Context: place: void
 "take me to a pool hall"
-{"ops":[{"op":"teleport","world":"pool hall","brief":"A dim, warm pool hall: wooden floor, green-felt tables under hanging shaded lamps, cue racks, a jukebox and a neon sign."},{"op":"say","text":"Racking them up."}]}
+{"ops":[{"op":"teleport","world":"pool hall","brief":"A dim, warm pool hall: wooden floor, green-felt tables under hanging shaded lamps, cue racks, a jukebox and a neon sign."},{"op":"say","text":"Come. The tables await."}]}
 
 Context: place: void
 "take me somewhere tranquil so I can relax"
-{"ops":[{"op":"teleport","world":"tranquil lake","brief":"A wooden dock on a still lake at golden hour, low fog, pines along the shore, fireflies."},{"op":"say","text":"Somewhere quiet."}]}
+{"ops":[{"op":"teleport","world":"tranquil lake","brief":"A wooden dock on a still lake at golden hour, low fog, pines along the shore, fireflies."},{"op":"say","text":"Come. Somewhere still."}]}
 
 Context: place: pool hall · world: pool_table ×4 [table] · hanging_lamp ×5 [light, lamp] · wall ×4 · floor ×1
 "a beach at sunset"
@@ -201,7 +211,7 @@ Context: gaze: object house#2 (house; floors 1) · world: house ×1
 
 Context: gaze: object bench#5 (bench), 6 m ahead
 "move that to my left"
-{"ops":[{"op":"move","target":{"ref":"gaze"},"at":{"anchor":"player","dir":"left","dist":6}},{"op":"say","text":"Scooted over."}]}
+{"ops":[{"op":"move","target":{"ref":"gaze"},"at":{"anchor":"player","dir":"left","dist":6}},{"op":"say","text":"Moved, as you wish."}]}
 `
 
 /** The per-call part: the context block plus the sentence. */
@@ -209,22 +219,48 @@ export function intentPrompt(text: string, scene: Partial<Scene> | undefined, ct
   return `## Context (at speech start)\n${buildContext(sceneToState(scene), ctx)}\n\n## Sentence\n"${text.trim().slice(0, 500)}"`
 }
 
-/** One sentence → strict ops. Never throws; a failed call comes back with `error` and no ops. */
-export async function interpret(req: IntentRequest): Promise<IntentResult & { prompt: string }> {
+/**
+ * One sentence → a stream of strict ops, each yielded the moment its object closes in the model's text
+ * (so the client applies the first one before the answer ends). Bad ops come back as `drop` events.
+ * Never throws; a failed call ends with `done.error`.
+ */
+export async function* streamIntent(req: IntentRequest): AsyncGenerator<IntentEvent> {
   const { alias, id } = resolveModel(req.model)
-  const prompt = intentPrompt(req.text, req.scene, req.ctx)
-  const res = await callStructured({
+  let firstOpMs: number | undefined
+  let index = 0
+  for await (const ev of streamOps({
     model: id,
     role: ROLE,
     digest: DIGEST,
-    prompt,
-    schema: OpsEnvelope,
+    prompt: intentPrompt(req.text, req.scene, req.ctx),
     // The latency budget is ~1 s for a plain edit: no thinking on Haiku; Sonnet gets the lightest setting.
     reasoning: alias === 'haiku' ? 'none' : 'minimal',
     maxOutputTokens: 2600, // a 20-part define plus its spawn is ~1,500 tokens
     timeoutMs: 25_000,
     signal: req.signal
-  })
-  const parsed = res.output ? parseOps(res.output) : { ops: [], dropped: [] }
-  return { ...parsed, ms: res.latencyMs, model: alias, error: res.error, usage: res.usage, costUsd: res.costUsd, salvaged: res.salvaged, prompt }
+  })) {
+    if (ev.t === 'op') {
+      const parsed = parseOps([ev.op])
+      for (const op of parsed.ops) {
+        firstOpMs ??= ev.ms
+        yield { t: 'op', op, ms: ev.ms, i: index++ }
+      }
+      for (const d of parsed.dropped) yield { t: 'drop', dropped: { ...d, index: ev.i } }
+    } else {
+      yield { t: 'done', ms: ev.ms, model: alias, count: index, firstOpMs, error: ev.error, usage: ev.usage, costUsd: ev.costUsd, recovered: ev.recovered, provider: ev.provider }
+    }
+  }
+}
+
+/** One sentence → strict ops, collected (the bench and any non-streaming caller). Never throws. */
+export async function interpret(req: IntentRequest): Promise<IntentResult & { prompt: string }> {
+  const ops: Op[] = []
+  const dropped: DroppedOp[] = []
+  const prompt = intentPrompt(req.text, req.scene, req.ctx)
+  for await (const ev of streamIntent(req)) {
+    if (ev.t === 'op') ops.push(ev.op)
+    else if (ev.t === 'drop') dropped.push(ev.dropped)
+    else return { ops, dropped, ms: ev.ms, model: ev.model, error: ev.error, usage: ev.usage, costUsd: ev.costUsd, recovered: ev.recovered, firstOpMs: ev.firstOpMs, provider: ev.provider, prompt }
+  }
+  return { ops, dropped, ms: 0, model: resolveModel(req.model).alias, error: 'stream ended without done', prompt }
 }

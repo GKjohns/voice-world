@@ -1,10 +1,11 @@
 /**
- * Realtime voice (Sprint 3, V1): gpt-realtime-mini through the AI Gateway is the ears and the mouth, with
- * exactly one tool, `build({ request })`. Ported from camera_shy's `useCameraShyRealtime`, minus the
+ * Realtime voice (Sprint 3, V1; Loop 1): gpt-realtime-mini through the AI Gateway is the ears and the mouth
+ * (a genie persona, shared/voice.ts), with two tools: `build({ request })` and `teleport({ world, brief })`. Ported from camera_shy's `useCameraShyRealtime`, minus the
  * recording seam, the Director and the watchdog.
  *
  *   speech-started  → `useIntent().capture()` (freeze the gaze, show the ghost) and stash it
- *   build tool call → `useIntent().build(request, stashedCtx, 'voice')` → `{ result: summary, hint: say }`
+ *   build tool call → `useIntent().build(request, stashedCtx, 'voice')` → `{ outcome, result, notes?, dropped? }`
+ *   teleport call   → a teleport batch through `useWorld().run` → the Director starts at once
  *   tool output     → the SDK sends it and asks for the spoken confirmation itself
  *
  * Barge-in is native (server VAD + the SDK truncating playback on speech-started). Tools come back from
@@ -19,7 +20,7 @@ import { gateway } from '@ai-sdk/gateway'
 import { Experimental_AbstractRealtimeSession } from 'ai'
 import type { Experimental_RealtimeServerEvent as RealtimeServerEvent, Experimental_RealtimeState as RealtimeState } from 'ai'
 import { shallowRef } from 'vue'
-import { BUILD_TOOL, VOICE_MODEL, voiceSessionConfig } from '#shared/voice'
+import { ACK_INSTRUCTIONS, BUILD_TOOL, TELEPORT_TOOL, VOICE_MODEL, voiceSessionConfig } from '#shared/voice'
 import type { OpContext } from '#shared/world/types'
 
 export type VoiceStatus = 'off' | 'connecting' | 'live' | 'error'
@@ -50,7 +51,9 @@ export interface VoiceTiming {
   request: string
   /** VAD speech-stopped → the build tool call arrived (realtime model time; VAD's own silence window is before this). */
   vadToToolMs?: number
-  /** Tool call → ops applied (the /api/intent round trip). */
+  /** Tool call → the first op applied in the world (streamed intent ops, or the Director's first op). */
+  toolToFirstOpMs?: number
+  /** Tool call → the whole sentence applied (the /api/intent round trip). */
   toolToBuiltMs?: number
 }
 
@@ -66,6 +69,8 @@ const said = shallowRef('')
 const lastTiming = shallowRef<VoiceTiming | null>(null)
 const toolCalls = shallowRef(0)
 const lastError = shallowRef('')
+/** The live mic stream, read-only for the HUD orb's level meter (null when off). */
+const micStream = shallowRef<MediaStream | null>(null)
 
 let session: VoiceSession | null = null
 let stream: MediaStream | null = null
@@ -75,6 +80,14 @@ let connectTimer: ReturnType<typeof setTimeout> | undefined
 let idleTimer: ReturnType<typeof setTimeout> | undefined
 let failHandler: ((reason: string) => void) | null = null
 const saidByItem = new Map<string, string>()
+/**
+ * Speaking first (Loop 1): when a response that called a tool closes, ask for a one-to-three-word
+ * acknowledgement (ACK_INSTRUCTIONS) while the wish is still being built, then hold the tool result until
+ * that line is done so the SDK's confirmation request never collides with it.
+ */
+let ackWanted = false
+let acking = false
+let responseHadAudio = false
 
 const presence = computed<VoicePresence>(() => {
   if (isPlaying.value) return 'speaking'
@@ -117,11 +130,24 @@ function handleEvent(event: RealtimeServerEvent) {
       break
     case 'response-created':
       responsePending.value = true
+      responseHadAudio = false
       break
     case 'response-done':
       responsePending.value = false
+      if (acking) {
+        acking = false
+      } else if (ackWanted) {
+        ackWanted = false
+        // Skip it if the model already spoke in the tool-call response.
+        if (!responseHadAudio && session) {
+          acking = true
+          // The SDK types only `modalities`, but the gateway forwards `instructions` (bench/realtime_check.ts).
+          session.requestResponse({ instructions: ACK_INSTRUCTIONS } as unknown as { modalities?: string[] })
+        }
+      }
       break
     case 'audio-transcript-delta': {
+      responseHadAudio = true
       const text = (saidByItem.get(event.itemId) ?? '') + event.delta
       saidByItem.set(event.itemId, text)
       said.value = text
@@ -141,21 +167,79 @@ function handleEvent(event: RealtimeServerEvent) {
 async function onToolCall({ toolCall }: { toolCall: { toolCallId: string, toolName: string, args: unknown } }) {
   const calledAt = performance.now()
   toolCalls.value++
-  if (toolCall.toolName !== BUILD_TOOL.name) return { error: `unknown tool ${toolCall.toolName}` }
-  const args = (typeof toolCall.args === 'string' ? safeJson(toolCall.args) : toolCall.args) as { request?: unknown } | null
-  const request = typeof args?.request === 'string' ? args.request : ''
-  if (!request.trim()) return { result: 'nothing changed (empty request)' }
+  const args = (typeof toolCall.args === 'string' ? safeJson(toolCall.args) : toolCall.args) as Record<string, unknown> | null
   const intent = useIntent()
   // Several calls in one response ("trees, and a house") share the same speech-start snapshot.
   const ctx = stashedCtx ?? intent.capture()
-  const timing: VoiceTiming = { request, vadToToolMs: speechStoppedAt ? Math.round(calledAt - speechStoppedAt) : undefined }
+  const vadToToolMs = speechStoppedAt ? Math.round(calledAt - speechStoppedAt) : undefined
+  // The acknowledgement must not grant anything itself (it sometimes re-calls the tool with an embellished wish).
+  if (acking) return { outcome: 'IGNORED', result: 'duplicate call: the wish is already being granted' }
+  ackWanted = true
+  const result = await (toolCall.toolName === TELEPORT_TOOL.name ? teleport(args, ctx, calledAt, vadToToolMs) : grant(toolCall.toolName, args, ctx, calledAt, vadToToolMs))
+  await ackDone()
+  return result
+}
+
+/** Wait (up to 2 s) for the acknowledgement line to finish generating (or for the call's response to close). */
+async function ackDone() {
+  const until = performance.now() + 2000
+  while ((acking || (ackWanted && responsePending.value)) && performance.now() < until) await new Promise(r => setTimeout(r, 40))
+  ackWanted = false
+}
+
+async function grant(toolName: string, args: Record<string, unknown> | null, ctx: OpContext, calledAt: number, vadToToolMs?: number) {
+  const intent = useIntent()
+  if (toolName !== BUILD_TOOL.name) return { error: `unknown tool ${toolName}` }
+  const request = typeof args?.request === 'string' ? args.request : ''
+  if (!request.trim()) return { outcome: 'NOTHING CHANGED', result: 'empty request' }
+  const timing: VoiceTiming = { request, vadToToolMs }
   toolBusy.value++
   try {
     const out = await intent.build(request, ctx, 'voice')
+    timing.toolToFirstOpMs = out.firstAppliedMs
     timing.toolToBuiltMs = Math.round(performance.now() - calledAt)
     lastTiming.value = timing
-    console.info(`[voice] build “${request}” vad→tool ${timing.vadToToolMs ?? '?'} ms, tool→built ${timing.toolToBuiltMs} ms: ${out.summary}`)
-    return out.say ? { result: out.summary, hint: `the builder suggests saying: ${out.say}` } : { result: out.summary }
+    console.info(`[voice] build “${request}” vad→tool ${timing.vadToToolMs ?? '?'} ms, tool→first op ${timing.toolToFirstOpMs ?? '-'} ms, tool→built ${timing.toolToBuiltMs} ms: ${out.summary}`)
+    // The real outcome, so the genie never claims what didn't happen.
+    return {
+      outcome: out.ok ? 'done' : 'NOTHING CHANGED',
+      result: out.summary,
+      ...(out.notes.length ? { notes: out.notes.slice(0, 3) } : {}),
+      ...(out.dropped.length ? { dropped: out.dropped.slice(0, 2).map(d => d.reason) } : {}),
+      ...(out.say && out.ok ? { builderLine: `${out.say} (use only if true to the result)` } : {})
+    }
+  } finally {
+    toolBusy.value--
+  }
+}
+
+/**
+ * `teleport({ world, brief })`: start the Director straight away (no intent hop). The teleport batch goes
+ * through `useWorld().run` like any other, so undo, save and replay behave exactly as for a typed teleport.
+ * Waits (briefly) for the first Director op so the spoken welcome matches what the user sees.
+ */
+async function teleport(args: Record<string, unknown> | null, ctx: OpContext, calledAt: number, vadToToolMs?: number) {
+  const place = typeof args?.world === 'string' ? args.world.trim() : ''
+  const brief = typeof args?.brief === 'string' ? args.brief.trim() : ''
+  if (!place) return { outcome: 'NOTHING CHANGED', result: 'no place named' }
+  const timing: VoiceTiming = { request: `teleport → ${place}: ${brief}`, vadToToolMs }
+  const res = useWorld().run([{ op: 'teleport', world: place, ...(brief ? { brief } : {}) }], `take me to ${place}`, ctx, { source: 'voice' })
+  if (!res.effects.teleport) return { outcome: 'NOTHING CHANGED', result: 'the teleport was rejected', notes: [...res.effects.notes, ...res.dropped.map(d => d.reason)].slice(0, 3) }
+  toolBusy.value++
+  try {
+    const director = useDirector()
+    const deadline = calledAt + 3000
+    while (performance.now() < deadline) {
+      const run = director.current.value
+      if (run && run.world === place && (run.firstOpAt || run.status !== 'building')) break
+      await new Promise(r => setTimeout(r, 50))
+    }
+    const run = director.current.value
+    timing.toolToFirstOpMs = run?.firstOpAt ? Math.round(run.firstOpAt - calledAt) : undefined
+    lastTiming.value = timing
+    console.info(`[voice] teleport “${place}” vad→tool ${vadToToolMs ?? '?'} ms, tool→first Director op ${timing.toolToFirstOpMs ?? '-'} ms · brief: ${brief}`)
+    if (run?.status === 'error') return { outcome: 'NOTHING CHANGED', result: `could not build ${place}: ${run.error ?? 'error'}` }
+    return { outcome: 'started', result: `${place} is assembling around the user now; it takes about ten seconds to finish` }
   } finally {
     toolBusy.value--
   }
@@ -193,6 +277,7 @@ async function start(onFail?: (reason: string) => void) {
   status.value = 'connecting'
   try {
     stream = await navigator.mediaDevices.getUserMedia({ audio: MIC })
+    micStream.value = stream
   } catch (err) {
     fail(`mic blocked (${(err as Error).name || 'error'})`)
     return
@@ -242,7 +327,10 @@ function teardown() {
   }
   stream?.getTracks().forEach(t => t.stop())
   stream = null
+  micStream.value = null
   stashedCtx = null
+  ackWanted = false
+  acking = false
   userSpeaking.value = false
   responsePending.value = false
   isPlaying.value = false
@@ -273,7 +361,7 @@ function exposeHandle() {
 export function useRealtimeVoice() {
   if (import.meta.client) exposeHandle()
   return {
-    status, presence, userSpeaking, isPlaying, heard, said, lastTiming, toolCalls, lastError,
+    status, presence, userSpeaking, isPlaying, heard, said, lastTiming, toolCalls, lastError, micStream,
     start, stop
   }
 }

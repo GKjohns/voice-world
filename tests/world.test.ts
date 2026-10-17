@@ -296,3 +296,36 @@ test('export → import replays to the same world', () => {
   assert.ok(loaded.kinds.grandfather_clock?.learned)
   assert.throws(() => importWorld({ nope: true }))
 })
+
+// ---------- size-aware placement (loop 1: always frame the wish) ----------
+
+test('fitDistance: short things need no distance, tall things need enough to see foot to top', async () => {
+  const { fitDistance, VIEW_VFOV } = await import('../shared/world/layout.ts')
+  assert.equal(fitDistance(1), 0)
+  const d = fitDistance(72)
+  const span = Math.atan((72 - 1.6) / d) + Math.atan(1.6 / d)
+  assert.ok(Math.abs(span - VIEW_VFOV * 0.86) < 1e-3)
+  assert.ok(fitDistance(72) > fitDistance(24) && fitDistance(24) > fitDistance(5))
+})
+
+test('a giant tower "right there" lands far enough away that its top is in view', async () => {
+  const { fitDistance } = await import('../shared/world/layout.ts')
+  const c = ctx({ gaze: { point: [0, 0, -3] } })
+  const s = run(createWorld(), [{ op: 'spawn', kind: 'tower', set: { scale: 3 } }], c).state
+  const t = s.entities[0]!
+  const d = distXZ(t.pos, c.player.pos)
+  const near = d - entityRadius(s, t)
+  assert.ok(near >= fitDistance(72) - 0.01, `near edge ${near.toFixed(1)} m is too close for a 72 m tower`)
+  assert.ok(t.pos[2] < 0, 'still in the direction you looked')
+})
+
+test('scale makes footprints bigger: a cluster of giant pines does not overlap', () => {
+  const s = run(createWorld(), [{ op: 'spawn', kind: 'pine', count: 6, set: { scale: 4 } }]).state
+  assertNoOverlaps(s)
+  for (const e of s.entities) assert.ok(distXZ(e.pos, [0, 1.6, 0]) > entityRadius(s, e), 'no giant pine swallows the viewer')
+})
+
+test('a normal-size spawn at a far gaze point is not pushed', () => {
+  const s = run(createWorld(), [{ op: 'spawn', kind: 'house' }], ctx({ gaze: { point: [0, 0, -30] } })).state
+  assert.ok(Math.abs(s.entities[0]!.pos[2] + 30) < 0.5)
+})

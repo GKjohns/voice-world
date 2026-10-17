@@ -7,6 +7,7 @@
 import { shallowRef } from 'vue'
 import { trimScene } from '#shared/world/context'
 import type { DroppedOp, Op } from '#shared/world/ops'
+import type { BatchResult } from '#shared/world/state'
 import type { OpContext } from '#shared/world/types'
 
 export type IntentPhase = 'idle' | 'listening' | 'thinking' | 'building'
@@ -18,12 +19,21 @@ export interface IntentOutcome {
   say?: string
   ops: Op[]
   dropped: DroppedOp[]
+  /** Why ops did nothing ("modify: nothing matches …"), for an honest spoken answer. */
+  notes: string[]
   model?: string
+  /** Server-side model time to the first op and to the end of the answer. */
+  firstOpMs?: number
+  /** Client time from the request to the first op applied in the world. */
+  firstAppliedMs?: number
   ms: number
   error?: string
 }
 
-interface IntentResponse { ops: Op[], dropped: DroppedOp[], ms: number, model: string, error?: string }
+type IntentEvent
+  = | { t: 'op', op: Op, ms: number, i: number }
+    | { t: 'drop', dropped: DroppedOp }
+    | { t: 'done', ms: number, model: string, count: number, firstOpMs?: number, error?: string }
 
 const phase = shallowRef<IntentPhase>('idle')
 const inflight = shallowRef(0)
@@ -84,64 +94,168 @@ function summarize(spawned: string[], modified: number, removed: number, other: 
   return bits.join(' · ') || 'nothing changed'
 }
 
+/** Read an NDJSON response line by line. Throws on a network failure mid-stream. */
+async function readNdjson<T>(res: Response, onLine: (ev: T) => void) {
+  const reader = res.body!.getReader()
+  const dec = new TextDecoder()
+  let buf = ''
+  const flush = (line: string) => {
+    if (!line.trim()) return
+    try {
+      onLine(JSON.parse(line) as T)
+    } catch (err) {
+      console.warn('[intent] bad line', line.slice(0, 120), err)
+    }
+  }
+  while (true) {
+    const { value, done } = await reader.read()
+    if (done) break
+    buf += dec.decode(value, { stream: true })
+    let nl = buf.indexOf('\n')
+    while (nl >= 0) {
+      flush(buf.slice(0, nl))
+      buf = buf.slice(nl + 1)
+      nl = buf.indexOf('\n')
+    }
+  }
+  flush(buf)
+}
+
 /**
- * One request → ops → the world. `ctx` must be the snapshot from when the request STARTED (typing, mic
- * speech-start, or the realtime session's speech-started). Never throws; resolves with a one-line outcome.
+ * One request → ops → the world, streamed: each op is applied the moment the server sees its JSON object
+ * close, so the first one lands before the model has finished. All of a sentence's ops share ONE batch
+ * (the first world-changing op opens it with `run`, the rest join it with `extend`, the way the Director
+ * fills a teleport), so one "undo" still takes back the whole sentence. `ctx` must be the snapshot from
+ * when the request STARTED (typing, mic speech-start, or the realtime session's speech-started).
+ * Never throws; resolves with an honest one-line outcome once the answer has ended.
  */
 async function build(request: string, ctx: OpContext, source: 'text' | 'voice' = 'text'): Promise<IntentOutcome> {
   const text = request.trim()
-  if (!text) return { ok: false, summary: 'empty request', ops: [], dropped: [], ms: 0, error: 'empty request' }
+  if (!text) return { ok: false, summary: 'empty request', ops: [], dropped: [], notes: [], ms: 0, error: 'empty request' }
   const world = useWorld()
   error.value = ''
   inflight.value++
   pendingText.value = [...pendingText.value, text]
   setPhase('thinking')
+  let settled = false
   const done = () => {
+    if (settled) return
+    settled = true
+    inflight.value--
     const i = pendingText.value.indexOf(text)
     pendingText.value = pendingText.value.filter((_, j) => j !== i)
   }
   const started = performance.now()
-  let res: IntentResponse
+
+  // What this sentence did, summed over every run/extend.
+  const spawned = new Set<string>()
+  const modified = new Set<string>()
+  const removed = new Set<string>()
+  const other: string[] = []
+  const notes: string[] = []
+  const says: string[] = []
+  const applied: Op[] = []
+  const dropped: DroppedOp[] = []
+  /** The sentence's batch once a world-changing op opened it; the history entries this sentence wrote. */
+  let target: { id: string, at: number } | null = null
+  const entries: number[] = []
+  /** `say` ops that arrive before anything opened a batch (says come last, so this is rare). */
+  let held: Op[] = []
+  let firstAppliedMs: number | undefined
+
+  const absorb = (out: BatchResult) => {
+    const fx = out.effects
+    fx.spawned.forEach(id => spawned.add(id))
+    fx.modified.forEach(id => modified.add(id))
+    fx.removed.forEach(id => removed.add(id))
+    if (fx.atmosphere && !other.some(o => o.startsWith('light'))) other.push(`light → ${out.state.atmosphere.time}`)
+    if (fx.teleport) other.push(`teleport → ${fx.teleport.world}`)
+    if (fx.redefined.length) other.push(`learned ${fx.redefined.join(', ')}`)
+    if (out.ops.some(o => o.op === 'undo')) other.push('undid the last change')
+    notes.push(...fx.notes)
+    says.push(...fx.say)
+    applied.push(...out.ops)
+  }
+  const open = (ops: Op[], label: string) => {
+    const out = world.run(ops, label, ctx, { source })
+    const entry = world.history.value[world.history.value.length - 1]
+    if (entry) entries.push(entry.n)
+    if (out.batch) target = { id: out.batch.id, at: out.batch.at }
+    absorb(out)
+  }
+  const apply = (op: Op) => {
+    if (op.op === 'say' && !target && !entries.length) {
+      held.push(op)
+      return
+    }
+    // Undo and teleport never join a batch (extendLastBatch drops them): they always run on their own.
+    const out = target && op.op !== 'undo' && op.op !== 'teleport' ? world.extend(target.id, target.at, [op]) : null
+    if (out) {
+      absorb(out)
+    } else if (op.op === 'say') {
+      // A say with no batch to join (the sentence changed nothing, or the batch is no longer last): caption it.
+      says.push(op.text)
+      applied.push(op)
+      world.caption.value = { text: says.join(' '), at: Date.now() }
+    } else {
+      open([...held, op], target || entries.length ? `${text} (cont.)` : text)
+      held = []
+    }
+    if (spawned.size + modified.size + removed.size || other.length) {
+      firstAppliedMs ??= Math.round(performance.now() - started)
+      setPhase('building')
+    }
+  }
+
+  let end: Extract<IntentEvent, { t: 'done' }> | undefined
+  let netError: string | undefined
   try {
-    res = await $fetch<IntentResponse>('/api/intent', {
+    const res = await fetch(`/api/intent${model.value === 'haiku' ? '' : `?model=${model.value}`}`, {
       method: 'POST',
-      query: model.value === 'haiku' ? undefined : { model: model.value },
-      body: { text, state: trimScene(world.state.value), ctx }
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ text, state: trimScene(world.state.value), ctx })
+    })
+    if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}${res.statusText ? ` ${res.statusText}` : ''}`)
+    await readNdjson<IntentEvent>(res, (ev) => {
+      if (ev.t === 'op') apply(ev.op)
+      else if (ev.t === 'drop') dropped.push(ev.dropped)
+      else end = ev
     })
   } catch (err) {
-    inflight.value--
-    done()
-    const msg = (err as { statusMessage?: string, message?: string }).statusMessage ?? (err as Error).message
-    error.value = `Couldn't reach the builder: ${msg}`
-    setPhase(recognition ? 'listening' : 'idle')
-    return { ok: false, summary: error.value, ops: [], dropped: [], ms: Math.round(performance.now() - started), error: msg }
+    netError = (err as Error).message
   }
-  inflight.value--
   done()
-  if (res.error && !res.ops.length) {
-    error.value = `The builder stumbled: ${res.error}`
-    world.run({ ops: [] }, text, ctx, { source, model: res.model, ms: res.ms, dropped: res.dropped, error: res.error })
+  if (held.length) open(held, text)
+  const ms = end?.ms ?? Math.round(performance.now() - started)
+  const failure = netError ?? end?.error ?? (end ? undefined : 'the stream ended early')
+  if (!entries.length) {
+    // Nothing applied: still log the sentence so the HUD shows what went wrong.
+    world.run({ ops: [] }, text, ctx, { source, model: end?.model, ms, dropped, error: failure })
+    const msg = netError ? `Couldn't reach the builder: ${netError}` : failure ? `The builder stumbled: ${failure}` : 'nothing changed'
+    if (failure) error.value = msg
     setPhase(recognition ? 'listening' : 'idle')
-    return { ok: false, summary: error.value, ops: [], dropped: res.dropped, model: res.model, ms: res.ms, error: res.error }
+    return { ok: false, summary: msg, ops: [], dropped, notes, model: end?.model, ms, error: failure }
   }
-  const out = world.run({ ops: res.ops }, text, ctx, { source, model: res.model, ms: res.ms, dropped: res.dropped })
-  const fx = out.effects
-  const other: string[] = []
-  if (fx.atmosphere) other.push(`light → ${out.state.atmosphere.time}`)
-  if (fx.teleport) other.push(`teleport → ${fx.teleport.world}`)
-  if (fx.redefined.length) other.push(`learned ${fx.redefined.join(', ')}`)
-  if (out.ops.some(o => o.op === 'undo')) other.push('undid the last change')
-  const say = fx.say.join(' ') || undefined
-  const changed = fx.spawned.length + fx.modified.length + fx.removed.length > 0 || other.length > 0
-  setPhase(changed ? 'building' : recognition ? 'listening' : 'idle')
+  // Stamp the model, latency and server-side drops onto this sentence's log entries.
+  world.history.value = world.history.value.map(h => !entries.includes(h.n)
+    ? h
+    : { ...h, model: end?.model, ms, error: failure, ...(h.n === entries[0] ? { dropped: [...dropped, ...h.dropped] } : {}) })
+
+  const changed = spawned.size + modified.size + removed.size > 0 || other.length > 0
+  if (!changed && phase.value !== 'building') setPhase(recognition ? 'listening' : 'idle')
+  const why = [...notes.filter(n => !n.startsWith('undid')), ...dropped.map(d => `dropped an op: ${d.reason}`)]
   return {
     ok: changed,
-    summary: summarize(fx.spawned, fx.modified.length, fx.removed.length, other) + (fx.notes.length && !changed ? ` (${fx.notes[0]})` : ''),
-    say,
-    ops: out.ops,
-    dropped: [...res.dropped, ...out.dropped],
-    model: res.model,
-    ms: res.ms
+    summary: summarize([...spawned], modified.size, removed.size, other) + (why.length ? ` (${why.slice(0, 2).join('; ')})` : ''),
+    say: says.join(' ') || undefined,
+    ops: applied,
+    dropped,
+    notes,
+    model: end?.model,
+    firstOpMs: end?.firstOpMs,
+    firstAppliedMs,
+    ms,
+    error: failure
   }
 }
 

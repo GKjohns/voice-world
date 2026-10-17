@@ -3,8 +3,18 @@
 
 @theme static {
   --font-sans: 'Geist', sans-serif;
+  /* The genie's voice on screen: captions, the first-run whisper, the wish field. */
+  --font-display: 'Cormorant Garamond', 'Cormorant', Georgia, serif;
 }
 
 :root {
   --ui-radius: 0.6rem;
+}
+
+/* Text that floats over the world: a soft dark bloom keeps it legible on bright skies without a panel. */
+@utility hud-glow {
+  text-shadow:
+    0 0 18px rgb(0 0 0 / 0.55),
+    0 1px 2px rgb(0 0 0 / 0.5),
+    0 0 42px rgb(255 220 170 / 0.12);
 }

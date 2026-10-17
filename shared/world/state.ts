@@ -60,7 +60,7 @@ function step(state: WorldState, op: Op, ctx: OpContext): StepResult {
       const notes: string[] = []
       const desc = kindOf(state, op.kind)
       if (!state.kinds[op.kind]) notes.push(`unknown kind "${op.kind}": holding its spot with a placeholder until it's defined`)
-      const out = layout(state, { desc, count: op.count ?? 1, arrange: op.arrange, at: op.at, radius: op.radius, vary: op.vary, facing: op.facing, xz: op.xz, yaw: op.yaw }, ctx, rand)
+      const out = layout(state, { desc, count: op.count ?? 1, arrange: op.arrange, at: op.at, radius: op.radius, vary: op.vary, facing: op.facing, xz: op.xz, yaw: op.yaw, props: op.set }, ctx, rand)
       notes.push(...out.notes)
       let nextId = state.nextId
       const spawned: Entity[] = out.placed.map((p) => {

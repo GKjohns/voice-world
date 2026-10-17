@@ -1,23 +1,22 @@
 /**
  * The Director (Teleport mode): a place name + a one-sentence brief → a streamed scene recipe in the same
  * op language, laid out in room coordinates. Sonnet writes the ops in build order (atmosphere → ground →
- * shell → big things → lights → small props → life) and `streamText` + `Output.array` hands each op over
- * the moment it closes, so the client builds the room while the model is still writing.
+ * shell → big things → lights → small props → life) as plain JSON text (no structured-output grammar since
+ * Loop 1: ~450 ms sooner to the first op and no 25–60 s cold-grammar compile), and `streamOps` hands each op
+ * over the moment its object closes, so the client builds the room while the model is still writing.
  *
  * Same cached-digest shape as gateway.ts: the digest (language, room frame, catalog, recipes) rides in
  * its own user part with an Anthropic cache breakpoint; `instructions` stays short. Plain module (explicit
  * imports, no Nitro globals) so scripts can run it directly.
  */
-import { Output, streamText } from 'ai'
 import { KIT } from '../../shared/world/kinds.ts'
-import { DirectorOpSchema } from '../../shared/world/ops.ts'
-import type { DirectorOp } from '../../shared/world/ops.ts'
-import { costUsd, resolveModel } from './aiModels.ts'
+import { resolveModel } from './aiModels.ts'
 import type { Usage } from './aiModels.ts'
+import { streamOps } from './gateway.ts'
 
 export const DIRECTOR_MODEL = 'sonnet'
 
-const ROLE = 'You are the Director inside Conjure, a 3D world the player changes by talking. When they ask to go somewhere, you build that place around them as a stream of world ops in room coordinates, following the digest exactly. Output only the JSON array of ops.'
+const ROLE = 'You are the Director inside Conjure, a 3D world the player changes by talking. When they ask to go somewhere, you build that place around them as a stream of world ops in room coordinates, following the digest exactly. Output only the JSON array of ops: no prose, no code fences.'
 
 function catalog(): string {
   return Object.values(KIT)
@@ -125,13 +124,14 @@ export interface DirectorRequest {
   brief?: string
   model?: string
   signal?: AbortSignal
-  /** Hard deadline. 45 s by default; the grammar warm-up needs longer on a cold schema. */
+  /** Hard deadline, 45 s by default. */
   timeoutMs?: number
   maxOutputTokens?: number
 }
 
 export type DirectorEvent
-  = | { t: 'op', op: DirectorOp, ms: number, i: number }
+  /** `op` is the model's loose Director op, unvalidated: the client runs directorToOp + parseOps. */
+  = | { t: 'op', op: unknown, ms: number, i: number }
     | { t: 'done', ms: number, count: number, model: string, usage: Usage, costUsd: number, finishReason?: string }
     | { t: 'error', ms: number, error: string }
 
@@ -142,50 +142,20 @@ export function directorPrompt(req: DirectorRequest): string {
 
 /** Stream a scene recipe. Never throws: failures come back as an `error` event. */
 export async function* directScene(req: DirectorRequest): AsyncGenerator<DirectorEvent> {
-  const started = Date.now()
   const { alias, id } = resolveModel(req.model ?? DIRECTOR_MODEL)
-  const anthropic = id.startsWith('anthropic/')
-  const ctrl = new AbortController()
-  const onOuter = () => ctrl.abort(req.signal?.reason)
-  req.signal?.addEventListener('abort', onOuter, { once: true })
-  // A recipe is ~1.5k output tokens; anything past the deadline is a hung stream (or a cold grammar).
-  const deadline = req.timeoutMs ?? 45_000
-  const timer = setTimeout(() => ctrl.abort(new Error(`director deadline (${Math.round(deadline / 1000)} s)`)), deadline)
-  let count = 0
-  try {
-    const result = streamText({
-      model: id,
-      instructions: ROLE,
-      messages: [{
-        role: 'user',
-        content: [
-          { type: 'text', text: DIRECTOR_DIGEST, ...(anthropic ? { providerOptions: { anthropic: { cacheControl: { type: 'ephemeral' } } } } : {}) },
-          { type: 'text', text: directorPrompt(req) }
-        ]
-      }],
-      output: Output.array({ element: DirectorOpSchema }),
-      maxOutputTokens: req.maxOutputTokens ?? 5000,
-      abortSignal: ctrl.signal,
-      maxRetries: 1,
-      reasoning: 'none',
-      // Pin Anthropic: it streams Output.array as plain JSON text. Other routes use tool mode, which streamed nothing.
-      ...(anthropic ? { providerOptions: { gateway: { only: ['anthropic'] } } } : {})
-    })
-    for await (const op of result.elementStream) {
-      yield { t: 'op', op, ms: Date.now() - started, i: count++ }
-    }
-    const u = await result.usage
-    const usage: Usage = {
-      input: u?.inputTokens ?? 0,
-      output: u?.outputTokens ?? 0,
-      cacheRead: u?.inputTokenDetails?.cacheReadTokens ?? 0,
-      cacheWrite: u?.inputTokenDetails?.cacheWriteTokens ?? 0
-    }
-    yield { t: 'done', ms: Date.now() - started, count, model: alias, usage, costUsd: costUsd(id, usage), finishReason: await result.finishReason }
-  } catch (err) {
-    yield { t: 'error', ms: Date.now() - started, error: ((err as Error)?.message ?? String(err)).slice(0, 300) }
-  } finally {
-    clearTimeout(timer)
-    req.signal?.removeEventListener('abort', onOuter)
+  for await (const ev of streamOps({
+    model: id,
+    role: ROLE,
+    digest: DIRECTOR_DIGEST,
+    prompt: directorPrompt(req),
+    reasoning: 'none',
+    maxOutputTokens: req.maxOutputTokens ?? 5000,
+    // A recipe is ~1.5k output tokens (~9 s); anything past the deadline is a hung stream.
+    timeoutMs: req.timeoutMs ?? 45_000,
+    signal: req.signal
+  })) {
+    if (ev.t === 'op') yield ev
+    else if (ev.error && !ev.count) yield { t: 'error', ms: ev.ms, error: ev.error }
+    else yield { t: 'done', ms: ev.ms, count: ev.count, model: alias, usage: ev.usage, costUsd: ev.costUsd, finishReason: ev.finishReason }
   }
 }

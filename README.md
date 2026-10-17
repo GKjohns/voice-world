@@ -19,7 +19,7 @@ npm run bench:intent   # ~34 utterances × small scenes through haiku and sonnet
 ```
 
 `.env` needs `AI_GATEWAY_API_KEY`. `POST /api/intent?model=haiku|sonnet` takes `{ text, state, ctx }`
-(the trimmed scene from `trimScene` and the gaze snapshot) and returns `{ ops, dropped, ms, model }`.
+(the trimmed scene from `trimScene` and the gaze snapshot) and streams NDJSON: one `{t:'op'}` line per op the moment its JSON object closes in the model's text, then `{t:'done'}`.
 
 Drag to look, WASD to walk (shift runs), double-click to lock the mouse, Enter to type. Where you
 were looking when you started typing (or started speaking) is what "there" and "that" mean. The

@@ -5,6 +5,7 @@
  */
 import * as THREE from 'three'
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js'
+import { kindHeight } from '#shared/world/kinds'
 import type { Fall, KindDescriptor } from '#shared/world/kinds'
 import type { Vec3 } from '#shared/world/ops'
 import { kindOf } from '#shared/world/select'
@@ -15,12 +16,21 @@ import { BUILD_READS_COLOR, KIT_BUILDERS, blob } from './kit'
 import { applyMaterialProps, gazeNdc, lookTargets } from './look'
 import { buildFromParts } from './parts'
 import { Ambience } from './sound'
+import { Gathering } from './fx/anticipate'
+import { beam, dissolve, shimmer, shockwave, sparkle } from './fx/arrival'
+import type { Fx } from './fx/common'
+import { solveFrame } from './fx/frame'
+import type { FrameBox, View } from './fx/frame'
+import { Vortex } from './fx/vortex'
 
 const EYE = 1.6
 const WALK = 6
 const RUN = 14
 const MAX_LIGHTS = 10
 const REVEAL_TIGHT = 4.5 // fog radius (m) around the player while a place is being summoned
+const BIG = 8 // metres tall: arrivals this big get the beam from the sky, the thump and the shake
+const MID = 3
+const PARTICLE_BUDGET = 1600 // dissolve sparks per sync (a teleport dissolves the whole old world)
 
 interface Item {
   entity: Entity
@@ -29,6 +39,15 @@ interface Item {
   body: THREE.Group // what the builder made
   buildKey: string
   leaving: boolean
+}
+
+/** Where an arrival sits in its batch, so the chimes climb and teleport builds stay light. */
+interface Cue {
+  index: number
+  count: number
+  reveal: boolean
+  /** false for page loads and restores: things appear without fanfare */
+  loud: boolean
 }
 
 interface Tween {
@@ -97,7 +116,8 @@ export class WorldRenderer {
   private prev = performance.now()
   private ro: ResizeObserver
   // Teleport: the world fogs in to a few metres around you, then the fog recedes as the place builds outward.
-  private reveal: { cur: number, target: number, readyAt: number, ending: boolean, center: THREE.Vector3, bumpedAt: number } | null = null
+  private reveal: { cur: number, target: number, readyAt: number, ending: boolean, center: THREE.Vector3, bumpedAt: number, t0: number, minCur: number } | null = null
+  private atmosVersion = 0
   private veil = 0
   private patch: THREE.Mesh
   private stars: THREE.Points
@@ -105,6 +125,17 @@ export class WorldRenderer {
   private sunGlow: THREE.Sprite
   readonly sound = new Ambience()
   private cleanup: (() => void)[] = []
+  // Spectacle: a smooth camera move that frames a wish, a size-scaled shake, the eye lift (god's-eye
+  // height after a huge scale-up), the teleport vortex and the "world listens" gathering glow.
+  private camMove: { from: View, to: View, start: number, dur: number } | null = null
+  private shake: { amp: number, start: number, dur: number } | null = null
+  private lift = 0
+  private lastInput = 0
+  private dt = 0
+  private vortex = new Vortex()
+  private gathering = new Gathering()
+  private revealChord = false
+  private rings = 0 // heavy-landing budget per sync, so a global scale-up isn't 40 overlapping shockwaves
 
   constructor(host: HTMLElement) {
     this.host = host
@@ -198,6 +229,7 @@ export class WorldRenderer {
     this.highlight = ring(0.94, 1, 0xffffff, 0.45) // unit ring scaled to the hovered entity's footprint
     this.ghost = ring(1.5, 1.8, 0x7dd3a8, 0)
     this.scene.add(this.reticle, this.highlight, this.ghost)
+    this.scene.add(this.vortex.obj, this.gathering.obj)
 
     this.scene.fog = new THREE.Fog(0x2a3550, 20, 140)
     this.applyAtmosphere(ATMOSPHERES.dusk)
@@ -218,19 +250,25 @@ export class WorldRenderer {
     const now = performance.now()
     const fx = effects
     const wanted = new Map(state.entities.map(e => [e.id, e]))
-    // A teleport fogs the old place out first; what was there shrinks away behind the fog.
+    // A teleport fogs the old place out first; what was there dissolves upward into motes behind the fog.
     if (fx?.teleport) this.beginReveal(now)
     const removeAt = fx?.teleport ? now + 520 : now
+    // Anything landing answers the wish, so the "world listens" glow lets go.
+    if (fx && (fx.spawned.length || fx.modified.length || fx.removed.length || fx.teleport)) this.gathering.set(null)
 
-    // Removals first (shrink out), including anything the effects missed.
+    // Removals first (dissolve into sparks), including anything the effects missed.
     const removed = new Set(fx?.removed ?? [])
     for (const id of this.items.keys()) if (!wanted.has(id)) removed.add(id)
+    let budget = PARTICLE_BUDGET
+    let dissolved = 0
     for (const id of removed) {
       const item = this.items.get(id)
       if (!item) continue
       this.items.delete(id)
-      this.removeItem(item, removeAt)
+      budget -= this.removeItem(item, removeAt, !!fx?.teleport, prev ? budget : 0)
+      dissolved++
     }
+    if (dissolved && prev && !fx?.teleport) this.sound.sfxDissolve()
 
     // Learned kinds that changed (or placeholders that just got defined) morph in place.
     for (const kind of fx?.redefined ?? []) {
@@ -248,25 +286,31 @@ export class WorldRenderer {
     }
     // While a place is being built, arrivals radiate outward: nearer things land first, the fog recedes behind them.
     if (this.reveal) spawned.sort((a, b) => distOf(a) - distOf(b))
+    // The first sync (page load) and a restore are not wishes: no fanfare, no camera move.
+    const fanfare = !!prev && Math.abs(state.log.length - prev.log.length) <= 1
     spawned.forEach((id, i) => {
       const e = wanted.get(id)!
       const stale = this.items.get(id)
       if (stale) {
         this.items.delete(id)
-        this.removeItem(stale, now)
+        this.removeItem(stale, now, false, 0)
       }
       if (this.reveal) {
         const d = distOf(id)
         const at = Math.max(now, this.reveal.readyAt) + Math.min(900, d * 22) + Math.min(i * 18, 400)
-        this.spawnItem(e, at)
+        this.spawnItem(e, at, { index: i, count: spawned.length, reveal: true, loud: !!prev })
+        if (!this.revealChord && prev) {
+          this.revealChord = true
+          this.sound.sfxArrive(at - now)
+        }
         // Big flat things (a lake, a floor) only pull the fog back a little; the rest unveils as it lands.
         this.revealTo(d + Math.min(entityReach(this.desc(e), e), 10) + 6)
       } else {
-        this.spawnItem(e, now + i * stepMs)
+        this.spawnItem(e, now + i * stepMs, { index: i, count: spawned.length, reveal: false, loud: fanfare })
       }
     })
 
-    // Modifies: colour wipes ripple across the set; height/scale spring; floors rebuild.
+    // Modifies: colour wipes ripple across the set with a shimmer; height/scale spring; floors rebuild.
     const modified = new Set(fx?.modified ?? [])
     for (const e of state.entities) {
       const item = this.items.get(e.id)
@@ -275,11 +319,130 @@ export class WorldRenderer {
     const mods = [...modified].map(id => this.items.get(id)).filter((x): x is Item => !!x && wanted.has(x.entity.id))
     const origin = this.camera.position
     mods.sort((a, b) => a.holder.position.distanceTo(origin) - b.holder.position.distanceTo(origin))
-    mods.forEach((item, i) => this.modifyItem(item, wanted.get(item.entity.id)!, now + Math.min(i * 40, 900)))
+    // A global scale-up lifts you first, then the world swells beneath you (you never end up inside a leg).
+    const swelling = mods.filter(m => (wanted.get(m.entity.id)!.props.scale ?? 1) > (m.entity.props.scale ?? 1) * 1.5).length >= 6
+    const modAt = now + (swelling && fanfare ? 450 : 0)
+    this.rings = 4
+    const reshaped: Entity[] = []
+    let grew = 0
+    let shrank = 0
+    let changed = 0
+    mods.forEach((item, i) => {
+      const e = wanted.get(item.entity.id)!
+      const r = this.modifyItem(item, e, modAt + Math.min(i * 40, 900), i < 32 && fanfare)
+      if (r.reshaped) reshaped.push(e)
+      if (r.grew) grew++
+      if (r.shrank) shrank++
+      if (r.changed) changed++
+    })
+    if (changed && fanfare) this.sound.sfxWhoosh(shrank <= grew, 0, grew + shrank > 0)
 
     if (!prev || fx?.atmosphere || prev.atmosphere !== state.atmosphere) this.setAtmosphere(state, prev ? 900 : 0)
     this.sound.set(state.atmosphere.ambient)
     this.budgetLights()
+
+    // Always frame the wish: what just arrived or changed shape should end up in shot, foot to top.
+    if (fanfare && !this.reveal && !fx?.teleport) {
+      const news = fanfare ? spawned.map(id => wanted.get(id)!) : []
+      const framed = [...news, ...reshaped].filter(e => this.frameable(e))
+      if (framed.length) this.frameWish(framed, swelling)
+      else this.settleLift(state)
+    }
+  }
+
+  // ---------- framing, shake, lift ----------
+
+  private frameable(e: Entity): boolean {
+    const d = this.desc(e)
+    if (d.tags.includes('particles')) return false
+    return kindHeight(d, e.props) >= 0.6
+  }
+
+  private view(): View {
+    return { yaw: this.yaw, pitch: this.pitch, x: this.camera.position.x, z: this.camera.position.z, lift: this.lift }
+  }
+
+  private userActive(): boolean {
+    const k = this.keys
+    const moving = k.w || k.a || k.s || k.d || k.arrowup || k.arrowdown || k.arrowleft || k.arrowright
+    return !!this.drag || !!moving || performance.now() - this.lastInput < 250
+  }
+
+  /**
+   * Turn, tilt, back away or rise so `entities` are all in shot. Never while you're dragging or walking,
+   * and any input hands control straight back.
+   */
+  frameWish(entities: Entity[], preferLift = false): void {
+    if (this.userActive() || !this.state) return
+    const boxes: FrameBox[] = entities.map((e) => {
+      const d = this.desc(e)
+      return { x: e.pos[0], z: e.pos[2], r: Math.max(0.3, entityReach(d, e)), h: e.pos[1] + kindHeight(d, e.props) }
+    })
+    if (boxes.length === 1 && boxes[0]!.h < 1.2 && boxes[0]!.r < 1) return
+    const cur = this.view()
+    const to = preferLift ? this.godView(boxes, cur) : solveFrame(this.camera, cur, boxes, EYE)
+    if (!to) return
+    const travel = Math.hypot(to.x - cur.x, to.z - cur.z) + Math.abs(to.lift - cur.lift)
+    this.camMove = preferLift
+      ? { from: cur, to, start: performance.now(), dur: 1300 }
+      : { from: cur, to, start: performance.now() + 120, dur: Math.min(1600, 1050 + travel * 9) }
+  }
+
+  /**
+   * "Make everything ten times bigger": rise above the new giants and look down on them, from a little
+   * way off their middle, instead of standing inside a table leg.
+   */
+  private godView(boxes: FrameBox[], cur: View): View | null {
+    const tops = boxes.map(b => b.h).sort((a, b) => b - a)
+    const H = tops[Math.min(tops.length - 1, Math.floor(tops.length * 0.2))]!
+    if (H < 6) return solveFrame(this.camera, cur, boxes, EYE)
+    let cx = 0
+    let cz = 0
+    for (const b of boxes) {
+      cx += b.x / boxes.length
+      cz += b.z / boxes.length
+    }
+    const away = Math.hypot(cur.x - cx, cur.z - cz)
+    const dir: [number, number] = away > 0.5 ? [(cur.x - cx) / away, (cur.z - cz) / away] : [Math.sin(cur.yaw), Math.cos(cur.yaw)]
+    const lift = Math.min(160, H * 1.45)
+    const back = Math.min(220, H * 1.7 + 8)
+    const x = cx + dir[0] * back
+    const z = cz + dir[1] * back
+    const yaw = Math.atan2(-(cx - x), -(cz - z))
+    const pitch = Math.max(-1.15, -Math.atan2(lift + EYE - H * 0.25, back))
+    return { yaw: cur.yaw + wrapAngle(yaw - cur.yaw), pitch, x, z, lift }
+  }
+
+  /** After a giant scale-up is undone (nothing tall left), drift back down to standing height. */
+  private settleLift(state: WorldState): void {
+    if (this.lift < 0.5 || this.userActive()) return
+    const tallest = state.entities.reduce((m, e) => Math.max(m, kindHeight(this.desc(e), e.props)), 0)
+    if (tallest > 14) return
+    const cur = this.view()
+    this.camMove = { from: cur, to: { ...cur, lift: 0, pitch: Math.max(cur.pitch, -0.15) }, start: performance.now(), dur: 1200 }
+  }
+
+  /** A shake proportional to size and nearness: a castle 10 m away rattles you, a pine doesn't. */
+  private addShake(tall: number, at: THREE.Vector3, when: number): void {
+    const d = Math.hypot(at.x - this.camera.position.x, at.z - this.camera.position.z)
+    const near = Math.min(1, (tall * 2) / (d + 4))
+    const amp = (0.006 + 0.03 * Math.min(1, tall / 60)) * near
+    if (amp < 0.002) return
+    const cur = this.shake
+    if (cur && cur.amp > amp && when < cur.start + cur.dur * 0.5) return
+    this.shake = { amp, start: when, dur: 420 + Math.min(500, tall * 8) }
+  }
+
+  /** "The world listens": a soft glow gathers at `point` while a request is pending; null lets it go. */
+  anticipate(point: Vec3 | null): void {
+    this.gathering.set(point ? new THREE.Vector3(point[0], 0, point[2]) : null)
+  }
+
+  private playFx(fx: Fx, at: number, dur: number): void {
+    this.tween(at, dur, t => fx.update(t, this.camera, this.dt), () => {
+      this.scene.remove(fx.obj)
+      fx.dispose()
+    }, () => this.scene.add(fx.obj))
   }
 
   // ---------- teleport reveal ----------
@@ -287,9 +450,16 @@ export class WorldRenderer {
   /** Fog in to a few metres around the player and show the floor patch under their feet. */
   beginReveal(now = performance.now()): void {
     const far = (this.scene.fog as THREE.Fog).far
-    this.reveal = { cur: this.reveal?.cur ?? far, target: REVEAL_TIGHT, readyAt: now + 650, ending: false, center: this.camera.position.clone(), bumpedAt: now }
+    this.reveal = { cur: this.reveal?.cur ?? far, target: REVEAL_TIGHT, readyAt: now + 650, ending: false, center: this.camera.position.clone(), bumpedAt: now, t0: now, minCur: this.reveal?.cur ?? far }
     this.patch.position.set(this.camera.position.x, 0.02, this.camera.position.z)
     this.patch.visible = true
+    this.revealChord = false
+    this.sound.sfxPortal()
+    // You arrive standing: any god's-eye lift comes down while the vortex spins up.
+    if (this.lift > 0.05) {
+      const cur = this.view()
+      this.camMove = { from: cur, to: { ...cur, lift: 0, pitch: Math.max(-0.2, Math.min(0.1, cur.pitch)) }, start: now, dur: 700 }
+    }
     const pm = this.patch.material as THREE.MeshStandardMaterial
     this.tween(now, 500, (t) => {
       pm.opacity = 0.9 * ease.out(t)
@@ -336,7 +506,7 @@ export class WorldRenderer {
     return { body, key: this.buildKeyOnly(e) }
   }
 
-  private spawnItem(e: Entity, at: number): void {
+  private spawnItem(e: Entity, at: number, cue: Cue = { index: 0, count: 1, reveal: false, loud: false }): void {
     const { body, key } = this.build(e)
     const holder = new THREE.Group()
     const stretch = new THREE.Group()
@@ -352,36 +522,99 @@ export class WorldRenderer {
     this.applyLook(item, e, false)
     holder.visible = false
     this.scene.add(holder)
-    this.arrive(item, this.desc(e).fall, at)
+    this.arrive(item, this.desc(e).fall, at, cue)
   }
 
-  private arrive(item: Item, fall: Fall, at: number): void {
+  /**
+   * Arrival choreography, scaled to the size of the wish. Small things pop in with a sparkle; big things
+   * (≥ 8 m) come down a beam of light from the sky (or grow inside it) and land with a thump, a
+   * shockwave, dust and a shake. A batch chimes up a scale as it lands, tk-tk-tk.
+   */
+  private arrive(item: Item, fall: Fall, at0: number, cue: Cue): void {
     const { holder, stretch } = item
-    const s = item.entity.props.scale ?? 1
-    const h = item.entity.props.height ?? 1
-    const y0 = item.entity.pos[1]
+    const e = item.entity
+    const desc = this.desc(e)
+    const s = e.props.scale ?? 1
+    const h = e.props.height ?? 1
+    const y0 = e.pos[1]
+    const tall = kindHeight(desc, e.props)
+    const reach = entityReach(desc, e)
+    const flat = tall < 0.6 || desc.tags.includes('particles')
+    const tier = flat ? 'flat' : tall >= BIG ? 'big' : tall >= MID ? 'mid' : 'small'
+    const loud = cue.loud
+    const color = e.props.color ?? desc.defaults.color ?? '#ffffff'
+    const lead = tier === 'big' && loud ? 420 : 0
+    const at = at0 + lead
+    const now = performance.now()
+    const center = new THREE.Vector3(e.pos[0], y0, e.pos[2])
     const show = () => {
       holder.visible = true
     }
+    if (loud && cue.count > 1 && (!cue.reveal || cue.index % 2 === 0)) this.sound.sfxChime(cue.index, cue.count, at - now)
+
+    // The beam from the sky arrives first and holds while the thing comes down through it.
+    let fallDur: number
+    const impact = (when: number) => {
+      if (!loud || flat) return
+      if (tier === 'big') {
+        this.playFx(shockwave(center, reach), when, 1300)
+        this.puff(center, reach * 1.2, 0.5 + Math.min(1.4, tall * 0.02), 70)
+        this.sound.sfxThump(tall, when - performance.now())
+        if (!cue.reveal) this.addShake(tall, center, when)
+      } else if (tier === 'mid') {
+        if (!cue.reveal && cue.count === 1) this.playFx(shockwave(center, reach * 0.5, 0xffffff, 2.5, 0.45), when, 700)
+        if (cue.count === 1) this.sound.sfxPop(tall, when - performance.now())
+      } else if (cue.count === 1) {
+        this.sound.sfxPop(Math.max(0.5, tall), when - performance.now())
+      }
+    }
+    const sparkleAt = (when: number, y = tall * 0.6) => {
+      if (!loud || flat) return
+      this.playFx(sparkle(new THREE.Vector3(center.x, y0 + y, center.z), Math.max(0.5, reach), color, tier === 'small' ? 26 : 40), when, 800)
+    }
+
     if (fall === 'drop') {
       holder.scale.setScalar(s)
       stretch.scale.y = h
-      holder.position.y = y0 + 7
-      this.tween(at, 850, (t) => {
-        holder.position.y = y0 + 7 * (1 - ease.bounce(t))
-      }, () => this.puff(holder.position, this.desc(item.entity).footprint * s), show)
-    } else if (fall === 'grow') {
-      holder.scale.setScalar(0.001)
+      if (tier === 'big' && loud) {
+        const H0 = 12 + tall * 0.9
+        fallDur = 950 + Math.min(650, tall * 9)
+        holder.position.y = y0 + H0
+        // Accelerating down (it has weight), then a short squash as it hits.
+        this.tween(at, fallDur, (t) => {
+          holder.position.y = y0 + H0 * (1 - t * t)
+        }, () => {
+          holder.position.y = y0
+          this.tween(performance.now(), 380, (t) => {
+            const k = Math.sin(Math.PI * t) * (1 - t)
+            holder.scale.set(s * (1 + 0.05 * k), s * (1 - 0.09 * k), s * (1 + 0.05 * k))
+          }, () => holder.scale.setScalar(s))
+          impact(performance.now())
+        }, show)
+      } else {
+        fallDur = 850
+        holder.position.y = y0 + 7
+        this.tween(at, 850, (t) => {
+          holder.position.y = y0 + 7 * (1 - ease.bounce(t))
+        }, () => {
+          this.puff(holder.position, this.desc(item.entity).footprint * s)
+          if (tier === 'small') sparkleAt(performance.now(), tall * 0.5)
+          impact(performance.now())
+        }, show)
+      }
+    } else if (fall === 'grow' || fall === 'rise') {
+      fallDur = tier === 'big' && loud ? 1100 : fall === 'grow' ? 620 : 700
+      if (fall === 'grow') holder.scale.setScalar(0.001)
+      else holder.scale.set(s, 0.001, s)
       stretch.scale.y = h
-      this.tween(at, 620, (t) => {
-        holder.scale.setScalar(Math.max(0.001, s * ease.back(t)))
-      }, undefined, show)
-    } else if (fall === 'rise') {
-      holder.scale.set(s, 0.001, s)
-      stretch.scale.y = h
-      this.tween(at, 700, (t) => {
-        holder.scale.y = Math.max(0.001, s * ease.out(t))
-      }, undefined, show)
+      this.tween(at, fallDur, (t) => {
+        if (fall === 'grow') holder.scale.setScalar(Math.max(0.001, s * ease.back(t)))
+        else holder.scale.y = Math.max(0.001, s * ease.out(t))
+      }, tier === 'big' ? () => impact(performance.now()) : undefined, show)
+      if (tier !== 'big') {
+        sparkleAt(at + 60, tall * 0.4)
+        impact(at + fallDur * 0.5)
+      }
     } else {
       // flicker: the fixture rises, then its glow stutters on like a sodium lamp warming up.
       holder.scale.set(s, 0.001, s)
@@ -389,6 +622,7 @@ export class WorldRenderer {
       const glows = slotMeshes(item.body, 'glow')
       const lights: THREE.Light[] = []
       item.body.traverse(o => (o as THREE.Light).isLight && lights.push(o as THREE.Light))
+      fallDur = 940
       this.tween(at, 420, (t) => {
         holder.scale.y = Math.max(0.001, s * ease.out(t))
       }, undefined, show)
@@ -401,28 +635,55 @@ export class WorldRenderer {
         for (const g of glows) g.visible = true
         this.applyLook(item, item.entity, false)
       })
+      if (!flat) sparkleAt(at + 900, tall * 0.92)
+      if (cue.count === 1 && loud && !flat) this.sound.sfxPop(1.2, at + 900 - now)
+    }
+
+    if (tier === 'big' && loud) {
+      const tint = new THREE.Color('#ffe2ad').lerp(new THREE.Color(color), 0.25)
+      const total = lead + fallDur + 900
+      this.playFx(beam(center, Math.max(1.4, reach * 0.95), tint, lead / total + 0.04, (lead + fallDur) / total), at0, total)
+      this.sound.sfxSummon(tall, lead + fallDur * 0.85, at0 - now)
     }
   }
 
-  private modifyItem(item: Item, e: Entity, at: number): void {
+  /** Animate one entity to its new props. With `fx`, a shimmer sweeps it and a big growth lands with weight. */
+  private modifyItem(item: Item, e: Entity, at: number, fx = false): { reshaped: boolean, grew: boolean, shrank: boolean, changed: boolean } {
     const before = item.entity
+    const desc = this.desc(e)
     const s0 = item.holder.scale.x
     const s1 = e.props.scale ?? 1
     const h0 = item.stretch.scale.y
     const h1 = e.props.height ?? 1
+    const tall0 = kindHeight(desc, before.props)
+    const tall1 = kindHeight(desc, e.props)
     const rebuilt = this.buildKeyOnly(e) !== item.buildKey
     if (rebuilt) this.rebuild(item, e, at, false, h0)
     item.entity = e
+    const resized = Math.abs(s1 - s0) > 1e-4 || (!rebuilt && Math.abs(h1 - h0) > 1e-4)
+    const grew = tall1 > tall0 * 1.05
+    const shrank = tall1 < tall0 * 0.95
 
-    if (Math.abs(s1 - s0) > 1e-4 || (!rebuilt && Math.abs(h1 - h0) > 1e-4)) {
-      this.tween(at, 750, (t) => {
+    if (resized) {
+      // Big growth is slower and heavier: you watch it swell, then it settles with a thump.
+      const dur = grew && tall1 >= BIG ? 1150 : 750
+      this.tween(at, dur, (t) => {
         const k = ease.spring(t)
         if (!rebuilt) item.stretch.scale.y = h0 + (h1 - h0) * k
         item.holder.scale.setScalar(s0 + (s1 - s0) * k)
       })
+      if (fx && grew && tall1 >= BIG && this.rings-- > 0) {
+        const c = item.holder.position.clone()
+        const reach = entityReach(desc, e)
+        this.playFx(shockwave(c, reach), at + dur * 0.35, 1300)
+        this.puff(c, reach, 0.5 + Math.min(1.4, tall1 * 0.02), 60)
+        this.sound.sfxThump(tall1, at + dur * 0.35 - performance.now())
+        this.addShake(tall1, c, at + dur * 0.35)
+      }
     }
 
-    if (before.pos.some((v, i) => Math.abs(v - e.pos[i]!) > 1e-4) || Math.abs(before.rotY - e.rotY) > 1e-4) {
+    const moved = before.pos.some((v, i) => Math.abs(v - e.pos[i]!) > 1e-4) || Math.abs(before.rotY - e.rotY) > 1e-4
+    if (moved) {
       const p0 = item.holder.position.clone()
       const p1 = new THREE.Vector3(...e.pos)
       const r0 = item.holder.rotation.y
@@ -433,7 +694,13 @@ export class WorldRenderer {
         item.holder.rotation.y = r0 + (e.rotY - r0) * k
       })
     }
-    this.applyLook(item, e, true, at)
+    const recolored = this.applyLook(item, e, true, at)
+    const changed = resized || moved || recolored || rebuilt
+    if (fx && (resized || recolored) && tall1 >= 0.3) {
+      const color = e.props.color ?? this.lampTint(e)?.getStyle() ?? '#ffffff'
+      this.playFx(shimmer(new THREE.Vector3(e.pos[0], 0, e.pos[2]), entityReach(desc, e), tall1 + e.pos[1], color), at, resized ? 900 : 620)
+    }
+    return { reshaped: resized || moved, grew, shrank, changed }
   }
 
   private buildKeyOnly(e: Entity): string {
@@ -478,9 +745,33 @@ export class WorldRenderer {
     }
   }
 
-  private applyLook(item: Item, e: Entity, animate: boolean, at = performance.now()): void {
+  /** Lamps cast the colour they glow: "make the lamps blue" turns their light pools blue. */
+  private lampTint(e: Entity): THREE.Color | null {
+    const tags = this.desc(e).tags
+    const lampLike = tags.includes('lamp') || (tags.includes('light') && !tags.includes('fire'))
+    const hex = lampLike ? e.props.color ?? e.props.trim : undefined
+    if (!hex) return null
+    const c = new THREE.Color(-1, -1, -1).set(hex)
+    if (c.r < 0) return null
+    // Keep the hue, but as light: bright enough to read as a lamp, never a dark pool.
+    const hsl = { h: 0, s: 0, l: 0 }
+    c.getHSL(hsl)
+    return c.setHSL(hsl.h, Math.min(1, hsl.s * 1.2 + 0.15), Math.max(0.55, Math.min(0.7, hsl.l)))
+  }
+
+  /** Apply colours (tweened bottom-to-top when `animate`). Returns whether any colour changed. */
+  private applyLook(item: Item, e: Entity, animate: boolean, at = performance.now()): boolean {
     applyMaterialProps(item.body, e.props)
     const targets = lookTargets(item.body, e.props, e.hue)
+    const tint = this.lampTint(e)
+    if (tint) for (const t of targets) if (t.mesh.userData.slot === 'glow') t.color.copy(tint)
+    const lights: { light: THREE.Light, to: THREE.Color }[] = []
+    item.body.traverse((o) => {
+      const l = o as THREE.Light
+      if (!l.isLight) return
+      if (l.userData.baseColor === undefined) l.userData.baseColor = '#' + l.color.getHexString()
+      lights.push({ light: l, to: tint ? tint.clone() : new THREE.Color(l.userData.baseColor as string) })
+    })
     const setColor = (m: THREE.Mesh, c: THREE.Color) => {
       const mat = m.material as THREE.MeshStandardMaterial
       mat.color.copy(c)
@@ -489,10 +780,12 @@ export class WorldRenderer {
     }
     if (!animate) {
       for (const { mesh, color } of targets) setColor(mesh, color)
-      return
+      for (const { light, to } of lights) light.color.copy(to)
+      return false
     }
     const from = targets.map(t => (t.mesh.material as THREE.MeshStandardMaterial).color.clone())
-    if (targets.every((t, i) => from[i]!.equals(t.color))) return
+    const lightFrom = lights.map(l => l.light.color.clone())
+    if (targets.every((t, i) => from[i]!.equals(t.color)) && lights.every((l, i) => lightFrom[i]!.equals(l.to))) return false
     const tmp = new THREE.Color()
     // The paint wipes bottom to top: lower meshes change first.
     const ys = targets.map(t => t.mesh.position.y)
@@ -503,21 +796,37 @@ export class WorldRenderer {
         const local = Math.min(1, Math.max(0, t * 1.6 - ((ys[i]! - minY) / span) * 0.6))
         setColor(mesh, tmp.copy(from[i]!).lerp(color, ease.out(local)))
       })
+      lights.forEach(({ light, to }, i) => light.color.copy(lightFrom[i]!).lerp(to, ease.inOut(t)))
     })
+    return true
   }
 
-  private removeItem(item: Item, now: number): void {
+  /**
+   * Shrink a thing away as it comes apart into sparks. A teleport sends them high, so the old world rises
+   * into the sky as motes. Returns how many particles it used (from `budget`).
+   */
+  private removeItem(item: Item, now: number, teleport = false, budget = 0): number {
     item.leaving = true
     this.leaving.add(item)
     const s = item.holder.scale.clone()
-    this.tween(now, 360, (t) => {
+    this.tween(now, teleport ? 520 : 420, (t) => {
       const k = Math.max(0.001, 1 - ease.out(t))
-      item.holder.scale.set(s.x * k, s.y * k, s.z * k)
+      item.holder.scale.set(s.x * k, s.y * (0.4 + 0.6 * k), s.z * k)
     }, () => {
       this.scene.remove(item.holder)
       disposeObject(item.holder)
       this.leaving.delete(item)
     })
+    if (budget <= 0) return 0
+    const e = item.entity
+    const d = this.desc(e)
+    const tall = Math.max(0.3, kindHeight(d, e.props))
+    const reach = Math.max(0.4, entityReach(d, e))
+    const n = Math.min(budget, Math.round(Math.min(teleport ? 46 : 80, 10 + reach * Math.min(tall, 12) * 2.2)))
+    if (n < 4) return 0
+    const color = e.props.color ?? d.defaults.color ?? '#ffe2b0'
+    this.playFx(dissolve(item.holder.position.clone().setY(e.pos[1]), reach, tall, teleport ? '#ffe9c4' : color, n, teleport ? 16 : 3.2), now, teleport ? 1900 : 1150)
+    return n
   }
 
   /** Real lights are expensive; keep the nearest few lamps lit and let emissive bulbs carry the rest. */
@@ -541,13 +850,17 @@ export class WorldRenderer {
     const fog = state.atmosphere.fog
     const factorTo = fog === undefined ? 1 : 1.8 - 1.5 * fog
     if (!dur) {
+      this.atmosVersion++
       this.fogFactor = factorTo
       this.applyAtmosphere(target)
       return
     }
     const from = { ...this.atmos }
     const factorFrom = this.fogFactor
+    // A newer change (clear, then "make it day" straight after) takes over from an older tween.
+    const version = ++this.atmosVersion
     this.tween(performance.now(), dur, (t) => {
+      if (version !== this.atmosVersion) return
       const k = ease.inOut(t)
       this.fogFactor = factorFrom + (factorTo - factorFrom) * k
       this.applyAtmosphere(lerpPreset(from, target, k))
@@ -635,9 +948,13 @@ export class WorldRenderer {
   }
 
   look(yaw: number, pitch: number, pos?: [number, number]): void {
+    this.camMove = null
     this.yaw = yaw
     this.pitch = pitch
-    if (pos) this.camera.position.set(pos[0], EYE, pos[1])
+    if (pos) {
+      this.lift = 0
+      this.camera.position.set(pos[0], EYE, pos[1])
+    }
   }
 
   // ---------- loop ----------
@@ -645,6 +962,7 @@ export class WorldRenderer {
   private frame(now: number): void {
     const dt = Math.min(0.05, (now - this.prev) / 1000)
     this.prev = now
+    this.dt = dt
     for (let i = this.tweens.length - 1; i >= 0; i--) {
       const tw = this.tweens[i]!
       if (now < tw.start) continue
@@ -660,15 +978,45 @@ export class WorldRenderer {
       }
     }
 
+    // A framing glide (ease in-out): turn, tilt, back away or rise until the wish is in shot.
+    const cm = this.camMove
+    if (cm && now >= cm.start) {
+      const t = Math.min(1, (now - cm.start) / cm.dur)
+      const k = ease.inOut(t)
+      this.yaw = cm.from.yaw + (cm.to.yaw - cm.from.yaw) * k
+      this.pitch = cm.from.pitch + (cm.to.pitch - cm.from.pitch) * k
+      this.camera.position.x = cm.from.x + (cm.to.x - cm.from.x) * k
+      this.camera.position.z = cm.from.z + (cm.to.z - cm.from.z) * k
+      this.lift = cm.from.lift + (cm.to.lift - cm.from.lift) * k
+      if (t >= 1) this.camMove = null
+    }
+    this.camera.position.y = EYE + this.lift
+
     const f = new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw))
     const r = new THREE.Vector3(-f.z, 0, f.x)
-    const sp = (this.keys.shift ? RUN : WALK) * dt
+    // Walking speed scales with the eye lift: a giant strides.
+    const sp = (this.keys.shift ? RUN : WALK) * dt * (1 + this.lift / 12)
     const k = this.keys
     if (k.w || k.arrowup) this.camera.position.addScaledVector(f, sp)
     if (k.s || k.arrowdown) this.camera.position.addScaledVector(f, -sp)
     if (k.a || k.arrowleft) this.camera.position.addScaledVector(r, -sp)
     if (k.d || k.arrowright) this.camera.position.addScaledVector(r, sp)
     this.camera.rotation.set(this.pitch, this.yaw, 0, 'YXZ')
+    // Weight: a decaying, slightly irregular shake after something big lands.
+    const sh = this.shake
+    if (sh && now >= sh.start) {
+      const t = (now - sh.start) / sh.dur
+      if (t >= 1) {
+        this.shake = null
+      } else {
+        const a = sh.amp * (1 - t) ** 2
+        const w = now / 1000
+        this.camera.rotation.x += a * (Math.sin(w * 47) * 0.6 + Math.sin(w * 31 + 1) * 0.4)
+        this.camera.rotation.y += a * 0.5 * Math.sin(w * 39 + 2)
+        this.camera.rotation.z += a * 0.6 * Math.sin(w * 53 + 3)
+        this.camera.position.y += a * 6 * Math.sin(w * 61)
+      }
+    }
 
     // Sky, grid and the sun's shadow box follow the player so the world feels endless.
     const cp = this.camera.position
@@ -701,6 +1049,19 @@ export class WorldRenderer {
     }
     for (const item of this.items.values()) item.body.traverse(animate)
     for (const item of this.leaving) item.body.traverse(animate)
+
+    // The teleport vortex: full while the place is summoned, gone once the fog has pulled back ~14 m.
+    // It spins up within ~300 ms of the wish (so the screen is never an empty wall of fog) and fades as the
+    // fog pulls back from its tightest point.
+    let vs = 0
+    if (this.reveal) {
+      const rv = this.reveal
+      rv.minCur = Math.min(rv.minCur, rv.cur)
+      vs = Math.min(1, (now - rv.t0) / 300) * Math.max(0, Math.min(1, 1 - (rv.cur - rv.minCur) / 14))
+    }
+    this.vortex.strength += (vs - this.vortex.strength) * Math.min(1, dt * (vs > this.vortex.strength ? 8 : 3))
+    this.vortex.tick(dt, this.camera.position)
+    this.gathering.tick(dt)
 
     if (this.reveal) {
       const r = this.reveal
@@ -739,24 +1100,23 @@ export class WorldRenderer {
   }
 
   /** A ring of dust where something landed. */
-  private puff(at: THREE.Vector3, radius: number): void {
-    const n = 46
+  private puff(at: THREE.Vector3, radius: number, size = 0.3, n = 46): void {
     const pos = new Float32Array(n * 3)
     const vel: [number, number, number][] = []
     const spread = 1.5 + radius * 0.8
     for (let i = 0; i < n; i++) {
       const a = Math.random() * Math.PI * 2
       const sp = spread * (0.7 + Math.random() * 0.6)
-      vel.push([Math.cos(a) * sp, 0.3 + Math.random() * 0.9, Math.sin(a) * sp])
+      vel.push([Math.cos(a) * sp, (0.3 + Math.random() * 0.9) * (1 + Math.max(0, size - 0.3) * 4), Math.sin(a) * sp])
       pos.set([at.x + Math.cos(a) * radius * 0.6, 0.15, at.z + Math.sin(a) * radius * 0.6], i * 3)
     }
     const start = pos.slice()
     const geo = new THREE.BufferGeometry()
     geo.setAttribute('position', new THREE.BufferAttribute(pos, 3))
-    const matl = new THREE.PointsMaterial({ color: 0xd8d0c0, size: 0.3, transparent: true, opacity: 0.7, depthWrite: false, alphaMap: radialTexture() })
+    const matl = new THREE.PointsMaterial({ color: 0xd8d0c0, size, transparent: true, opacity: 0.7, depthWrite: false, alphaMap: radialTexture() })
     const pts = new THREE.Points(geo, matl)
     this.scene.add(pts)
-    this.tween(performance.now(), 850, (t) => {
+    this.tween(performance.now(), 850 + size * 500, (t) => {
       const k = ease.out(t)
       for (let i = 0; i < n; i++) {
         pos[i * 3] = start[i * 3]! + vel[i]![0] * k
@@ -808,7 +1168,9 @@ export class WorldRenderer {
     })
     on(window, 'keydown', (e) => {
       if (typing(e) || e.metaKey || e.ctrlKey) return
-      this.keys[e.key.toLowerCase()] = true
+      const key = e.key.toLowerCase()
+      if ('wasd'.includes(key) || key.startsWith('arrow')) this.takeControl()
+      this.keys[key] = true
     })
     on(window, 'keyup', (e) => {
       this.keys[e.key.toLowerCase()] = false
@@ -818,7 +1180,14 @@ export class WorldRenderer {
     })
   }
 
+  /** Any look or walk input takes the camera back instantly. */
+  private takeControl(): void {
+    this.camMove = null
+    this.lastInput = performance.now()
+  }
+
   private turn(dx: number, dy: number): void {
+    if (dx || dy) this.takeControl()
     this.yaw -= dx * 0.004
     this.pitch = Math.max(-1.25, Math.min(0.7, this.pitch - dy * 0.004))
   }
@@ -834,6 +1203,8 @@ export class WorldRenderer {
 
   dispose(): void {
     this.sound.dispose()
+    this.vortex.dispose()
+    this.gathering.dispose()
     this.renderer.setAnimationLoop(null)
     this.ro.disconnect()
     for (const fn of this.cleanup) fn()
@@ -905,6 +1276,10 @@ function lerpPreset(a: AtmospherePreset, b: AtmospherePreset, k: number): Atmosp
     ground: c(a.ground, b.ground), grid: n(a.grid, b.grid), env: n(a.env, b.env), exposure: n(a.exposure, b.exposure),
     stars: n(a.stars, b.stars), moon: n(a.moon, b.moon), sunGlow: n(a.sunGlow, b.sunGlow), glowColor: c(a.glowColor, b.glowColor)
   }
+}
+
+function wrapAngle(a: number): number {
+  return Math.atan2(Math.sin(a), Math.cos(a))
 }
 
 function v3(p: THREE.Vector3): Vec3 {

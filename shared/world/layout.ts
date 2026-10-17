@@ -2,8 +2,9 @@
  * The placement resolver: anchor + count + arrangement → ground positions, with jitter, footprint
  * de-overlap and facing. The model says "nine pines, clustered, over there"; this does all the coordinate math.
  */
+import { kindHeight } from './kinds.ts'
 import type { KindDescriptor } from './kinds.ts'
-import type { Arrangement, Facing, Placement, Vec3 } from './ops.ts'
+import type { Arrangement, Facing, Placement, Props, Vec3 } from './ops.ts'
 import { distXZ, entityHeight, entityRadius, kindOf, select } from './select.ts'
 import type { Entity, OpContext, WorldState } from './types.ts'
 
@@ -26,6 +27,8 @@ export interface LayoutSpec {
   xz?: number[]
   /** Degrees in the room frame; 0 = front faces +z (back toward the player's teleport spot). */
   yaw?: number
+  /** The spawn's `set` props: scale, floors and height make it bigger, so it needs more room and distance. */
+  props?: Props
 }
 
 export interface Anchor {
@@ -39,6 +42,26 @@ export interface Anchor {
 const PLAYER_RADIUS = 1.5 // nothing lands on top of the viewer
 const PLAYER_CLEAR = 2.5 // gaze-anchored groups keep their near edge this far from the viewer
 const TAU = Math.PI * 2
+/** The renderer's vertical field of view; placement keeps a wish inside 86% of it (the camera tilts to fit). */
+export const VIEW_VFOV = (65 * Math.PI) / 180
+const FRAME_SPAN = VIEW_VFOV * 0.86
+
+/**
+ * How far back you must stand (from the thing's near edge) to see a `height`-metre thing from its foot
+ * to its top within 86% of the view, tilting the camera as needed. 0 for things shorter than eye height.
+ */
+export function fitDistance(height: number, eye = 1.6): number {
+  if (height <= eye + 0.5) return 0
+  const span = (d: number) => Math.atan((height - eye) / d) + Math.atan(eye / d)
+  let lo = 0.05
+  let hi = 4000
+  for (let i = 0; i < 48; i++) {
+    const mid = (lo + hi) / 2
+    if (span(mid) > FRAME_SPAN) lo = mid
+    else hi = mid
+  }
+  return hi
+}
 
 /** mulberry32: tiny, fast and good enough for jitter. Seeded so replaying a log rebuilds the same world. */
 export function rng(seed: number): () => number {
@@ -139,7 +162,9 @@ function besideTarget(state: WorldState, target: Entity, place: Placement, ctx: 
 export function layout(state: WorldState, spec: LayoutSpec, ctx: OpContext, rand: () => number): { placed: Placed[], notes: string[] } {
   const { desc } = spec
   const n = Math.max(1, Math.round(spec.count))
-  const r = desc.footprint
+  // A giant pine is a bigger pine: its footprint (spacing, clearance, de-overlap) and height scale with it.
+  const r = desc.footprint * (spec.props?.scale ?? 1)
+  const tall = kindHeight(desc, spec.props ?? {})
   const notes: string[] = []
   const room = spec.xz && spec.xz.length >= 2
   const anchor: Anchor = room ? { center: roomToWorld(spec.xz!, ctx.player) } : resolveAnchor(state, spec.at, ctx, r)
@@ -164,7 +189,10 @@ export function layout(state: WorldState, spec: LayoutSpec, ctx: OpContext, rand
   // "Over there" must never swallow the viewer. Big things need more room before they stop looming
   // (a house wants ~10 m, a pine ~5 m). Clusters keep their centre on the gaze and fill the far side of
   // the disc instead; rings, grids and long things shift back until their near edge is clear.
-  const gazeAnchored = !room && (spec.at?.anchor ?? 'gaze') === 'gaze'
+  // Tall things also get pushed back until foot-to-top fits the view: "a giant tower right there" lands
+  // far enough off that you see all of it, not a wall 3 m away with its top cut off.
+  const anchorKind = spec.at?.anchor ?? 'gaze'
+  const gazeAnchored = !room && (anchorKind === 'gaze' || (anchorKind === 'player' && spec.at?.dist === undefined))
   const clear = r + PLAYER_CLEAR + 1.5 * r
   const extent = arrange === 'single'
     ? (desc.length ? desc.length / 2 : 0)
@@ -172,7 +200,7 @@ export function layout(state: WorldState, spec: LayoutSpec, ctx: OpContext, rand
   const c: Vec3 = [...anchor.center]
   if (gazeAnchored && r + extent > 0) {
     const d = distXZ(c, ctx.player.pos)
-    const need = extent + clear
+    const need = Math.max(extent + clear, extent + r + fitDistance(tall, ctx.player.pos[1] || 1.6))
     if (d < need) {
       const dir = d > 1e-3 ? norm2(c[0] - ctx.player.pos[0], c[2] - ctx.player.pos[2]) : forward(yaw)
       c[0] = ctx.player.pos[0] + dir[0] * need

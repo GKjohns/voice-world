@@ -1,11 +1,15 @@
 /**
- * POST /api/intent { text, state, ctx } → { ops, dropped, ms, model }. `state` is the trimmed scene from
- * `trimScene` (entities' kind/tags/pos/props/group plus learned kinds, no log); `ctx` is the gaze snapshot
- * taken when the player started typing or speaking. `?model=sonnet` swaps the model.
+ * POST /api/intent { text, state, ctx } → NDJSON, one event per line as the model writes (Loop 1):
+ *   {"t":"op","op":{...},"ms":805,"i":0}      a strict op, the moment its object closed in the stream
+ *   {"t":"drop","dropped":{index,raw,reason}}  an op that failed validation
+ *   {"t":"done","ms":998,"model":"haiku","count":2,"firstOpMs":805,"error"?:"..."}
+ * `state` is the trimmed scene from `trimScene` (entities' kind/tags/pos/props/group plus learned kinds, no
+ * log); `ctx` is the gaze snapshot taken when the player started typing or speaking. `?model=sonnet` swaps
+ * the model. Closing the request aborts the model call.
  */
 import type { Scene } from '#shared/world/context'
 import type { OpContext } from '#shared/world/types'
-import { interpret } from '../utils/intent'
+import { streamIntent } from '../utils/intent'
 
 interface Body {
   text?: string
@@ -28,7 +32,35 @@ export default defineEventHandler(async (event) => {
     seed: typeof c.seed === 'number' ? c.seed : 1
   }
   const model = getQuery(event).model
-  const res = await interpret({ text, scene: body.state, ctx, model: typeof model === 'string' ? model : undefined })
-  console.info(`[intent] ${res.model} ${res.ms}ms ops=${res.ops.length} dropped=${res.dropped.length}${res.error ? ` error=${res.error}` : ''} “${text.slice(0, 80)}”`)
-  return { ops: res.ops, dropped: res.dropped, ms: res.ms, model: res.model, error: res.error }
+  const ctrl = new AbortController()
+  event.node.req.on('close', () => ctrl.abort(new Error('client closed')))
+  setResponseHeaders(event, { 'content-type': 'application/x-ndjson; charset=utf-8', 'cache-control': 'no-cache', 'x-accel-buffering': 'no' })
+
+  const enc = new TextEncoder()
+  return new ReadableStream<Uint8Array>({
+    async start(controller) {
+      let dropped = 0
+      for await (const ev of streamIntent({ text, scene: body.state, ctx, model: typeof model === 'string' ? model : undefined, signal: ctrl.signal })) {
+        if (ev.t === 'drop') dropped++
+        if (ev.t === 'done') console.info(`[intent] ${ev.model}${ev.provider && ev.provider !== 'anthropic' ? `@${ev.provider}` : ''} first op ${ev.firstOpMs ?? '-'} ms · done ${ev.ms} ms · ops=${ev.count} dropped=${dropped}${ev.recovered ? ' (recovered)' : ''}${ev.error ? ` error=${ev.error}` : ''} “${text.slice(0, 80)}”`)
+        if (ctrl.signal.aborted) break
+        try {
+          const line = ev.t === 'done'
+            ? { t: 'done', ms: ev.ms, model: ev.model, count: ev.count, firstOpMs: ev.firstOpMs, error: ev.error }
+            : ev
+          controller.enqueue(enc.encode(`${JSON.stringify(line)}\n`))
+        } catch {
+          break // the client went away
+        }
+      }
+      try {
+        controller.close()
+      } catch {
+        // already closed
+      }
+    },
+    cancel() {
+      ctrl.abort(new Error('client cancelled'))
+    }
+  })
 })

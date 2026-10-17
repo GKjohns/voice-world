@@ -1,25 +1,29 @@
 /**
- * Live check (Sprint 3.1): does the AI Gateway forward function calls for the realtime voice?
- *   node --env-file=.env bench/realtime_check.ts [wav ...]     (default: the two fixtures)
+ * Live check (Sprint 3.1, Loop 1): the realtime voice end to end, minus the browser.
+ *   node --env-file=.env bench/realtime_check.ts [wav ...]     (default: trees, castle, tranquil, dragon, hi)
  * Opens the same session the browser opens (shared/voice.ts config + the token route's tool list), streams
  * a 24 kHz mono PCM16 wav at real-time pace, then silence so server VAD closes the turn. On a `build` call it
- * runs the real /api/intent on the dev server (INTENT_URL, default localhost:3091) with an empty scene,
- * returns the summary as the tool output, and waits for the spoken confirmation.
- * Reports per file: transcript, tool call args, and speech-end → build-start latency.
+ * streams the real /api/intent (NDJSON) from the dev server (INTENT_URL, default localhost:3091) against an
+ * empty scene, applies the ops with the real kernel and returns the same honest outcome the browser sends
+ * (`{ outcome, result, notes? }`). A `teleport` call is answered as started (the Director is not run here).
+ * Reports per file: transcript, tool calls, speech end → first audio (dead air), → tool call, → first op.
  * Fixtures: `say -o x.aiff "…" && afconvert -f WAVE -d LEI16@24000 -c 1 x.aiff x.wav`.
  */
 import { readFileSync } from 'node:fs'
 import { basename } from 'node:path'
 import { gateway } from '@ai-sdk/gateway'
 import { realtimeTools } from '../server/utils/realtimeTools.ts'
-import { VOICE_MODEL, voiceSessionConfig } from '../shared/voice.ts'
+import { ACK_INSTRUCTIONS, VOICE_MODEL, VOICE_NAME, voiceSessionConfig } from '../shared/voice.ts'
+import { applyBatch, createWorld } from '../shared/world/state.ts'
+import type { OpContext } from '../shared/world/types.ts'
 
 const RATE = 24_000
 const CHUNK_MS = 100
 const INTENT_URL = process.env.INTENT_URL ?? 'http://localhost:3091/api/intent'
 const files = process.argv.slice(2).length
   ? process.argv.slice(2)
-  : ['bench/fixtures/trees.wav', 'bench/fixtures/hi.wav']
+  : ['trees', 'castle', 'tranquil', 'dragon', 'hi'].map(n => `bench/fixtures/${n}.wav`)
+const CTX: OpContext = { gaze: { point: [-3, 0, -8], dist: 8.5 }, player: { pos: [0, 1.6, 0], yaw: 0 }, seed: 3 }
 
 function pcmFromWav(path: string): Buffer {
   const buf = readFileSync(path)
@@ -56,10 +60,49 @@ interface Result {
   reply?: string
   speechEndToBuildMs?: number
   vadStopToBuildMs?: number
+  /** Speech end → the first audio byte of any response: the dead air the user hears. */
+  speechEndToAudioMs?: number
+  /** What the voice said before the first tool output went back (the "speaks first" line). */
+  before?: string
+  intentFirstOpMs?: number
+  /** Tool calls made by the acknowledgement response (should be 0). */
+  ackToolCalls?: number
   intentMs?: number
   summary?: string
   events: string[]
   error?: string
+}
+
+/** Stream /api/intent (NDJSON), apply the ops to an empty world, and build the browser's honest outcome. */
+async function intent(request: string, res: Result): Promise<Record<string, unknown>> {
+  const t = performance.now()
+  const r = await fetch(INTENT_URL, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ text: request, ctx: CTX })
+  })
+  const text = await r.text() // the bench only needs the total; the first op time comes from the server
+  res.intentMs = Math.round(performance.now() - t)
+  const lines = text.split('\n').filter(Boolean).map(l => JSON.parse(l) as { t: string, op?: unknown, dropped?: { reason: string }, firstOpMs?: number })
+  res.intentFirstOpMs = lines.find(l => l.t === 'done')?.firstOpMs
+  const ops = lines.filter(l => l.t === 'op').map(l => l.op)
+  const dropped = lines.filter(l => l.t === 'drop').map(l => l.dropped!.reason)
+  const out = applyBatch(createWorld(), ops, CTX, request)
+  const fx = out.effects
+  const bits: string[] = []
+  if (fx.spawned.length) bits.push(`spawned ${fx.spawned.length} ${[...new Set(fx.spawned.map(id => id.split('#')[0]))].join(', ')}`)
+  if (fx.modified.length) bits.push(`changed ${fx.modified.length}`)
+  if (fx.removed.length) bits.push(`removed ${fx.removed.length}`)
+  if (fx.atmosphere) bits.push(`light → ${out.state.atmosphere.time}`)
+  if (fx.teleport) bits.push(`teleport → ${fx.teleport.world}`)
+  const changed = bits.length > 0
+  return {
+    outcome: changed ? 'done' : 'NOTHING CHANGED',
+    result: bits.join(' · ') || 'nothing changed',
+    ...(fx.notes.length ? { notes: fx.notes.slice(0, 3) } : {}),
+    ...(dropped.length ? { dropped } : {}),
+    ...(fx.say.length && changed ? { builderLine: `${fx.say.join(' ')} (use only if true to the result)` } : {})
+  }
 }
 
 async function run(file: string): Promise<Result> {
@@ -83,7 +126,8 @@ async function run(file: string): Promise<Result> {
   let configured = false
   let replyDone: () => void = () => {}
   const finished = new Promise<void>(r => (replyDone = r))
-  let responses = 0
+  let phase: 'call' | 'ack' | 'confirm' = 'call'
+  const pending: Promise<{ callId: unknown, output: Record<string, unknown> }>[] = []
   const send = (e: unknown) => sock.send(JSON.stringify(e))
 
   async function stream() {
@@ -120,42 +164,59 @@ async function run(file: string): Promise<Result> {
       case 'speech-stopped':
         speechStopAt = performance.now()
         break
+      case 'audio-delta':
+        if (res.speechEndToAudioMs === undefined && streamStart) res.speechEndToAudioMs = Math.round(performance.now() - (streamStart + speechEndAt))
+        break
       case 'input-transcription-completed':
         res.transcript = String(ev.transcript ?? '').trim()
         break
       case 'function-call-arguments-done': {
         const at = performance.now()
         res.toolCalls.push({ name: String(ev.name), args: String(ev.arguments), atMs: now() })
-        res.speechEndToBuildMs = Math.round(at - (streamStart + speechEndAt))
-        if (speechStopAt) res.vadStopToBuildMs = Math.round(at - speechStopAt)
-        let summary: string
-        try {
-          const request = (JSON.parse(String(ev.arguments)) as { request?: string }).request ?? ''
-          const t = performance.now()
-          const r = await fetch(INTENT_URL, {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ text: request, ctx: { gaze: { point: [-3, 0, -8], dist: 8.5 }, player: { pos: [0, 1.6, 0], yaw: 0 }, seed: 3 } })
-          })
-          const body = await r.json() as { ops?: { op: string, kind?: string, count?: number }[] }
-          res.intentMs = Math.round(performance.now() - t)
-          const spawned = (body.ops ?? []).filter(o => o.op === 'spawn').map(o => `${o.count ?? 1} ${o.kind}`)
-          summary = spawned.length ? `spawned ${spawned.join(', ')}` : `ops: ${(body.ops ?? []).map(o => o.op).join(', ') || 'none'}`
-        } catch (err) {
-          summary = `builder unreachable (${(err as Error).message}); pretend it worked`
+        if (res.speechEndToBuildMs === undefined) {
+          res.speechEndToBuildMs = Math.round(at - (streamStart + speechEndAt))
+          if (speechStopAt) res.vadStopToBuildMs = Math.round(at - speechStopAt)
         }
-        res.summary = summary
-        send({ type: 'conversation-item-create', item: { type: 'function-call-output', callId: ev.callId, output: JSON.stringify({ result: summary }) } })
-        send({ type: 'response-create' })
+        // Start the work at once, like the browser; the output goes back after the acknowledgement.
+        const callId = ev.callId
+        if (phase !== 'call') {
+          // The acknowledgement response tried to call a tool too: the browser ignores it the same way.
+          res.ackToolCalls = (res.ackToolCalls ?? 0) + 1
+          pending.push(Promise.resolve({ callId, output: { outcome: 'IGNORED', result: 'duplicate call: the wish is already being granted' } }))
+          break
+        }
+        pending.push((async () => {
+          let output: Record<string, unknown>
+          try {
+            const args = JSON.parse(String(ev.arguments)) as { request?: string, world?: string, brief?: string }
+            output = String(ev.name) === 'teleport'
+              ? { outcome: 'started', result: `${args.world} is assembling around the user now; it takes about ten seconds to finish` }
+              : await intent(args.request ?? '', res)
+          } catch (err) {
+            output = { outcome: 'NOTHING CHANGED', result: `builder unreachable (${(err as Error).message})` }
+          }
+          res.summary = [res.summary, JSON.stringify(output)].filter(Boolean).join(' ; ')
+          return { callId, output }
+        })())
         break
       }
       case 'audio-transcript-done':
         res.reply = [res.reply, String(ev.transcript ?? '')].filter(Boolean).join(' / ')
+        if (phase !== 'confirm') res.before = [res.before, String(ev.transcript ?? '')].filter(Boolean).join(' / ')
         break
       case 'response-done':
-        responses++
-        // A tool call takes two responses (the call, then the spoken confirmation).
-        if (!res.toolCalls.length || responses >= 2) replyDone()
+        if (!res.toolCalls.length || phase === 'confirm') {
+          replyDone()
+        } else if (phase === 'call') {
+          // The tool-call response closed: ask for the out-of-band acknowledgement (speaks first).
+          phase = 'ack'
+          send({ type: 'response-create', options: { instructions: ACK_INSTRUCTIONS } })
+        } else if (phase === 'ack') {
+          phase = 'confirm'
+          const outs = await Promise.all(pending)
+          for (const o of outs) send({ type: 'conversation-item-create', item: { type: 'function-call-output', callId: o.callId, output: JSON.stringify(o.output) } })
+          send({ type: 'response-create' })
+        }
         break
       case 'error':
         res.error = String(ev.message)
@@ -170,15 +231,18 @@ async function run(file: string): Promise<Result> {
   return res
 }
 
-const lines: string[] = [`realtime live check — ${new Date().toISOString()} — ${VOICE_MODEL} via AI Gateway, server-vad, tools: [build]`, '']
+const lines: string[] = [`realtime live check — ${new Date().toISOString()} — ${VOICE_MODEL} via AI Gateway, voice ${VOICE_NAME}, server-vad, tools: [build, teleport]`, '']
 for (const f of files) {
   const r = await run(f)
   lines.push(`## ${r.file}`)
   lines.push(`heard:        ${JSON.stringify(r.transcript ?? null)}`)
   lines.push(`tool calls:   ${r.toolCalls.length ? r.toolCalls.map(c => `${c.name}(${c.args}) @${c.atMs} ms`).join('; ') : 'none'}`)
+  lines.push(`speech end → first audio: ${r.speechEndToAudioMs ?? '-'} ms`)
   if (r.toolCalls.length) {
-    lines.push(`speech end → build call:  ${r.speechEndToBuildMs} ms (VAD speech-stopped → build call: ${r.vadStopToBuildMs ?? '?'} ms)`)
-    lines.push(`/api/intent:  ${r.intentMs ?? '?'} ms → ${JSON.stringify(r.summary)}`)
+    lines.push(`speech end → tool call:   ${r.speechEndToBuildMs} ms (VAD speech-stopped → tool call: ${r.vadStopToBuildMs ?? '?'} ms)`)
+    if (r.intentMs !== undefined) lines.push(`/api/intent:  first op ${r.intentFirstOpMs ?? '-'} ms (server), done ${r.intentMs} ms → speech end → first op ≈ ${r.speechEndToBuildMs! + (r.intentFirstOpMs ?? r.intentMs)} ms`)
+    lines.push(`tool output:  ${r.summary}`)
+    lines.push(`said first:   ${JSON.stringify(r.before ?? null)}${r.ackToolCalls ? ` (ack made ${r.ackToolCalls} ignored tool call(s))` : ''}`)
   }
   lines.push(`voice said:   ${JSON.stringify(r.reply ?? null)}`)
   if (r.error) lines.push(`error:        ${r.error}`)
