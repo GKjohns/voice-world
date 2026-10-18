@@ -28,17 +28,17 @@ import type { Route, RouteContext } from '#shared/npc/routing'
 import { describeChange, howFar, npcScene, wishEvent } from '#shared/npc/scene'
 import type { WishChange } from '#shared/npc/scene'
 import { SCARY, STARTLING, TALK_LEAVE_RANGE } from '#shared/npc/behavior'
-import { personGender, rolePreset } from '#shared/npc/people'
+import { personGender } from '#shared/npc/people'
 import { pickBlock } from '#shared/npc/routine'
 import type { Vec3 } from '#shared/world/ops'
 import { isKitKind } from '#shared/world/kinds'
 import { normalizeKind } from '#shared/world/ops'
 import type { Entity, OpContext, WorldState } from '#shared/world/types'
 import { People } from '~/world/npc/people'
+import { VoiceQueue } from '~/world/npc/voice'
 import type { WorldRenderer } from '~/world/renderer'
 
 const STORE_KEY = 'conjure:npc:v1'
-const VOICES = { f: ['ara', 'eve', 'una'], m: ['leo', 'rex', 'sal'] } as const
 /** Persona calls for a batch bigger than this wait until you come within NEAR_PERSONA of them. */
 const EAGER_PERSONAS = 4
 const NEAR_PERSONA = 16
@@ -109,12 +109,6 @@ let stopWatch: WatchStopHandle | null = null
 
 function sigOf(e: Entity): string {
   return `${e.id}|${e.props.name ?? ''}`
-}
-
-function hash(id: string, salt: string): number {
-  let h = 2166136261
-  for (const ch of id + salt) h = Math.imul(h ^ ch.charCodeAt(0), 16777619)
-  return ((h ^ (h >>> 15)) >>> 0) / 4294967296
 }
 
 function seedOf(e: Entity): PersonSeed {
@@ -405,7 +399,7 @@ async function speakAside(e: Entity, line: BanterLine | { line: string, to?: str
   else if (line.act === 'flinch') people.setMood(e.id, 'afraid', 6)
   sideBubble.value = { id: e.id, name: e.props.name ?? '', text: line.line, thinking: false, at: Date.now() }
   banterSpeaking.value = e.id
-  const q = new VoiceQueue(e.id, m.persona)
+  const q = new VoiceQueue(e.id, m.persona, () => distToPlayer(e.id))
   banterQ = q
   const t0 = performance.now()
   await new Promise<void>((resolve) => {
@@ -505,132 +499,6 @@ function onFollowEnd(id: string, why: 'quiet' | 'far') {
   })
   people.perform(id, 'wave')
   console.info(`[npc] ${e.props.name} stopped following (${why}): “${line}”`)
-}
-
-// ---------- the voice ----------
-
-interface Segment { text: string, audio: Promise<HTMLAudioElement | null> }
-
-/** Let a line's audio go: detach the element from its blob first (revoking a loaded src logs a load error). */
-function release(a: HTMLAudioElement | null) {
-  if (!a) return
-  const src = a.src
-  a.pause()
-  a.onerror = null
-  a.removeAttribute('src')
-  a.load()
-  URL.revokeObjectURL(src)
-}
-
-class VoiceQueue {
-  private queue: Segment[] = []
-  private playing = false
-  private current: HTMLAudioElement | null = null
-  stopped = false
-  onFirstAudio?: () => void
-  onIdle?: () => void
-
-  constructor(private readonly id: string, private readonly persona: Persona) {}
-
-  private voice(): string {
-    const list = VOICES[this.persona.voice]
-    return list[Math.floor(hash(this.id, 'voice') * list.length) % list.length]!
-  }
-
-  push(text: string) {
-    const t = text.trim()
-    if (!t || this.stopped) return
-    this.queue.push({ text: t, audio: this.fetch(t) })
-    if (!this.playing) void this.next()
-  }
-
-  private async fetch(text: string): Promise<HTMLAudioElement | null> {
-    try {
-      const preset = rolePreset(this.persona.occupation)
-      const res = await fetch('/api/npc/voice', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text, voice: this.voice(), speed: preset === 'elder' ? 0.9 : preset === 'child' ? 1.12 : 1 }) })
-      if (res.status !== 200) return null
-      const blob = await res.blob()
-      const a = new Audio(URL.createObjectURL(blob))
-      a.preload = 'auto'
-      return a
-    } catch {
-      return null
-    }
-  }
-
-  private volume(): number {
-    const p = people?.posOf(this.id)
-    const c = renderer?.camera.position
-    if (!p || !c) return 1
-    const d = Math.hypot(p[0] - c.x, p[2] - c.z)
-    return Math.max(0.25, Math.min(1, 1.15 - d / 18))
-  }
-
-  private async next() {
-    const seg = this.queue.shift()
-    if (!seg || this.stopped) {
-      this.playing = false
-      this.onIdle?.()
-      return
-    }
-    this.playing = true
-    const audio = await seg.audio
-    if (this.stopped) {
-      release(audio)
-      return
-    }
-    if (audio) {
-      this.current = audio
-      audio.volume = this.volume()
-      audio.addEventListener('playing', () => this.onFirstAudio?.(), { once: true })
-      await new Promise<void>((resolve) => {
-        audio.onended = () => resolve()
-        audio.onerror = () => resolve()
-        audio.play().catch(() => this.browserSay(seg.text).then(resolve))
-      })
-      URL.revokeObjectURL(audio.src)
-    } else {
-      await this.browserSay(seg.text)
-    }
-    this.current = null
-    void this.next()
-  }
-
-  /** The browser's own voice, pitched and paced per person (a child high and quick, an elder low and slow). */
-  private browserSay(text: string): Promise<void> {
-    return new Promise((resolve) => {
-      if (typeof speechSynthesis === 'undefined') return resolve()
-      const u = new SpeechSynthesisUtterance(text)
-      const preset = rolePreset(this.persona.occupation)
-      const f = this.persona.voice === 'f'
-      u.pitch = preset === 'child' ? 1.6 : preset === 'elder' ? (f ? 0.95 : 0.7) : f ? 1.15 : 0.85
-      u.rate = preset === 'elder' ? 0.85 : preset === 'child' ? 1.15 : 0.95 + hash(this.id, 'rate') * 0.15
-      u.volume = this.volume()
-      const voices = speechSynthesis.getVoices().filter(v => v.lang.startsWith('en'))
-      if (voices.length) u.voice = voices[Math.floor(hash(this.id, 'bv') * voices.length) % voices.length]!
-      u.onstart = () => this.onFirstAudio?.()
-      u.onend = () => resolve()
-      u.onerror = () => resolve()
-      speechSynthesis.speak(u)
-      setTimeout(resolve, 2500 + text.length * 90) // never hang on a stuck synth
-    })
-  }
-
-  stop() {
-    if (this.stopped) return
-    this.stopped = true
-    // Lines fetched but never played: let their audio go.
-    for (const seg of this.queue) void seg.audio.then(release)
-    this.queue = []
-    release(this.current)
-    if (typeof speechSynthesis !== 'undefined') speechSynthesis.cancel()
-    this.playing = false
-    this.onIdle?.()
-  }
-
-  get active() {
-    return this.playing || this.queue.length > 0
-  }
 }
 
 let voiceQ: VoiceQueue | null = null
@@ -767,9 +635,9 @@ async function talk(id: string, utterance: string, ctx: OpContext = useWorld().s
   const t0 = performance.now()
   const timing: NpcTiming = { id, name: e.props.name ?? id, utterance }
   const live = people.get(id)
-  const q = new VoiceQueue(id, m.persona)
+  const q = new VoiceQueue(id, m.persona, () => distToPlayer(id))
   voiceQ = q
-  timing.voice = VOICES[m.persona.voice][Math.floor(hash(id, 'voice') * 3) % 3]
+  timing.voice = q.voiceName
   q.onFirstAudio = () => {
     timing.firstAudioMs ??= Math.round(performance.now() - t0)
     speakingId.value = id
