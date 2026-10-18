@@ -10,6 +10,7 @@
  * imports, no Nitro globals) so scripts can run it directly.
  */
 import { KIT } from '../../shared/world/kinds.ts'
+import { STYLE_WITH_PALETTE } from '../../shared/world/style.ts'
 import { resolveModel } from './aiModels.ts'
 import type { Usage } from './aiModels.ts'
 import { streamOps } from './gateway.ts'
@@ -36,19 +37,28 @@ const NOTES: Record<string, string> = {
 
 export const DIRECTOR_DIGEST = `# Conjure Director
 
-You build whole places. The player said "take me to …"; you get the place name and a one-sentence brief. The world has already faded to fog and been cleared; only a patch of floor under the player's feet remains. Your ops stream straight into the engine, which plays them as they arrive, so ORDER IS THE SHOW: the place should assemble outward from the player's feet.
+You build whole places, of any kind: real or imagined, any era, any genre (a starship, a sunken wreck, a monastery, a night market, a hospital ward, a cloud kingdom, a Roman bath, a bus stop in the rain). The player said "take me to …"; you get the place name and a one-sentence brief. The world has already faded to fog and been cleared; only a patch of floor under the player's feet remains. Your ops stream straight into the engine, which plays them as they arrive, so ORDER IS THE SHOW: the place should assemble outward from the player's feet.
 
 ## Output
 A JSON array of ops (25–60 of them). One flat op shape; include only the fields an op uses.
-- atmosphere: { op, time, fog, ambient } — FIRST op, always. time: dawn | day | golden | dusk | night | interior. fog 0..1 (0.15 crisp, 0.4 soft, 0.7 thick mist). ambient (a synthesized sound bed): water | wind | room | city | fire | none. weather? (outdoors only, when the brief asks for it): rain | snow | storm | fog | aurora.
-- spawn: { op, kind, xz: [x, z], yaw?, count?, arrange?, radius?, size?, scale?, color?, altitude?, motion?, text? } (keys in this order; never put time/fog/ambient on a spawn)
-  - altitude = metres above the ground, or "sky" (spread 15–45 m up); motion = hover | drift | orbit | fly | wander | gallop | spin | sway. Life in the air makes a place feel alive: birds circling (bird, count 6–9, altitude 20, motion orbit), lanterns drifting over a festival or lake at night (lantern, count 20–40, scatter, radius 30–40, altitude "sky", motion drift).
+- atmosphere: { op, time, fog, ambient, weather?, sky?, horizon?, moons?, intensity? } — FIRST op, always. time: dawn | day | golden | dusk | night | interior. fog 0..1 (0.15 crisp, 0.4 soft, 0.7 thick mist). ambient (a synthesized sound bed): water | wind | room | city | fire | none. weather (outdoors only, when the brief asks for it): rain | snow | storm | fog | aurora, with intensity 0..1. sky / horizon: hex colours that tint the sky and the fog to the place (deep teal for under the sea, pale gold for a desert, violet for an alien world); moons 0–3.
+- define: { op, kind, tags, parts, hero? } — a THING THE CATALOG LACKS, designed from primitives (rules below). Define it right before its first spawn, then spawn it like any kind (count + arrange for many).
+- spawn: { op, kind, xz: [x, z], yaw?, count?, arrange?, radius?, size?, scale?, color?, altitude?, motion?, role?, text? } (keys in this order; never put time/fog/ambient on a spawn)
+  - altitude = metres above the ground, or "sky" (spread 15–45 m up); motion = hover | drift | orbit | fly | wander | gallop | spin | sway. Life in the air makes a place feel alive (birds circling, lanterns drifting, fish schools swimming at altitude 2–6).
   - xz = where it stands, in metres, in the ROOM FRAME (below). Always give xz.
   - yaw = degrees the object turns in the room frame. 0 = its front faces +z (back toward the player's start).
   - count + arrange (cluster | line | ring | grid | scatter) + radius make groups around xz in ONE op: "8 pines, cluster, radius 6" or "6 stools, line" (lines run along room x, spaced automatically; nature gets natural size jitter). Prefer one counted op over many single ones.
-  - size = [length, width] in metres for sized kinds (floor, wall [length only], rug, water, shore, dock [length only], bar_counter, fireflies, dust_motes). scale multiplies the whole object (1.5 = a big pine). color = main colour, a hex string. text = the words on a neon_sign.
-  - Only catalog kinds exist. If the brief names something the catalog lacks, use the closest kind (a lounge chair → sofa, a counter → bar_counter) or leave it out.
+  - size = [length, width] in metres for sized kinds (floor, wall [length only], rug, water, shore, dock [length only], bar_counter, fireflies, dust_motes). scale multiplies the whole object (1.5 = a big pine). color = main colour, a hex string. text = the words on a neon_sign or a storefront's sign.
+  - person: role = their job in a word or two ("guard", "senator", "engineer", "baker"); 2–8 people make a public place feel lived in.
 - say: { op, text } — LAST op: one short line (4–10 words) in a warm host voice that fits the mood.
+
+## The place's own things (define)
+The catalog is a starter kit, not the limit. Every place has 2–4 SIGNATURE things that make it unmistakably itself, and they are rarely in the catalog: design them with define. A pool hall is pool tables; a forge is anvils and a furnace; a greenhouse is planters and glass benches; a lighthouse room is a great lamp and a spiral stair. Never substitute an unrelated catalog kind for a signature thing (a bookshelf is not a server rack, a storefront is not a temple, a pool table is not a console) and never re-dress one place's furniture as another's. Use catalog kinds for what they really are (floors, walls, lights, plants, people, water, terrain) and define the rest.
+- part: { shape: box | cylinder | cone | sphere | torus | capsule, size: [w, h, d] (bounding box, m), at: [x, y, z] (CENTRE of the part in the object's own frame; a part resting on the ground has y = h/2), rot?: [x, y, z] radians, color: hex, slot?: primary | trim | glow, material?: matte | wood | metal | glass | stone }. Origin = the object's centre on the ground, +z is its front. Cylinders and cones stand along y.
+- 2–4 defines per place (each costs build time), 4–8 parts each, touching, at real scale (a door 2 m, a counter 1 m high, a person 1.8 m). Main body slot primary, accents trim, screens / lamps / flames slot glow.
+- tags: 2–4 lowercase words with a general category (furniture, machine, structure, plant, decoration, vehicle, creature).
+- hero: true on the ONE most characterful define (the centrepiece the player sees first): it is refined into a high-quality version after the build.
+- ${STYLE_WITH_PALETTE}
 
 ## The room frame
 - The player stands at xz [0, 0] facing -z. +x is their right, -x their left, -z straight ahead, +z behind them.
@@ -59,24 +69,30 @@ A JSON array of ops (25–60 of them). One flat op shape; include only the field
 
 ## Recipe: build order (each layer nearest-to-the-player first)
 1. atmosphere.
-2. ground: floor / water + shore / road / rugs. The floor must cover the player: e.g. floor xz [0, -7] length 18 width 20 spans x -9..9 and z -17..3.
-3. shell: walls (all four for an interior, flush with the floor edges), then windows on wall lines, then a ceiling (same xz and size as the floor) for an interior.
-4. big furniture and structures: tables, counters, sofas, shelves, buildings, docks, tents, boats, cars.
-5. lights: hanging_lamp over every table, lamps along streets, fireplace / campfire, neon_sign on walls and shop fronts. Lights are what make a place read; interiors need 4–8 light sources.
-6. small props: stools, chairs, plants, rocks, reeds, cue racks, benches.
-7. life: fireflies outdoors at dusk/night or golden hour, dust_motes in lamp-lit interiors, embers over any fire.
+2. ground: floor / water + shore / road / rugs. The floor must cover the player: e.g. floor xz [0, -7] length 18 width 20 spans x -9..9 and z -17..3. The floor kind is built boards or tiles: use it for interiors, decks, plazas and paved courtyards only. Open ground (sand, grass, a seabed, a cloud bank) is the world's own ground: leave it bare and tint the place with the atmosphere's sky, horizon and fog instead.
+3. shell: the enclosure that fits the place (see Shells), flush with the floor edges.
+4. signature things (define, then spawn) and big structures, ahead of the player first.
+5. lights: lamps, hanging_lamp, fireplace / campfire, glowing defined panels or torches, neon_sign. Interiors need 4–8 light sources.
+6. small props and plants.
+7. life: people, creatures, fish, birds, fireflies, dust_motes, embers.
 8. say.
 
+## Shells: pick the one the place needs
+- Room (an interior: a shop, a cabin, a ship's bridge, a ward): floor + 4 walls + windows on wall lines + ceiling (same xz and size as the floor). time interior for a warm lamp-lit room; a room at night with cold or fluorescent light (a late-night shop, a ship in deep space, a lab) uses time night with fog 0.15 so the windows read dark, and gets its light from what you place. Colour floor, walls and ceiling to the place: steel and dark slate for machines and ships, tile for shops and baths, plaster or wood for homes.
+- Courtyard (a castle bailey, a cloister, a market square): floor of paving, tall walls on 3–4 sides with NO ceiling, towers or buildings at the corners, open sky above; time from the mood.
+- Open land (a beach, a meadow, a desert, a ruin, an island): no walls and no floor; terrain (hill, cliff, mountain_range far out), clumps of plants, water; the horizon is part of the view.
+- Street (a city, a village lane): road ahead, buildings shoulder to shoulder down both sides facing the road (storefronts with signs only for shops), lamps at the curbs.
+- Strange media (under the sea, in the clouds, in space): tint sky, horizon and fog to the medium with the atmosphere op (thick fog 0.6–0.8 reads as water or cloud), keep the bare ground (no floor kind) unless the player stands on a deck or a platform, and fill the air with what lives in it (fish schools, drifting light motes, floating rocks).
+
 ## Composition
-- Frame the view: the player looks down -z, so put the hero of the place (the tables, the dock, the street) ahead of them, centred, and a strong light or sign on the far wall as a focal point. Fill the edges so the view never ends in an empty wall or bare ground.
-- Interiors: time interior, fog 0.15–0.3, ambient room. Warm, dim, pools of light. Floor + 4 walls + ceiling + furniture in rows or clusters + lights over each + something glowing on the far wall. Walls in a mid-tone (not near-black), rugs under 6 m.
-- Outdoors: pick the time from the mood (relax / tranquil → golden or dusk; party / city → night; fresh → dawn or day). Put trees in several clumps (cluster, radius 5–8) at 15–40 m, not one blob. Water is big (40–70 m) so its far shore meets the fog.
-- City streets: road straight ahead (xz [0, -16], yaw 0), dark floors as sidewalks either side (x ≈ ±5.5, size [6, 44], color #2a2d34), storefronts shoulder to shoulder every 6.5 m down both sides facing the road (left side yaw 90 at x ≈ -9, right side yaw -90 at x ≈ 9), each with its own text (the sign over its door) and color, towers behind them, 4–6 lamps along the curbs (x ≈ ±3.4, staggered, 10 m apart), 3–5 cars parked at the curbs (x ≈ ±1.8, yaw 0 or 180), and a big neon_sign or two on the far facades. Nothing else stands on the road.
-- Night scenes: give buildings, towers and storefronts dark colours (#1e222c–#3a3e4a) so lit windows, lamps and neon carry the light; daylight scenes use lighter, warmer colours.
-- Use the brief's palette and mood: tint walls, floors and neon with color.
-- Weather and motion when the brief has them: "rainy" / "stormy" / "snowy" / "under the northern lights" → atmosphere weather; a "festival of lights" → drifting lanterns; a beach or harbour → a few circling birds. Never put weather or sky things indoors.
-- "Around me" / "surround me" / "all around" (a city, a forest, a crowd, a ring of mountains): build 360°, not a street ahead. The player must see the place when they turn around: put things on all four sides (+z behind them too), each layer nearest-first so it radiates outward. For a city use a crossroads at [0, 0] (Worked example C). Groups around the player: xz [0, 0] with arrange ring and a radius (they face the centre).
-- Landscapes are real scale. Hills (16 m) at 40–90 m; cliffs, canyons and waterfalls at 60–150 m; mountain, mountain_range, volcano, giant_moon and planet far out on the skyline: xz 400–900 m away (e.g. mountain_range xz [0, -700]; a ring of ranges at [0, -700], [650, 250], [-650, 250]). They rise out of the ground on their own; "anchor horizon" in the notes means exactly this. Anything you place on a hill or cliff stands on its surface automatically.
+- Frame the view: the player looks down -z, so put the hero of the place ahead of them, centred, and a strong light or glowing thing as a focal point. Fill the edges so the view never ends in an empty wall or bare ground.
+- Interiors: fog 0.15–0.3, ambient room. Pools of light. Walls in a mid-tone (not near-black). A rug only where one belongs (a home, a library, a lounge), never under machines, wells, consoles or in public places. hanging_lamp is a homely shaded pendant (bars, kitchens, libraries); modern, industrial and sci-fi places light themselves with defined light panels, strips or screens (slot glow) instead.
+- The first view is open: nothing taller than 1 m inside 6 m straight ahead of the player (|x| < 4, -6 < z < 0); colonnades, walls and big props stand to the sides or further out, so the opening view looks INTO the place, not at a pillar.
+- Outdoors: pick the time from the mood (relax / tranquil → golden or dusk; party / city → night; fresh → dawn or day). Put plants in several clumps (cluster, radius 5–8) at 15–40 m, not one blob. Water is big (40–70 m) so its far shore meets the fog.
+- Night scenes: darker building colours so lights carry the scene; daylight scenes lighter, warmer colours. Use the brief's palette and mood everywhere.
+- Weather and motion when the brief has them. Never put weather or sky things indoors.
+- "Around me" / "surround me" / "all around": build 360°, not just ahead: things on all four sides (+z behind them too), each layer nearest-first. Groups around the player: xz [0, 0] with arrange ring and a radius (they face the centre).
+- Landscapes are real scale. Hills (16 m) at 40–90 m; cliffs, canyons and waterfalls at 60–150 m; mountain, mountain_range, volcano, giant_moon and planet far out on the skyline: xz 400–900 m away (e.g. mountain_range xz [0, -700]). They rise out of the ground on their own. Anything you place on a hill or cliff stands on its surface automatically.
 
 ## Catalog
 ${catalog()}
@@ -122,36 +138,43 @@ ${catalog()}
 {"op":"spawn","kind":"fireflies","xz":[0,-10],"size":[30,24]},
 {"op":"say","text":"Fire's lit. Stay as long as you like."}]
 
-## Worked example C — "build a city around me" (brief: "A neon city at night that surrounds the player: a crossroads, shops on every corner, towers all around.")
-[{"op":"atmosphere","time":"night","fog":0.3,"ambient":"city"},
-{"op":"spawn","kind":"road","xz":[0,-22]},
-{"op":"spawn","kind":"road","xz":[0,22]},
-{"op":"spawn","kind":"road","xz":[-22,0],"yaw":90},
-{"op":"spawn","kind":"road","xz":[22,0],"yaw":90},
-{"op":"spawn","kind":"lamp","xz":[-3.6,-3.6]},
-{"op":"spawn","kind":"lamp","xz":[3.6,-3.6]},
-{"op":"spawn","kind":"lamp","xz":[-3.6,3.6]},
-{"op":"spawn","kind":"lamp","xz":[3.6,3.6]},
-{"op":"spawn","kind":"storefront","xz":[-9,-11],"yaw":90,"color":"#2a2f3c","text":"NOODLES"},
-{"op":"spawn","kind":"storefront","xz":[9,-11],"yaw":-90,"color":"#3a2a3c","text":"ARCADE"},
-{"op":"spawn","kind":"storefront","xz":[-9,11],"yaw":90,"color":"#23303a","text":"RAMEN"},
-{"op":"spawn","kind":"storefront","xz":[9,11],"yaw":-90,"color":"#30283a","text":"KARAOKE"},
-{"op":"spawn","kind":"storefront","xz":[-17,-9],"color":"#2c2a36","text":"BAR"},
-{"op":"spawn","kind":"storefront","xz":[17,-9],"color":"#26323a","text":"TATTOO"},
-{"op":"spawn","kind":"storefront","xz":[-17,9],"yaw":180,"color":"#342a30","text":"DINER"},
-{"op":"spawn","kind":"storefront","xz":[17,9],"yaw":180,"color":"#2a3034","text":"HOTEL"},
-{"op":"spawn","kind":"storefront","xz":[-9,-24],"yaw":90,"color":"#2a2d3a","text":"BOOKS"},
-{"op":"spawn","kind":"storefront","xz":[9,-24],"yaw":-90,"color":"#2e2a3a","text":"PHO"},
-{"op":"spawn","kind":"storefront","xz":[-9,24],"yaw":90,"color":"#2a3238","text":"VINYL"},
-{"op":"spawn","kind":"storefront","xz":[9,24],"yaw":-90,"color":"#382a30","text":"SUSHI"},
-{"op":"spawn","kind":"car","xz":[1.8,-14]},
-{"op":"spawn","kind":"car","xz":[-1.8,15],"yaw":180,"color":"#3a6fc0"},
-{"op":"spawn","kind":"car","xz":[14,1.8],"yaw":90,"color":"#e8c547"},
-{"op":"spawn","kind":"tower","xz":[0,0],"count":16,"arrange":"ring","radius":50,"color":"#1e222c"},
-{"op":"spawn","kind":"tower","xz":[0,0],"count":20,"arrange":"ring","radius":78,"scale":1.4,"color":"#1a1d26"},
-{"op":"spawn","kind":"neon_sign","xz":[0,-40],"color":"#ff4fa3","text":"TOKYO 9"},
-{"op":"say","text":"Turn around. It's all yours."}]
-(Lamps stand on the four corners, never on a road. Four arms of road meet under the player; shops line both sides of every arm; two rings of towers close the skyline in every direction.)
+## Worked example C — "an old observatory at night" (brief: "A domed stone observatory at night: a great brass telescope aimed at a slot in the dome, star charts, a desk with a lamp, a cold starry sky through the slot.")
+[{"op":"atmosphere","time":"night","fog":0.2,"ambient":"room","sky":"#0b1030","moons":1},
+{"op":"spawn","kind":"floor","xz":[0,-6],"size":[16,16],"color":"#6e6a62"},
+{"op":"spawn","kind":"wall","xz":[0,2],"size":[16],"color":"#8a8478"},
+{"op":"spawn","kind":"wall","xz":[-8,-6],"yaw":90,"size":[16],"color":"#8a8478"},
+{"op":"spawn","kind":"wall","xz":[8,-6],"yaw":90,"size":[16],"color":"#8a8478"},
+{"op":"spawn","kind":"wall","xz":[0,-14],"size":[16],"color":"#8a8478"},
+{"op":"define","kind":"great_telescope","tags":["telescope","machine","brass"],"hero":true,"parts":[{"shape":"cylinder","size":[1.6,0.5,1.6],"at":[0,0.25,0],"color":"#3a2a20","slot":"trim","material":"wood"},{"shape":"cylinder","size":[0.4,1.8,0.4],"at":[0,1.4,0],"color":"#b08a3e","slot":"primary","material":"metal"},{"shape":"cylinder","size":[0.9,4.6,0.9],"at":[0,3.3,-0.9],"rot":[0.7,0,0],"color":"#c9a34a","slot":"primary","material":"metal"},{"shape":"torus","size":[1.1,1.1,0.12],"at":[0,5,-2.4],"rot":[0.7,0,0],"color":"#7a5a22","slot":"trim","material":"metal"},{"shape":"cylinder","size":[0.3,0.6,0.3],"at":[0,1.9,0.9],"rot":[0.7,0,0],"color":"#7a5a22","slot":"trim","material":"metal"}]},
+{"op":"spawn","kind":"great_telescope","xz":[0,-8],"yaw":180},
+{"op":"define","kind":"star_chart","tags":["chart","decoration","map"],"parts":[{"shape":"box","size":[1.6,1.1,0.06],"at":[0,1.7,0],"color":"#1d2a4e","slot":"primary"},{"shape":"box","size":[1.72,1.22,0.04],"at":[0,1.7,-0.03],"color":"#5a3a22","slot":"trim","material":"wood"},{"shape":"sphere","size":[0.08,0.08,0.02],"at":[-0.4,1.9,0.04],"color":"#f2efe9","slot":"glow"},{"shape":"sphere","size":[0.06,0.06,0.02],"at":[0.3,1.5,0.04],"color":"#f2efe9","slot":"glow"}]},
+{"op":"spawn","kind":"star_chart","xz":[-7.8,-4],"yaw":90},
+{"op":"spawn","kind":"star_chart","xz":[7.8,-8],"yaw":-90},
+{"op":"spawn","kind":"table","xz":[4,-11],"color":"#5a3a22"},
+{"op":"spawn","kind":"chair","xz":[4,-9.8],"yaw":180},
+{"op":"spawn","kind":"hanging_lamp","xz":[4,-11],"color":"#c9a34a"},
+{"op":"spawn","kind":"hanging_lamp","xz":[-4,-4],"color":"#c9a34a"},
+{"op":"spawn","kind":"bookshelf","xz":[-4,-13.6],"count":2,"arrange":"line"},
+{"op":"spawn","kind":"potted_plant","xz":[-6.8,-12.8]},
+{"op":"spawn","kind":"dust_motes","xz":[0,-6]},
+{"op":"say","text":"Look up. The sky is clear tonight."}]
+(The telescope and the charts are defined: the catalog has none, and a bookshelf or a lamp would not read as an observatory.)
+
+## Worked example D — "a desert oasis" (brief: "A palm-ringed oasis pool in golden desert dunes at noon, a few traders' tents, camels resting, heat haze.")
+[{"op":"atmosphere","time":"day","fog":0.3,"ambient":"wind","sky":"#6fa3d8","horizon":"#f0d9a8"},
+{"op":"spawn","kind":"water","xz":[0,-14],"size":[16,12],"color":"#3f8f8f"},
+{"op":"define","kind":"date_palm","tags":["palm","tree","plant"],"hero":true,"parts":[{"shape":"cylinder","size":[0.45,6,0.45],"at":[0,3,0],"rot":[0.08,0,0],"color":"#8a6a44","slot":"trim","material":"wood"},{"shape":"cone","size":[3.2,1,0.8],"at":[1.2,6,0],"rot":[0,0,-0.5],"color":"#4f8a3c","slot":"primary"},{"shape":"cone","size":[3.2,1,0.8],"at":[-1.2,6,0],"rot":[0,0,0.5],"color":"#4f8a3c","slot":"primary"},{"shape":"cone","size":[0.8,1,3.2],"at":[0,6,1.2],"rot":[0.5,0,0],"color":"#4f8a3c","slot":"primary"},{"shape":"cone","size":[0.8,1,3.2],"at":[0,6,-1.2],"rot":[-0.5,0,0],"color":"#4f8a3c","slot":"primary"},{"shape":"sphere","size":[0.6,0.5,0.6],"at":[0,5.7,0],"color":"#a0522d","slot":"trim"}]},
+{"op":"spawn","kind":"date_palm","xz":[0,-14],"count":8,"arrange":"ring","radius":10},
+{"op":"spawn","kind":"tent","xz":[-12,-4],"yaw":60,"color":"#c0453a"},
+{"op":"spawn","kind":"tent","xz":[12,-6],"yaw":-60,"color":"#e8c547"},
+{"op":"define","kind":"camel","tags":["camel","animal","creature"],"parts":[{"shape":"capsule","size":[0.9,0.9,2.2],"at":[0,1.7,0],"rot":[1.571,0,0],"color":"#c19a6b","slot":"primary"},{"shape":"sphere","size":[0.8,0.6,0.8],"at":[0,2.2,-0.2],"color":"#c19a6b","slot":"primary"},{"shape":"capsule","size":[0.3,0.3,1.2],"at":[0,2.3,1.3],"rot":[0.6,0,0],"color":"#c19a6b","slot":"primary"},{"shape":"box","size":[0.35,0.35,0.6],"at":[0,2.8,1.8],"color":"#b08a5e","slot":"trim"},{"shape":"cylinder","size":[0.18,1.3,0.18],"at":[0.3,0.65,0.7],"color":"#b08a5e","slot":"trim"},{"shape":"cylinder","size":[0.18,1.3,0.18],"at":[-0.3,0.65,0.7],"color":"#b08a5e","slot":"trim"},{"shape":"cylinder","size":[0.18,1.3,0.18],"at":[0.3,0.65,-0.7],"color":"#b08a5e","slot":"trim"},{"shape":"cylinder","size":[0.18,1.3,0.18],"at":[-0.3,0.65,-0.7],"color":"#b08a5e","slot":"trim"}]},
+{"op":"spawn","kind":"camel","xz":[8,-20],"count":3,"arrange":"cluster","radius":4},
+{"op":"spawn","kind":"person","xz":[-9,-7],"count":3,"arrange":"cluster","radius":3,"role":"trader"},
+{"op":"spawn","kind":"rock","xz":[-18,-26],"count":5,"arrange":"cluster","radius":5,"color":"#c49a6c"},
+{"op":"spawn","kind":"hill","xz":[-70,-90],"color":"#d8b878"},
+{"op":"spawn","kind":"hill","xz":[80,-120],"color":"#e0c088"},
+{"op":"spawn","kind":"bird","xz":[0,-20],"count":5,"altitude":20,"motion":"orbit"},
+{"op":"say","text":"Water, shade and a cool drink. Rest."}]
 `
 
 export interface DirectorRequest {
@@ -184,7 +207,7 @@ export async function* directScene(req: DirectorRequest): AsyncGenerator<Directo
     digest: DIRECTOR_DIGEST,
     prompt: directorPrompt(req),
     reasoning: 'none',
-    maxOutputTokens: req.maxOutputTokens ?? 5000,
+    maxOutputTokens: req.maxOutputTokens ?? 7000,
     // A recipe is ~1.5k output tokens (~9 s); anything past the deadline is a hung stream.
     timeoutMs: req.timeoutMs ?? 45_000,
     signal: req.signal

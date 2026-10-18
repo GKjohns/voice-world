@@ -86,6 +86,13 @@ const SCENES = {
     ['some villagers', [{ op: 'spawn', kind: 'person', count: 4, arrange: 'cluster', at: { anchor: 'gaze' }, radius: 4, set: { role: 'villager' } }]],
     ['a fisherman', [{ op: 'spawn', kind: 'person', at: { anchor: 'player', dir: 'right', dist: 7 }, set: { role: 'fisherman', name: 'Mara' } }]]
   ),
+  // Gauntlet loop 1 (track B): a tower to stand on, a lit tower you can knock over, a weightless field, a flight.
+  tower: () => build(['a tall tower', [{ op: 'spawn', kind: 'tower', at: { anchor: 'gaze' } }]]),
+  floating: () => build(
+    ['some rocks', [{ op: 'spawn', kind: 'rock', count: 6, arrange: 'cluster', at: { anchor: 'gaze' } }]],
+    ['turn gravity off', [{ op: 'atmosphere', gravity: false }]]
+  ),
+  flying: () => build(['let me fly', [{ op: 'atmosphere', fly: true }]]),
   poolHall: () => build(['a pool hall', [{ op: 'spawn', kind: 'floor', at: { anchor: 'player', dist: 0 }, set: { length: 30, width: 30 } }, { op: 'spawn', kind: 'pool_table', count: 3, arrange: 'line', at: { anchor: 'player', dist: 10 } }, { op: 'atmosphere', time: 'interior' }]])
 } satisfies Record<string, () => WorldState>
 
@@ -398,6 +405,43 @@ const CASES: Case[] = [
   { name: 'people: Mara follow me', text: 'make Mara follow me', scene: 'town', check: (o) => {
     const mara = o.after.entities.find(e => e.props.name === 'Mara')!
     return expect(mara.props.act === 'follow' && o.after.entities.filter(e => e.props.act === 'follow').length === 1, `acts ${o.after.entities.filter(e => e.kind === 'person').map(e => `${e.props.name}:${e.props.act ?? '-'}`).join(',')}`)
+  } },
+  // ---- Gauntlet loop 1 (track B): held-out phrasings for physics, powers, followers, the sky and no kit swaps ----
+  { name: 'phys: a tower of boxes', text: 'pile four boxes into a tower', scene: 'empty', check: (o) => {
+    const b = added(o).filter(e => !e.tags.includes('placeholder'))
+    const ys = b.map(e => e.pos[1]).sort((x, y) => x - y)
+    return expect(b.length === 4 && o.ops.some(op => op.op === 'spawn' && op.arrange === 'stack') && ys[3]! > ys[0]! + 1, `${b.length} new, ys ${ys.map(y => y.toFixed(1)).join(' ')}, ops ${o.ops.map(x => x.op === 'spawn' ? `spawn ${x.arrange ?? ''}` : x.op).join(',')}`)
+  } },
+  { name: 'phys: let it fall from the sky', text: 'let a boulder fall out of the sky', scene: 'empty', check: o => expect(added(o).some(e => e.launch?.kind === 'drop'), `ops ${JSON.stringify(o.ops.filter(x => x.op === 'spawn'))}`) },
+  { name: 'phys: gravity off', text: 'switch off gravity', scene: 'grove', check: o => expect(o.after.atmosphere.gravity === false && added(o).length === 0, `atmo ${JSON.stringify(o.after.atmosphere)}, added ${kinds(added(o))}`) },
+  { name: 'phys: gravity back', text: 'bring gravity back', scene: 'floating', check: o => expect(o.after.atmosphere.gravity === undefined, `atmo ${JSON.stringify(o.after.atmosphere)}`) },
+  { name: 'phys: throw far', text: 'chuck a snowball as far as you can', scene: 'empty', check: (o) => {
+    const t = added(o).find(e => e.launch?.kind === 'throw')
+    return expect(!!t && distXZ(t.pos, o.ctx.player.pos) >= 25, `thrown ${t ? distXZ(t.pos, o.ctx.player.pos).toFixed(0) : 'nothing'} (${kinds(added(o))})`)
+  } },
+  { name: 'phys: upside down', text: 'turn that house upside down', scene: 'oneHouse', ctx: s => lookAt(s, e => e.kind === 'house'), check: o => expect(o.after.entities.find(e => e.kind === 'house')?.props.tip === 180, `tip ${o.after.entities.find(e => e.kind === 'house')?.props.tip}`) },
+  { name: 'phys: push it over', text: 'push it over onto its side', scene: 'tower', ctx: s => lookAt(s, e => e.kind === 'tower'), check: o => expect([90, -90, 270].includes(o.after.entities.find(e => e.kind === 'tower')?.props.tip ?? 0), `tip ${o.after.entities.find(e => e.kind === 'tower')?.props.tip}`) },
+  { name: 'power: wish to fly', text: 'I wish I could fly', scene: 'grove', check: o => expect(o.after.atmosphere.fly === true && added(o).length === 0, `atmo ${JSON.stringify(o.after.atmosphere)}, added ${kinds(added(o))}`) },
+  { name: 'power: land', text: 'okay put me back on the ground', scene: 'flying', check: o => expect(!o.after.atmosphere.fly, `atmo ${JSON.stringify(o.after.atmosphere)}`) },
+  { name: 'power: stand on top', text: 'can I stand on top of the tower', scene: 'tower', check: o => expect(o.ops.some(op => op.op === 'goto' && op.side !== 'front'), `ops ${o.ops.map(x => x.op).join(',')}`) },
+  { name: 'follow: a puppy trails me', text: 'a puppy that trails behind me wherever I go', scene: 'empty', check: o => expect(added(o).some(e => e.kind === 'dog' && e.props.motion === 'follow'), `added ${added(o).map(e => `${e.kind}:${e.props.motion ?? '-'}`).join(',')}`) },
+  { name: 'sky: paint it orange', text: 'paint the sky orange', scene: 'empty', check: (o) => {
+    const v = hsl(o.after.atmosphere.sky)
+    return expect(!!v && v[0] >= 10 && v[0] <= 45, `sky ${o.after.atmosphere.sky}`)
+  } },
+  { name: 'sky: a second moon', text: 'hang a second moon up there', scene: 'night', check: o => expect(o.after.atmosphere.moons === 2 && !added(o).some(e => e.kind === 'giant_moon'), `moons ${o.after.atmosphere.moons}, added ${kinds(added(o))}`) },
+  { name: 'sky: raging snowstorm', text: 'a raging snowstorm', scene: 'grove', check: o => expect(o.after.atmosphere.weather === 'snow' && (o.after.atmosphere.intensity ?? 0) >= 0.8, `atmo ${JSON.stringify(o.after.atmosphere)}`) },
+  { name: 'novel: a lighthouse is not a tower', text: 'build a lighthouse', scene: 'empty', check: o => expect(learnedAdded(o).some(k => /lighthouse/.test(k.kind)) && !added(o).some(e => e.kind === 'tower'), `learned ${learnedAdded(o).map(k => k.kind).join(',') || 'none'}, added ${kinds(added(o))}`) },
+  { name: 'novel: a barn is not a house', text: 'a big red barn', scene: 'empty', check: o => expect(learnedAdded(o).some(k => /barn/.test(k.kind)) && !added(o).some(e => e.kind === 'house'), `learned ${learnedAdded(o).map(k => k.kind).join(',') || 'none'}, added ${kinds(added(o))}`) },
+  { name: 'novel: monoliths around me', text: 'surround me with a ring of tall stone monoliths', scene: 'empty', check: (o) => {
+    const m = added(o).filter(e => e.kind !== 'rock')
+    return expect(m.length >= 6 && learnedAdded(o).length >= 1 && !added(o).some(e => e.kind === 'rock'), `added ${kinds(added(o))} ×${added(o).length}`)
+  } },
+  { name: 'novel: picnic blanket is not a rug', text: 'lay out a picnic blanket', scene: 'empty', check: o => expect(!added(o).some(e => e.kind === 'rug') && learnedAdded(o).length >= 1, `added ${kinds(added(o))}`) },
+  { name: 'place: right in front of me', text: 'a telescope right in front of me', scene: 'empty', check: (o) => {
+    const t = added(o)[0]
+    const d = t ? distXZ(t.pos, o.ctx.player.pos) : -1
+    return expect(d >= 2 && d <= 6.5, `dist ${d.toFixed(1)} (${kinds(added(o))})`)
   } }
 ]
 
@@ -423,7 +467,7 @@ const models = argv.filter(a => !a.startsWith('--') && !flagVals.has(a))
 const only = flag('--only')
 const repeat = Number(flag('--repeat') ?? 1)
 const conc = Number(flag('--conc') ?? 4)
-const cases = CASES.filter(c => !only || c.name.includes(only))
+const cases = CASES.filter(c => !only || only.split(',').some(o => c.name.includes(o)))
 
 interface Row { model: string, name: string, pass: boolean, why: string, ms: number, first: number, provider?: string, cost: number, cacheRead: number, out: number, ops: Op[], dropped: number, error?: string }
 

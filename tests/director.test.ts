@@ -77,9 +77,11 @@ test('directorToOp moves flat props into set and keeps atmosphere/say as they ar
 
 // Since Loop 1 the Director writes JSON in plain text (no grammar), so the budget is a guard on flatness, not a
 // compile limit. Loop 2 added altitude, motion and weather (16).
-test('the Director schema stays flat (≤ 16 optional fields) and the intent digest never mentions xz', () => {
+// The Director writes plain JSON text (no grammar since Loop 1), so the bound is about keeping the shape
+// teachable; Gauntlet loop 1 added define's tags, parts and hero.
+test('the Director schema stays flat (≤ 20 optional fields) and the intent digest never mentions xz', () => {
   const optional = Object.values(DirectorOpSchema.shape).filter(f => f.safeParse(undefined).success).length
-  assert.ok(optional <= 16, `${optional} optional fields`)
+  assert.ok(optional <= 20, `${optional} optional fields`)
   assert.ok(!/\bxz\b/.test(DIGEST), 'intent digest mentions xz')
   assert.ok(/\bxz\b/.test(DIRECTOR_DIGEST))
 })

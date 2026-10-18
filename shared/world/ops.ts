@@ -17,14 +17,17 @@ export const SHAPES = ['box', 'cylinder', 'cone', 'sphere', 'torus', 'capsule'] 
  */
 export const FORGE_SHAPES = ['tube', 'lathe', 'extrude'] as const
 export const SLOTS = ['primary', 'trim', 'glow'] as const
-export const ARRANGEMENTS = ['cluster', 'line', 'ring', 'grid', 'scatter', 'along'] as const
+/** stack: one on top of another, each resting on the one below ("stack five crates"). */
+export const ARRANGEMENTS = ['cluster', 'line', 'ring', 'grid', 'scatter', 'along', 'stack'] as const
 export const FACINGS = ['player', 'center', 'along', 'random'] as const
 export const TIMES = ['dawn', 'day', 'golden', 'dusk', 'night', 'interior'] as const
-export const OP_NAMES = ['spawn', 'define', 'modify', 'move', 'remove', 'undo', 'reset', 'atmosphere', 'teleport', 'say'] as const
+/** goto (Gauntlet loop 1): carry the player to a thing ("take me to the top of the tower", "stand on the roof"). */
+export const OP_NAMES = ['spawn', 'define', 'modify', 'move', 'remove', 'undo', 'reset', 'atmosphere', 'teleport', 'goto', 'say'] as const
 /** Ambient noise beds (synthesized, no files). Director-only: the intent model never sets them. */
 export const AMBIENTS = ['none', 'water', 'wind', 'room', 'city', 'fire'] as const
 /** Loop 2: how a thing moves (rendered per frame by app/world/fx/motion.ts, never stored as positions). */
-export const MOTIONS = ['none', 'hover', 'drift', 'orbit', 'fly', 'wander', 'gallop', 'spin', 'sway'] as const
+/** follow (Gauntlet loop 1): a creature trails the player and keeps up ("a dog that follows me"). */
+export const MOTIONS = ['none', 'hover', 'drift', 'orbit', 'fly', 'wander', 'gallop', 'spin', 'sway', 'follow'] as const
 /** What an orbit, gallop loop or flight circles: its own group's centre, the player, or the gaze point. */
 export const AROUNDS = ['self', 'player', 'gaze'] as const
 /** Persistent weather (atmosphere.weather) and one-shot sky events (atmosphere.event). */
@@ -101,7 +104,13 @@ export const PropsSchema = z.object({
   /** A person's gender when the sentence says ("two guys", "an old woman"): f | m. */
   gender: z.string().trim().transform(g => (/^(f|female|woman|women|girl|lady|she)/i.test(g) ? 'f' as const : 'm' as const)).optional(),
   /** Set by the kernel on every act (the sentence's seed), so "wave again" replays even when act is unchanged. */
-  actId: z.number().optional()
+  actId: z.number().optional(),
+  // Gauntlet loop 1, physics-lite. drop: it falls from this many metres up ('sky' = 25 m) and settles on the
+  // ground or on top of whatever is under it. throw: thrown from the player's eye toward the gaze, landing
+  // this many metres away. tip: degrees it is turned over (90 = toppled on its side, 180 = upside down).
+  drop: z.union([num(0.5, 120), z.literal('sky')]).optional(),
+  throw: num(1, 150).optional(),
+  tip: num(-360, 360).optional()
 })
 export type Props = z.infer<typeof PropsSchema>
 
@@ -190,6 +199,13 @@ export const LooseOpSchema = z.object({
   weather: z.enum(WEATHERS).optional(),
   event: z.enum(SKY_EVENTS).optional(),
   playerScale: z.number().optional(),
+  gravity: z.boolean().optional(),
+  fly: z.boolean().optional(),
+  sky: z.string().optional(),
+  horizon: z.string().optional(),
+  moons: z.number().optional(),
+  intensity: z.number().optional(),
+  side: z.string().optional(),
   world: z.string().optional(),
   brief: z.string().optional(),
   text: z.string().optional()
@@ -213,7 +229,7 @@ export const OpsEnvelope = z.object({ ops: z.array(LooseOpSchema) })
 export const DirectorOpSchema = z.object({
   // Key order is the grammar's order: atmosphere keys first, then spawn keys, `text` last (say, neon),
   // so a model that has just written a sign's text isn't walked back through atmosphere keys.
-  op: z.enum(['atmosphere', 'spawn', 'say']),
+  op: z.enum(['atmosphere', 'define', 'spawn', 'say']),
   time: z.string().optional(),
   fog: z.number().optional(),
   ambient: z.string().optional(),
@@ -229,6 +245,13 @@ export const DirectorOpSchema = z.object({
   color: z.string().optional(),
   altitude: z.union([z.number(), z.string()]).optional(),
   motion: z.string().optional(),
+  // define (Gauntlet loop 1): a signature prop the catalog lacks, in the intent language's part format.
+  tags: z.array(z.string()).optional(),
+  parts: z.array(z.unknown()).optional(),
+  /** The one signature prop per place that is worth forging into a high-quality version. */
+  hero: z.boolean().optional(),
+  /** person spawns: their job ("guard", "trader"). */
+  role: z.string().optional(),
   text: z.string().optional()
 })
 export type DirectorOp = z.infer<typeof DirectorOpSchema>
@@ -241,12 +264,18 @@ export function directorToOp(raw: unknown): unknown {
   if (!raw || typeof raw !== 'object') return raw
   const d = raw as Partial<DirectorOp> & Record<string, unknown>
   if (d.op === 'say') return { op: 'say', text: d.text }
+  if (d.op === 'define') {
+    const out: Record<string, unknown> = { op: 'define', kind: d.kind, tags: d.tags ?? [], parts: d.parts }
+    if (d.hero === true) out.hero = true
+    return out
+  }
   if (d.op === 'atmosphere') {
     const out: Record<string, unknown> = { op: 'atmosphere' }
     if (d.time !== undefined) out.time = d.time
     if (typeof d.fog === 'number') out.fog = Math.min(1, Math.max(0, d.fog))
     if (d.ambient !== undefined) out.ambient = d.ambient
     if (typeof d.weather === 'string' && (WEATHERS as readonly string[]).includes(d.weather)) out.weather = d.weather
+    for (const k of ['sky', 'horizon', 'moons', 'intensity', 'gravity'] as const) if ((raw as Record<string, unknown>)[k] !== undefined) out[k] = (raw as Record<string, unknown>)[k]
     return out
   }
   if (d.op !== 'spawn') return raw
@@ -256,6 +285,7 @@ export function directorToOp(raw: unknown): unknown {
   if (typeof d.scale === 'number' && d.scale > 0) set.scale = d.scale
   if (d.altitude === 'sky' || (typeof d.altitude === 'number' && d.altitude >= 0)) set.altitude = typeof d.altitude === 'number' ? Math.min(150, d.altitude) : 'sky'
   if (typeof d.motion === 'string' && (MOTIONS as readonly string[]).includes(d.motion)) set.motion = d.motion
+  if (typeof d.role === 'string' && d.role.trim()) set.role = d.role.trim().slice(0, 32)
   if (Array.isArray(d.size)) {
     if (typeof d.size[0] === 'number' && d.size[0] > 0) set.length = d.size[0]
     if (typeof d.size[1] === 'number' && d.size[1] > 0) set.width = d.size[1]
@@ -293,7 +323,9 @@ const DefineOp = z.object({
   op: z.literal('define'),
   kind: kindName,
   tags: z.array(z.string().trim().min(1).max(32)).max(12).optional(),
-  parts: z.array(PartSchema).min(1).max(MAX_PARTS)
+  parts: z.array(PartSchema).min(1).max(MAX_PARTS),
+  /** Director only: this place's signature prop, worth one forge refine. Never changes the kernel's result. */
+  hero: z.boolean().optional()
 }).transform(d => ({
   ...d,
   tags: (d.tags ?? []).map(t => t.toLowerCase()),
@@ -315,7 +347,7 @@ const ModifyOp = z.object({
 const MoveOp = z.object({ op: z.literal('move'), target: SelectorSchema, at: PlacementSchema })
 const RemoveOp = z.object({ op: z.literal('remove'), target: SelectorSchema })
 const UndoOp = z.object({ op: z.literal('undo') })
-/** "Start over": back to the starting world (no entities, dusk, clear sky, normal size). Never logged. */
+/** "Start over": back to the starting world (no entities, golden hour, clear sky, normal size). Never logged. */
 const ResetOp = z.object({ op: z.literal('reset') })
 
 const AtmosphereOp = z.object({
@@ -326,10 +358,21 @@ const AtmosphereOp = z.object({
   weather: z.enum(WEATHERS).optional(),
   event: z.enum(SKY_EVENTS).optional(),
   // "Make me tiny" / "make everything ten times bigger": the player's size (eye height, stride). 1 = normal.
-  playerScale: num(0.02, 10).optional()
-}).refine(a => a.time !== undefined || a.fog !== undefined || a.ambient !== undefined || a.weather !== undefined || a.event !== undefined || a.playerScale !== undefined, 'atmosphere needs time, fog, ambient, weather, event or playerScale')
+  playerScale: num(0.02, 10).optional(),
+  // Gauntlet loop 1. gravity false: loose things float up and turn (true brings them down). fly: the player
+  // flies (Space rises, look + W carries you). sky / horizon: custom sky colours (hex) over the time preset.
+  // moons: how many moons hang in the sky (0–3). intensity 0..1: how hard the weather is (1 = a blizzard's white-out).
+  gravity: z.boolean().optional(),
+  fly: z.boolean().optional(),
+  sky: color.optional(),
+  horizon: color.optional(),
+  moons: num(0, 3, true).optional(),
+  intensity: num(0, 1).optional()
+}).refine(a => Object.keys(a).some(k => k !== 'op'), 'atmosphere needs at least one field')
 
 const TeleportOp = z.object({ op: z.literal('teleport'), world: z.string().trim().min(1).max(80), brief: z.string().max(400).optional() })
+/** "Take me to the top of the tower": the player glides to the target (on_top = stands on its highest point; front = before it). */
+const GotoOp = z.object({ op: z.literal('goto'), target: SelectorSchema, side: z.enum(['on_top', 'front']).optional() })
 const SayOp = z.object({ op: z.literal('say'), text: z.string().trim().min(1).max(280) })
 
 const STRICT = {
@@ -342,6 +385,7 @@ const STRICT = {
   reset: ResetOp,
   atmosphere: AtmosphereOp,
   teleport: TeleportOp,
+  goto: GotoOp,
   say: SayOp
 } as const
 
@@ -354,9 +398,10 @@ export type UndoOp = z.infer<typeof UndoOp>
 export type ResetOp = z.infer<typeof ResetOp>
 export type AtmosphereOp = z.infer<typeof AtmosphereOp>
 export type TeleportOp = z.infer<typeof TeleportOp>
+export type GotoOp = z.infer<typeof GotoOp>
 export type SayOp = z.infer<typeof SayOp>
 /** A strictly validated op. The engine only ever sees these. */
-export type Op = SpawnOp | DefineOp | ModifyOp | MoveOp | RemoveOp | UndoOp | ResetOp | AtmosphereOp | TeleportOp | SayOp
+export type Op = SpawnOp | DefineOp | ModifyOp | MoveOp | RemoveOp | UndoOp | ResetOp | AtmosphereOp | TeleportOp | GotoOp | SayOp
 
 export interface DroppedOp {
   index: number

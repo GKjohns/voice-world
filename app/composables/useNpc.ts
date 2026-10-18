@@ -98,6 +98,8 @@ const casts = new Map<string, Promise<CastEntry | undefined>>()
 let people: People | null = null
 let renderer: WorldRenderer | null = null
 let saveTimer: ReturnType<typeof setTimeout> | undefined
+/** Bumped by every wipe, so persona answers that started before it are dropped. */
+let mindGeneration = 0
 let lastHistoryN = 0
 let convoLastAt = 0
 let lastSpoken: { id: string, text: string, at: number } | null = null
@@ -204,11 +206,16 @@ async function ensurePersona(e: Entity): Promise<void> {
   const m = mindOf(e)
   if (m.personaState !== 'stand-in') return
   m.personaState = 'pending'
+  const gen = mindGeneration
   try {
     const cast = await casts.get(m.sig)
+    if (gen !== mindGeneration) return
     const others = othersOf(e)
     const res = await fetch('/api/npc/persona', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ seed: seedOf(e), scene: sceneFor(e), others, cast, place: useWorld().state.value.place }) })
     const out = await res.json() as { persona?: Persona, error?: string }
+    // Gauntlet loop 1: the world was wiped (start over, teleport) while this mind was being written. Ids
+    // restart after a reset, so a late answer would hand an old person's life to a new one: drop it.
+    if (gen !== mindGeneration) return
     if (out.persona) {
       m.persona = { ...out.persona, name: e.props.name ?? out.persona.name }
       m.personaState = out.persona.generated ? 'ready' : 'stand-in'
@@ -696,6 +703,9 @@ async function summarize(m: Mind, turns: Turn[]) {
   save()
 }
 
+/** The visitor asking someone to come along with them. */
+const FOLLOW_ASK = /\b(follow me|come with me|come along|tag along|walk with me|join me|keep up|stay with me|follow along)\b/i
+
 function applyActions(id: string, actions: NpcAction[], ctx: OpContext) {
   if (!people) return
   const e = entityOf(id)
@@ -832,6 +842,9 @@ async function talk(id: string, utterance: string, ctx: OpContext = useWorld().s
   if (toSummarize.length) void summarize(m, toSummarize)
   convoLastAt = performance.now()
   if (reply.mood) people.setMood(id, reply.mood, 10)
+  // Gauntlet loop 1: "can you follow me?" answered "Yes, I'll come along" but with no follow action left the
+  // wizard behind. Asked to come along and not refusing means they come.
+  if (FOLLOW_ASK.test(utterance) && !reply.actions.some(a => a.act === 'follow' || a.act === 'walk_to') && !/\b(can't|cannot|won't|not now|no,)\b/i.test(say)) reply.actions.push({ act: 'follow' } as NpcAction)
   applyActions(id, reply.actions, ctx)
   overheard(e, utterance, say)
   save()
@@ -958,6 +971,7 @@ function detach() {
  * are gone, and a new person reusing an old id must not inherit a stranger's memories).
  */
 function wipe() {
+  mindGeneration++
   stopBanter()
   voiceQ?.stop()
   voiceQ = null

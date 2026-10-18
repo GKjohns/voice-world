@@ -1,0 +1,558 @@
+{
+ "url": "http://localhost:3091/",
+ "startedAt": "2026-10-18T03:47:56.615Z",
+ "minutes": 1.3,
+ "spend": 0.0063383,
+ "spendBy": {
+  "/api/intent (est)": 0.006,
+  "/api/npc/persona": 0.00033830000000000004
+ },
+ "forgeStatus": {
+  "total": 1.157,
+  "session": 0,
+  "calls": 43,
+  "cap": 12,
+  "sessionCap": 1.5
+ },
+ "results": [
+  {
+   "id": "god_tiny",
+   "group": "god",
+   "steps": [
+    {
+     "step": 1,
+     "text": "a picnic blanket with some food on it",
+     "thought": true,
+     "idleMs": 3388,
+     "intent": {
+      "model": "haiku",
+      "ms": 3601,
+      "firstOpMs": 3377,
+      "count": 3
+     },
+     "entry": {
+      "ops": [
+       "define picnic_blanket(9)"
+      ],
+      "dropped": 0,
+      "notes": [],
+      "say": [],
+      "spawned": 0,
+      "modified": 0,
+      "removed": 0
+     },
+     "director": null,
+     "forge": [
+      {
+       "kind": "picnic_blanket",
+       "tier": "good",
+       "outcome": "library hit",
+       "draftMs": 3381,
+       "refinedMs": 4287,
+       "parts": 25,
+       "usd": 0,
+       "library": true
+      }
+     ],
+     "fps": {
+      "avg": 60,
+      "min1": 60,
+      "gap": 17
+     },
+     "before": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "after": {
+      "pos": [
+       0,
+       1.6,
+       -6.66
+      ],
+      "yaw": 0,
+      "pitch": -0.19
+     },
+     "census": {
+      "entities": 1,
+      "kinds": 1,
+      "top": [
+       "picnic_blanket×1"
+      ],
+      "time": "golden"
+     },
+     "hud": "A feast, laid out on the grass.",
+     "shot": "001_god_tiny_s1_a_picnic_blanket_with_some_f.jpg"
+    },
+    {
+     "step": 2,
+     "text": "shrink me to the size of an ant",
+     "thought": true,
+     "idleMs": 960,
+     "intent": {
+      "model": "haiku",
+      "ms": 1002,
+      "firstOpMs": 946,
+      "count": 2
+     },
+     "entry": {
+      "ops": [
+       "atmosphere "
+      ],
+      "dropped": 0,
+      "notes": [],
+      "say": [],
+      "spawned": 0,
+      "modified": 0,
+      "removed": 0
+     },
+     "director": null,
+     "forge": [],
+     "fps": {
+      "avg": 60,
+      "min1": 60,
+      "gap": 17
+     },
+     "before": {
+      "pos": [
+       0,
+       1.6,
+       -6.66
+      ],
+      "yaw": 0,
+      "pitch": -0.19
+     },
+     "after": {
+      "pos": [
+       0,
+       0.03,
+       -6.66
+      ],
+      "yaw": 0,
+      "pitch": 0.2
+     },
+     "census": {
+      "entities": 1,
+      "kinds": 1,
+      "top": [
+       "picnic_blanket×1"
+      ],
+      "time": "golden"
+     },
+     "hud": "Small as an ant. Look up.",
+     "shot": "002_god_tiny_s2_shrink_me_to_the_size_of_an_.jpg"
+    }
+   ],
+   "fps": {
+    "avg": 60,
+    "min1": 60,
+    "gap": 17
+   },
+   "usd": 0.002,
+   "errors": [],
+   "errorCount": 0
+  },
+  {
+   "id": "sky_two_moons",
+   "group": "sky",
+   "steps": [
+    {
+     "step": 1,
+     "text": "turn the sky purple and give it two moons",
+     "thought": true,
+     "idleMs": 1275,
+     "intent": {
+      "model": "haiku",
+      "ms": 1457,
+      "firstOpMs": 1262,
+      "count": 2
+     },
+     "entry": {
+      "ops": [
+       "atmosphere #7b4fa6"
+      ],
+      "dropped": 0,
+      "notes": [],
+      "say": [],
+      "spawned": 0,
+      "modified": 0,
+      "removed": 0
+     },
+     "director": null,
+     "forge": [],
+     "fps": {
+      "avg": 60,
+      "min1": 60,
+      "gap": 17
+     },
+     "before": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "after": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "census": {
+      "entities": 0,
+      "kinds": 0,
+      "top": [],
+      "time": "golden"
+     },
+     "hud": "A purple sky. Two moons rise.",
+     "shot": "003_sky_two_moons_s1_turn_the_sky_purple_and_give.jpg"
+    }
+   ],
+   "fps": {
+    "avg": 60,
+    "min1": 60,
+    "gap": 17
+   },
+   "usd": 0.001,
+   "errors": [],
+   "errorCount": 0
+  },
+  {
+   "id": "sky_blizzard",
+   "group": "sky",
+   "steps": [
+    {
+     "step": 1,
+     "text": "some pine trees",
+     "thought": true,
+     "idleMs": 1124,
+     "intent": {
+      "model": "haiku",
+      "ms": 1201,
+      "firstOpMs": 1102,
+      "count": 2
+     },
+     "entry": {
+      "ops": [
+       "spawn pine×5"
+      ],
+      "dropped": 0,
+      "notes": [],
+      "say": [],
+      "spawned": 5,
+      "modified": 0,
+      "removed": 0
+     },
+     "director": null,
+     "forge": [],
+     "fps": {
+      "avg": 60,
+      "min1": 60,
+      "gap": 17
+     },
+     "before": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "after": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "census": {
+      "entities": 5,
+      "kinds": 1,
+      "top": [
+       "pine×5"
+      ],
+      "time": "golden"
+     },
+     "hud": "A few pines rise.",
+     "shot": "004_sky_blizzard_s1_some_pine_trees.jpg"
+    },
+    {
+     "step": 2,
+     "text": "now a blizzard",
+     "thought": true,
+     "idleMs": 1104,
+     "intent": {
+      "model": "haiku",
+      "ms": 1265,
+      "firstOpMs": 1095,
+      "count": 2
+     },
+     "entry": {
+      "ops": [
+       "atmosphere snow"
+      ],
+      "dropped": 0,
+      "notes": [],
+      "say": [],
+      "spawned": 0,
+      "modified": 0,
+      "removed": 0
+     },
+     "director": null,
+     "forge": [],
+     "fps": {
+      "avg": 60,
+      "min1": 60,
+      "gap": 17
+     },
+     "before": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "after": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "census": {
+      "entities": 5,
+      "kinds": 1,
+      "top": [
+       "pine×5"
+      ],
+      "time": "golden",
+      "weather": "snow"
+     },
+     "hud": "Winter closes in. Hold on.",
+     "shot": "005_sky_blizzard_s2_now_a_blizzard.jpg"
+    }
+   ],
+   "fps": {
+    "avg": 60,
+    "min1": 60,
+    "gap": 17
+   },
+   "usd": 0.002,
+   "errors": [],
+   "errorCount": 0
+  },
+  {
+   "id": "people_wizard",
+   "group": "people",
+   "steps": [
+    {
+     "step": 1,
+     "text": "put a wizard right in front of me",
+     "thought": true,
+     "idleMs": 1299,
+     "intent": {
+      "model": "haiku",
+      "ms": 1355,
+      "firstOpMs": 1277,
+      "count": 2
+     },
+     "entry": {
+      "ops": [
+       "spawn person×1"
+      ],
+      "dropped": 0,
+      "notes": [],
+      "say": [],
+      "spawned": 1,
+      "modified": 0,
+      "removed": 0
+     },
+     "director": null,
+     "forge": [],
+     "fps": {
+      "avg": 60,
+      "min1": 60,
+      "gap": 17
+     },
+     "before": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "after": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "census": {
+      "entities": 1,
+      "kinds": 1,
+      "top": [
+       "person×1"
+      ],
+      "time": "golden"
+     },
+     "hud": "A wizard, before you.",
+     "shot": "006_people_wizard_s1_put_a_wizard_right_in_front_.jpg"
+    },
+    {
+     "step": 2,
+     "text": "hello! who are you?",
+     "thought": false,
+     "idleMs": 4007,
+     "intent": null,
+     "entry": null,
+     "director": null,
+     "forge": [],
+     "replyMs": 2,
+     "fps": {
+      "avg": 60,
+      "min1": 60,
+      "gap": 17
+     },
+     "before": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "after": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "census": {
+      "entities": 1,
+      "kinds": 1,
+      "top": [
+       "person×1"
+      ],
+      "time": "golden"
+     },
+     "hud": "PIA Oh, sleet and salt, you startled me! I'm Pia, I keep the road lanterns out here. Mind the grass, the wind's been tangling everything tonight.",
+     "shot": "007_people_wizard_s2_hello_who_are_you.jpg"
+    },
+    {
+     "step": 3,
+     "text": "can you follow me?",
+     "thought": false,
+     "idleMs": 4117,
+     "intent": null,
+     "entry": null,
+     "director": null,
+     "forge": [],
+     "replyMs": 1,
+     "fps": {
+      "avg": 60,
+      "min1": 60,
+      "gap": 17
+     },
+     "before": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "after": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "census": {
+      "entities": 1,
+      "kinds": 1,
+      "top": [
+       "person×1"
+      ],
+      "time": "golden"
+     },
+     "hud": "",
+     "shot": "008_people_wizard_s3_can_you_follow_me.jpg"
+    },
+    {
+     "step": 4,
+     "action": "hold w 2500 ms",
+     "fps": {
+      "avg": 60,
+      "min1": 60,
+      "gap": 17
+     },
+     "before": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "after": {
+      "pos": [
+       0,
+       1.6,
+       -15.4
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "census": {
+      "entities": 1,
+      "kinds": 1,
+      "top": [
+       "person×1"
+      ],
+      "time": "golden"
+     },
+     "hud": "",
+     "shot": "009_people_wizard_s4_walked.jpg"
+    }
+   ],
+   "fps": {
+    "avg": 60,
+    "min1": 60,
+    "gap": 17
+   },
+   "usd": 0.0013,
+   "errors": [],
+   "errorCount": 0
+  }
+ ]
+}

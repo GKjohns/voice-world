@@ -26,7 +26,7 @@ export interface Scene {
   entities: SceneEntity[]
   /** Learned kinds only (kit kinds are known to the server); parts stripped, the model only needs names and tags. */
   learned: KindDescriptor[]
-  atmosphere: { time: TimeOfDay, fog?: number, weather?: Atmosphere['weather'], playerScale?: number }
+  atmosphere: { time: TimeOfDay, fog?: number, weather?: Atmosphere['weather'], playerScale?: number, gravity?: false, fly?: true, sky?: string, moons?: number, intensity?: number }
   place: string
   lastGroup: string | null
   lastLabel?: string
@@ -56,7 +56,7 @@ export function sceneToState(scene: Partial<Scene> | undefined): WorldState & { 
   return {
     entities,
     kinds,
-    atmosphere: scene?.atmosphere ?? { time: 'dusk' },
+    atmosphere: scene?.atmosphere ?? { time: 'golden' },
     place: scene?.place ?? 'void',
     log: [],
     nextId: entities.length + 1,
@@ -163,7 +163,7 @@ export function buildContext(state: WorldState & { lastLabel?: string }, ctx: Op
   if (placeholders.length) lines.push(`placeholders waiting for a define: ${placeholders.map(k => placeholderKind(k).label).join(', ')}`)
 
   const at = state.atmosphere
-  lines.push(`atmosphere: ${at.time}${at.fog !== undefined ? `, fog ${at.fog}` : ''}${at.weather ? ` · weather: ${at.weather}` : ''}${at.playerScale ? ` · player scale ${at.playerScale}` : ''} · place: ${state.place}`)
+  lines.push(`atmosphere: ${at.time}${at.fog !== undefined ? `, fog ${at.fog}` : ''}${at.weather ? ` · weather: ${at.weather}` : ''}${at.playerScale ? ` · player scale ${at.playerScale}` : ''}${at.gravity === false ? ' · gravity off' : ''}${at.fly ? ' · player flying' : ''}${at.sky ? ` · sky ${at.sky}` : ''}${at.moons !== undefined ? ` · moons ${at.moons}` : ''} · place: ${state.place}`)
   return lines.join('\n')
 }
 

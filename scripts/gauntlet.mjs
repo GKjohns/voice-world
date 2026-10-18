@@ -196,20 +196,20 @@ async function speak(text, settle) {
   const thought = await page.waitForFunction(() => window.__conjure.phase() === 'thinking', null, { timeout: 4000 }).then(() => true).catch(() => false)
   await page.waitForFunction(() => window.__conjure.phase() !== 'thinking', null, { timeout: 45000 }).catch(() => {})
   const tIdle = await now()
-  const entry = await page.evaluate(n => {
+  const entry = await page.evaluate((n) => {
     const e = window.__conjure.lastEntry()
     return e && e.n > n ? { model: e.model, ms: e.ms, ops: e.ops, dropped: e.dropped?.length ?? 0, notes: e.notes, say: e.say, error: e.error, spawned: e.spawned, modified: e.modified, removed: e.removed } : null
   }, lastN)
   // A teleport: wait out the Director's build.
   let director = null
-  const d0 = await page.evaluate(t => {
+  const d0 = await page.evaluate((t) => {
     const d = window.__conjure.director()
     return d && d.t0 >= t - 50 ? d.status : null
   }, t0)
   if (d0) {
     await page.waitForFunction(() => window.__conjure.director()?.status !== 'building', null, { timeout: 120000 }).catch(() => {})
     await wait(3000) // last arrivals land, the fog lifts
-    director = await page.evaluate(t => {
+    director = await page.evaluate((t) => {
       const d = window.__conjure.director()
       return { world: d.world, status: d.status, ops: d.ops, dropped: d.dropped, firstOpMs: d.firstOpAt ? Math.round(d.firstOpAt - t) : null, doneMs: d.doneAt ? Math.round(d.doneAt - t) : null, usd: d.costUsd ?? null, error: d.error ?? null }
     }, t0)

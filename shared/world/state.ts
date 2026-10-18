@@ -5,7 +5,7 @@
  */
 import { KIT, isKitKind, learnedKind } from './kinds.ts'
 import type { KindDescriptor } from './kinds.ts'
-import { altitudeY, capAltitude, deOverlap, hashSeed, layout, resolveAnchor, rng } from './layout.ts'
+import { altitudeY, capAltitude, deOverlap, forward, hashSeed, layout, resolveAnchor, rng, supportAt } from './layout.ts'
 import { honestSay } from './honesty.ts'
 import type { Placed } from './layout.ts'
 import { parseOps } from './ops.ts'
@@ -21,7 +21,7 @@ export function createWorld(): WorldState {
   return {
     entities: [],
     kinds: { ...KIT },
-    atmosphere: { time: 'dusk' },
+    atmosphere: { time: 'golden' },
     place: 'void',
     log: [],
     nextId: 1,
@@ -41,6 +41,7 @@ interface StepResult {
   teleport?: Effects['teleport']
   facts?: string[]
   event?: { kind: SkyEvent, at?: Vec3 }
+  goto?: Effects['goto']
 }
 
 /**
@@ -55,6 +56,7 @@ export function applyOp(state: WorldState, op: Op, ctx: OpContext): { state: Wor
   if (res.teleport) effects.teleport = res.teleport
   if (res.facts) effects.facts!.push(...res.facts)
   if (res.event) effects.events!.push(res.event)
+  if (res.goto) effects.goto = res.goto
   return { state: res.state, effects }
 }
 
@@ -90,7 +92,8 @@ function step(state: WorldState, op0: Op, ctx: OpContext): StepResult {
         return e
       }), ctx)
       if (op.kind === 'person') namePeople(state, spawned, op.set?.name, ctx.seed)
-      return { state: { ...state, entities: [...state.entities, ...spawned], nextId, lastGroup: group }, notes, facts: skyFacts(spawned, op.set) }
+      const flown = launchAll(state, spawned, op.set, ctx, rand, true)
+      return { state: { ...state, entities: [...state.entities, ...flown], nextId, lastGroup: group }, notes, facts: [...skyFacts(flown, op.set) ?? [], ...physicsFacts(state, flown, op)] }
     }
 
     case 'define': {
@@ -104,7 +107,8 @@ function step(state: WorldState, op0: Op, ctx: OpContext): StepResult {
         : { ...learnedKind(op.kind, op.tags, op.parts), basis, quality: 'draft' as const }
       // Placeholders already standing in for this kind pick up its tags (and the renderer morphs them).
       const entities = state.entities.map(e => e.kind === op.kind ? { ...e, tags: [...desc.tags] } : e)
-      return { state: { ...state, kinds: { ...state.kinds, [op.kind]: desc }, entities }, notes: [] }
+      const next = { ...state, kinds: { ...state.kinds, [op.kind]: desc }, entities }
+      return { state: settleKind(next, op.kind), notes: [] }
     }
 
     case 'modify': {
@@ -141,10 +145,11 @@ function step(state: WorldState, op0: Op, ctx: OpContext): StepResult {
         return next
       })
       // A new motion (or a new circle) resolves its path for the whole set at once, so a herd shares one loop.
-      const changed = op.set.motion || op.set.around || op.set.range ? withPaths(changed0, ctx) : changed0
+      const changed1 = op.set.motion || op.set.around || op.set.range ? withPaths(changed0, ctx) : changed0
+      const changed = launchAll(state, changed1, op.set, ctx, rand, false)
       const byId = new Map(changed.map(e => [e.id, e]))
       const entities = state.entities.map(e => byId.get(e.id) ?? e)
-      return { state: { ...state, entities }, notes: [], facts: skyFacts(changed, op.set) }
+      return { state: { ...state, entities }, notes: [], facts: [...skyFacts(changed, op.set) ?? [], ...physicsFacts(state, changed, op)] }
     }
 
     case 'move': {
@@ -200,20 +205,40 @@ function step(state: WorldState, op0: Op, ctx: OpContext): StepResult {
       const fog = op.fog ?? (op.weather === 'fog' ? 0.75 : op.weather === 'clear' && a.weather === 'fog' ? 0 : a.fog)
       const playerScale = op.playerScale === undefined ? a.playerScale : op.playerScale
       const facts: string[] = []
+      const gravity = op.gravity === undefined ? a.gravity : op.gravity ? undefined : false as const
+      const fly = op.fly === undefined ? a.fly : op.fly ? true as const : undefined
+      // A new time of day without a new tint drops the old custom sky ("make it day" after a purple sky).
+      const retint = op.time !== undefined && op.time !== a.time && op.sky === undefined && op.horizon === undefined
+      const sky = retint ? undefined : op.sky ?? a.sky
+      const horizon = retint ? undefined : op.horizon ?? a.horizon
+      const intensity = op.intensity ?? (op.weather !== undefined && op.weather !== a.weather ? undefined : a.intensity)
+      if (op.gravity === false) facts.push(`gravity off: ${looseThings(state).length} loose things float up`)
+      if (op.gravity === true) facts.push('gravity back on: floating things fall back down')
+      if (op.fly !== undefined) facts.push(op.fly ? 'the player can fly now (Space rises, look and walk to steer)' : 'the player lands and walks again')
+      if (op.sky || op.horizon) facts.push(`sky tinted ${[op.sky, op.horizon].filter(Boolean).join(' / ')}`)
+      if (op.moons !== undefined) facts.push(`${op.moons} moon${op.moons === 1 ? '' : 's'} in the sky`)
+      if (op.intensity !== undefined) facts.push(`weather intensity ${op.intensity}`)
       if (op.weather) facts.push(`weather → ${op.weather}`)
       if (op.event) facts.push(`sky event: ${op.event}`)
       if (op.playerScale !== undefined) facts.push(op.playerScale === 1 ? 'player back to normal size' : `player scale → ${op.playerScale} (the world looms ${round3(1 / op.playerScale)}× larger)`)
       // A sunrise sweep ends in day; lightning strikes where you look (when that's close enough to see).
       const time = op.event === 'sunrise' && !op.time ? 'day' : op.time ?? a.time
       const event = op.event ? { kind: op.event, ...(op.event === 'lightning' && (ctx.gaze.dist ?? 99) < 90 ? { at: ctx.gaze.point } : {}) } : undefined
-      return { state: { ...state, atmosphere: stripAtmos({ time, fog, ambient: op.ambient ?? a.ambient, weather, playerScale }) }, notes: [], facts, event }
+      return { state: { ...state, atmosphere: stripAtmos({ time, fog, ambient: op.ambient ?? a.ambient, weather, playerScale, gravity, fly, sky, horizon, moons: op.moons ?? a.moons, intensity }) }, notes: [], facts, event }
     }
 
     case 'teleport':
       // Clears the stage (and the old place's sound); the Director streams the new place into this same
       // batch afterwards (extendLastBatch), so the log replays the built scene without calling a model.
       // A new place starts dry and at your own size (the Director sets its own weather).
-      return { state: { ...state, entities: [], place: op.world, lastGroup: null, atmosphere: stripAtmos({ ...state.atmosphere, ambient: undefined, weather: undefined, playerScale: undefined }) }, notes: [], teleport: { world: op.world, brief: op.brief } }
+      return { state: { ...state, entities: [], place: op.world, lastGroup: null, atmosphere: stripAtmos({ time: state.atmosphere.time, fog: state.atmosphere.fog }) }, notes: [], teleport: { world: op.world, brief: op.brief } }
+
+    case 'goto': {
+      const pool = select(state, op.target, ctx)
+      const e = [...pool].sort((a, b) => entityHeight(state, b) - entityHeight(state, a) || distXZ2(a.pos, ctx.gaze.point) - distXZ2(b.pos, ctx.gaze.point))[0]
+      if (!e) return { state, notes: [`goto: nothing matches ${JSON.stringify(op.target)}`] }
+      return { state, notes: [], ...gotoOf(state, e, op.side ?? 'on_top', ctx) }
+    }
 
     case 'say':
       return { state, say: op.text, notes: [] }
@@ -316,7 +341,144 @@ function stripAtmos(a: WorldState['atmosphere']): WorldState['atmosphere'] {
   if (a.ambient !== undefined && a.ambient !== 'none') out.ambient = a.ambient
   if (a.weather !== undefined) out.weather = a.weather
   if (a.playerScale !== undefined && Math.abs(a.playerScale - 1) > 1e-3) out.playerScale = a.playerScale
+  if (a.gravity === false) out.gravity = false
+  if (a.fly) out.fly = true
+  if (a.sky) out.sky = a.sky
+  if (a.horizon) out.horizon = a.horizon
+  if (a.moons !== undefined) out.moons = a.moons
+  if (a.intensity !== undefined) out.intensity = a.intensity
   return out
+}
+
+// ---------- Gauntlet loop 1: physics-lite and player powers ----------
+
+const DROP_SKY = 25
+const distXZ2 = (a: Vec3, b: Vec3) => Math.hypot(a[0] - b[0], a[2] - b[2])
+
+/**
+ * Things that float off when gravity goes (and fall back when it returns): small, loose, on the ground.
+ * Never terrain, flat things, buildings, people, or anything already flying. The renderer uses the same rule.
+ */
+export function looseThings(state: WorldState): Entity[] {
+  return state.entities.filter(e => isLoose(state, e))
+}
+
+export function isLoose(state: WorldState, e: Entity): boolean {
+  if (e.kind === 'person') return false
+  const d = kindOf(state, e.kind)
+  if (d.surface || d.sized || d.footprint <= 0 || d.tags.some(t => t === 'terrain' || t === 'building' || t === 'structure' || t === 'particles')) return false
+  if (e.props.motion && e.props.motion !== 'none') return false
+  return entityRadius(state, e) < 3 && entityHeight(state, e) < 6
+}
+
+/**
+ * drop / throw on a spawn or a modify: each thing comes to rest on the ground or on top of whatever is under
+ * it, and remembers where its flight began (`launch`) so the renderer can play the fall or the arc. A drop
+ * falls from `drop` metres above its resting spot; a throw leaves the player's eye toward the gaze and lands
+ * `throw` metres out. The props themselves are not kept (the logged op replays the flight).
+ */
+function launchAll(state: WorldState, list: Entity[], set: Props | undefined, ctx: OpContext, rand: () => number, fresh: boolean): Entity[] {
+  if (!set || (set.drop === undefined && set.throw === undefined)) return list
+  const ignore = new Set(list.map(e => e.id))
+  const p = ctx.player.pos
+  const gx = ctx.gaze.point[0] - p[0]
+  const gz = ctx.gaze.point[2] - p[2]
+  const gl = Math.hypot(gx, gz)
+  const dir: [number, number] = gl > 0.5 ? [gx / gl, gz / gl] : forward(ctx.player.yaw)
+  // Stacked drops land one on the other, so each settles on the ones before it.
+  let world = state
+  return list.map((e, i) => {
+    const { drop, throw: thr, altitude: _alt, ...props } = e.props
+    const r = entityRadius(state, e)
+    let next: Entity
+    if (thr !== undefined) {
+      const spread = list.length > 1 ? (i - (list.length - 1) / 2) * 0.14 + (rand() * 2 - 1) * 0.04 : 0
+      const c = Math.cos(spread)
+      const s = Math.sin(spread)
+      const d = thr * (list.length > 1 ? 0.85 + 0.3 * rand() : 1)
+      const x = p[0] + (dir[0] * c - dir[1] * s) * d
+      const z = p[2] + (dir[0] * s + dir[1] * c) * d
+      const from: Vec3 = [round3(p[0] + dir[0] * 0.6), round3(Math.max(0.5, p[1] - 0.25)), round3(p[2] + dir[1] * 0.6)]
+      next = { ...e, pos: [round3(x), supportAt(world, x, z, r, ignore), round3(z)], props, launch: { from, kind: 'throw' } }
+    } else {
+      const h = drop === 'sky' ? DROP_SKY : drop ?? 12
+      const rest = supportAt(world, e.pos[0], e.pos[2], r, ignore)
+      // A thing already up in the air falls from where it is; one on the ground is lifted first ("drop it").
+      const fromY = !fresh && e.pos[1] > rest + 0.5 ? e.pos[1] : rest + h
+      next = { ...e, pos: [e.pos[0], rest, e.pos[2]], props, launch: { from: [e.pos[0], round3(fromY), e.pos[2]], kind: 'drop' } }
+    }
+    if (!next.props.motion || next.props.motion === 'none') delete next.path
+    if (next.props.motion === 'fly' || next.props.motion === 'orbit' || next.props.motion === 'drift' || next.props.motion === 'hover') delete next.props.motion
+    ignore.delete(e.id)
+    world = { ...world, entities: [...world.entities.filter(x => x.id !== e.id), next] }
+    return next
+  })
+}
+
+/**
+ * A kind's real size just arrived (its define, after a placeholder held the spot): things of that kind that
+ * rest on something (a stack, a crate on a table) settle onto the new tops, bottom first. Only the supports
+ * that were under each one before count, so nothing climbs onto a neighbour.
+ */
+function settleKind(state: WorldState, kind: string): WorldState {
+  const resting = state.entities.filter(e => e.kind === kind && e.pos[1] > 0.05 && e.props.altitude === undefined && (!e.props.motion || e.props.motion === 'none'))
+  if (!resting.length) return state
+  let world = state
+  const oldY = new Map(state.entities.map(e => [e.id, e.pos[1]]))
+  for (const e0 of [...resting].sort((a, b) => a.pos[1] - b.pos[1])) {
+    const e = world.entities.find(x => x.id === e0.id)!
+    // Its own kind supports it only from below (the crate under it); anything else only if it was under it.
+    const under = (x: Entity) => x.kind === kind ? (oldY.get(x.id) ?? 0) < e0.pos[1] - 1e-3 : x.pos[1] + entityHeight(world, x) <= e0.pos[1] + 0.01
+    const y = supportAt(world, e.pos[0], e.pos[2], entityRadius(world, e), new Set([e.id]), under)
+    if (Math.abs(y - e.pos[1]) < 1e-3) continue
+    const moved = { ...e, pos: [e.pos[0], y, e.pos[2]] as Vec3 }
+    world = { ...world, entities: world.entities.map(x => (x.id === e.id ? moved : x)) }
+  }
+  return world
+}
+
+/** What the physics props did, in words the genie can repeat ("5 crate stacked 5 high, 3.2 m tall"). */
+function physicsFacts(state: WorldState, list: Entity[], op: Op): string[] {
+  if (!list.length || (op.op !== 'spawn' && op.op !== 'modify')) return []
+  const kinds = [...new Set(list.map(e => e.kind))].join('/')
+  const out: string[] = []
+  if (op.op === 'spawn' && op.arrange === 'stack' && list.length > 1) {
+    const top = Math.max(...list.map(e => e.pos[1] + entityHeight({ ...state, entities: list }, e)))
+    out.push(`${list.length} ${kinds} stacked ${list.length} high, ${round1(top)} m tall`)
+  }
+  const flown = list.filter(e => e.launch && (op.set?.drop !== undefined || op.set?.throw !== undefined))
+  if (flown.length) {
+    const e = flown[0]!
+    if (e.launch!.kind === 'throw') out.push(`${flown.length} ${kinds} thrown ${round1(distXZ2(e.launch!.from, e.pos))} m, landing and bouncing`)
+    else out.push(`${flown.length} ${kinds} dropped from ${round1(e.launch!.from[1] - e.pos[1])} m, landing ${e.pos[1] > 0.3 ? 'on top of what was below' : 'on the ground'}`)
+  }
+  if (op.set?.tip !== undefined) {
+    const t = ((Math.round(op.set.tip) % 360) + 360) % 360
+    out.push(`${list.length} ${kinds} ${t === 0 ? 'set upright' : t === 180 ? 'turned upside down' : t === 90 || t === 270 ? 'toppled onto its side' : `tipped ${t}°`}`)
+  }
+  return out
+}
+
+/** Where "take me to the top of it" puts you: standing on its highest point, looking out past it. */
+function gotoOf(state: WorldState, e: Entity, side: 'on_top' | 'front', ctx: OpContext): { goto: Effects['goto'], facts: string[] } {
+  const h = entityHeight(state, e)
+  const p = ctx.player.pos
+  const dx = e.pos[0] - p[0]
+  const dz = e.pos[2] - p[2]
+  const d = Math.hypot(dx, dz)
+  const dir: [number, number] = d > 0.5 ? [dx / d, dz / d] : forward(ctx.player.yaw)
+  if (side === 'front') {
+    const back = entityRadius(state, e) + 3
+    const x = e.pos[0] - dir[0] * back
+    const z = e.pos[2] - dir[1] * back
+    return { goto: { to: [round3(x), supportAt(state, x, z, 0.4), round3(z)], look: [e.pos[0], e.pos[1] + h * 0.5, e.pos[2]], id: e.id }, facts: [`the player walks up to the ${e.kind}`] }
+  }
+  const top = round3(e.pos[1] + h)
+  return { goto: { to: [e.pos[0], top, e.pos[2]], look: [round3(e.pos[0] + dir[0] * 40), Math.max(0, top - 10), round3(e.pos[2] + dir[1] * 40)], id: e.id }, facts: [`the player stands on top of the ${e.kind}, ${Math.round(top)} m up`] }
+}
+
+function round1(v: number): number {
+  return Math.round(v * 10) / 10
 }
 
 const PATHED = new Set(['orbit', 'gallop', 'fly'])
@@ -377,7 +539,7 @@ function mergeProps(props: Props, set: Props, relative: boolean, desc: KindDescr
   const out: Props = { ...props }
   for (const [key, value] of Object.entries(set) as [keyof Props, Props[keyof Props]][]) {
     if (value === undefined) continue
-    if (relative && typeof value === 'number') {
+    if (relative && typeof value === 'number' && key !== 'tip' && key !== 'drop' && key !== 'throw') {
       const base = (props[key] ?? desc.defaults[key] ?? 1) as number
       ;(out as Record<string, unknown>)[key] = round3(base * value)
     } else {
@@ -433,6 +595,7 @@ function commitOps(state: WorldState, ops: Op[], dropped: DroppedOp[], ctx: OpCo
       if (res.teleport) extras.teleport = res.teleport
       if (res.facts) extras.facts!.push(...res.facts)
       if (res.event) extras.events!.push(res.event)
+      if (res.goto) extras.goto = res.goto
     }
     return s
   }
@@ -456,8 +619,9 @@ function commitOps(state: WorldState, ops: Op[], dropped: DroppedOp[], ctx: OpCo
   }
   // The genie only claims what this batch actually did.
   const wiped = reset && (state.entities.length > 0 || state.log.length > 0 || diffStates(state, start).atmosphere)
-  const say = extras.say.map(t => honestSay(t, reset ? [{ op: 'reset' }, ...worldOps] : worldOps, s, !!changed || !!extras.events!.length || wiped))
+  const say = extras.say.map(t => honestSay(t, reset ? [{ op: 'reset' }, ...worldOps] : worldOps, s, !!changed || !!extras.events!.length || wiped || !!extras.goto))
   const effects: Effects = { ...diffStates(state, s), say, notes: extras.notes, teleport: extras.teleport, events: extras.events, facts: extras.facts }
+  if (extras.goto) effects.goto = extras.goto
   if (reset) {
     effects.reset = true
     effects.atmosphere = true
@@ -525,11 +689,12 @@ export function diffStates(a: WorldState, b: WorldState): Effects {
   const aa = a.atmosphere
   const ba = b.atmosphere
   fx.atmosphere = aa.time !== ba.time || aa.fog !== ba.fog || aa.ambient !== ba.ambient || aa.weather !== ba.weather || aa.playerScale !== ba.playerScale
+    || aa.gravity !== ba.gravity || aa.fly !== ba.fly || aa.sky !== ba.sky || aa.horizon !== ba.horizon || aa.moons !== ba.moons || aa.intensity !== ba.intensity
   return fx
 }
 
 function entityKey(e: Entity): string {
-  return JSON.stringify([e.pos, e.rotY, e.props, e.tags, e.hue, e.path])
+  return JSON.stringify([e.pos, e.rotY, e.props, e.tags, e.hue, e.path, e.launch])
 }
 
 // ---------- summaries (the model's view of the world, and the HUD's) ----------
@@ -579,7 +744,7 @@ export function upgradeKind(state: WorldState, kind: string, parts: Part[], opts
   if (!desc?.learned || desc.basis !== opts.basis || !parts.length) return null
   if (QUALITY_RANK[desc.quality ?? 'draft'] > QUALITY_RANK[opts.quality]) return null
   const next: KindDescriptor = { ...learnedKind(kind, desc.tags, parts), basis: opts.basis, quality: opts.quality }
-  const s: WorldState = { ...state, kinds: { ...state.kinds, [kind]: next }, upgrades: { ...state.upgrades, [kind]: { basis: opts.basis, parts, quality: opts.quality } } }
+  const s: WorldState = settleKind({ ...state, kinds: { ...state.kinds, [kind]: next }, upgrades: { ...state.upgrades, [kind]: { basis: opts.basis, parts, quality: opts.quality } } }, kind)
   return { state: s, effects: diffStates(state, s) }
 }
 

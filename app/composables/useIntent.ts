@@ -210,6 +210,7 @@ async function build(request: string, ctx: OpContext, source: 'text' | 'voice' =
     for (const f of fx.facts ?? []) if (!other.includes(f)) other.push(f)
     if (out.ops.some(o => o.op === 'undo')) other.push('undid the last change')
     if (fx.reset) other.push('started over: the world is blank')
+    if (fx.goto) other.push('the player was carried there')
     notes.push(...fx.notes)
     says.push(...fx.say)
     applied.push(...out.ops)
@@ -234,7 +235,7 @@ async function build(request: string, ctx: OpContext, source: 'text' | 'voice' =
       return
     }
     // Undo, reset and teleport never join a batch (extendLastBatch drops them): they always run on their own.
-    const out = target && op.op !== 'undo' && op.op !== 'reset' && op.op !== 'teleport' ? world.extend(target.id, target.at, [op]) : null
+    const out = target && op.op !== 'undo' && op.op !== 'reset' && op.op !== 'teleport' && op.op !== 'goto' ? world.extend(target.id, target.at, [op]) : null
     if (out) {
       absorb(out)
     } else if (op.op === 'say') {
@@ -302,6 +303,8 @@ async function build(request: string, ctx: OpContext, source: 'text' | 'voice' =
     if (m && definedNow.has(m[1]!)) notes.splice(i, 1)
   }
   if (!changed && phase.value !== 'building') setPhase(recognition ? 'listening' : 'idle')
+  // A late batch (held says, or a restore) can land after the last op: never leave the pill stuck on thinking.
+  if (phase.value === 'thinking' && !inflight.value) setPhase(changed ? 'building' : recognition ? 'listening' : 'idle')
   const why = [...notes.filter(n => !n.startsWith('undid')), ...dropped.map(d => `dropped an op: ${d.reason}`)]
   return {
     ok: changed,

@@ -15,6 +15,7 @@ import { directorToOp } from '#shared/world/ops'
 import type { BatchResult } from '#shared/world/state'
 import type { Batch, Effects } from '#shared/world/types'
 import { useWorld } from './useWorld'
+import { useForge } from './useForge'
 
 export interface DirectorRun {
   world: string
@@ -128,11 +129,21 @@ async function start(tp: NonNullable<Effects['teleport']>, batch: Batch) {
   const reader = res.body.getReader()
   const dec = new TextDecoder()
   let buf = ''
+  // Gauntlet loop 1: the place's signature thing (the define marked hero, else the first define) is forged
+  // into a high-quality version once the build is done: one refine per teleport, under the forge's spend caps.
+  let hero: string | null = null
+  let heroMarked = false
   const handle = (ev: DirectorEvent) => {
     if (ctrl !== mine) return
     if (ev.t === 'op') {
-      const out = apply(directorToOp(ev.op))
+      const op = directorToOp(ev.op) as { op?: string, kind?: string, hero?: boolean }
+      const out = apply(op)
       if (!out) return
+      const def = out.ops.find(o => o.op === 'define') as { kind: string, hero?: boolean } | undefined
+      if (def && (!hero || (def.hero && !heroMarked))) {
+        hero = def.kind
+        heroMarked = !!def.hero
+      }
       const run = current.value!
       patch({ ops: run.ops + out.ops.length, dropped: run.dropped + out.dropped.length, firstOpAt: run.firstOpAt ?? performance.now() })
     } else if (ev.t === 'done') {
@@ -144,6 +155,13 @@ async function start(tp: NonNullable<Effects['teleport']>, batch: Batch) {
       origin = null
       target = null
       world.renderer()?.endReveal()
+      const kind = hero
+      if (kind) {
+        setTimeout(() => {
+          const s = useWorld().state.value
+          if (s.place === tp.world && s.entities.some(e => e.kind === kind)) useForge().forgeKind(kind, `${tp.world}: ${kind.replace(/_/g, ' ')}`)
+        }, 1200)
+      }
     } else {
       fail(ev.error)
     }

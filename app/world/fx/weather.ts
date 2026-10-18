@@ -154,6 +154,11 @@ export class WeatherFx {
   private opening = 0
   private weather: Weather | undefined
   private t = 0
+  /**
+   * Gauntlet loop 1 (track B): how hard the weather blows, 0..1 (0.5 = the old default). A blizzard (snow at
+   * 1) falls faster, drives sideways in the wind and closes the fog in to a white-out; rain at 1 is a downpour.
+   */
+  intensity = 0.5
 
   constructor() {
     const make = (n: number, frag: string, extra: Record<string, THREE.IUniform>, blending: THREE.Blending) => {
@@ -326,11 +331,15 @@ export class WeatherFx {
       this.snowU.uTime!.value = t
       ;(this.snowU.uCam!.value as THREE.Vector3).copy(cp)
       this.snowU.uCount!.value = this.blend.snow.cur
+      const gust = Math.max(0, this.intensity - 0.5) * 2
+      this.snowU.uFall!.value = 1.3 * (1 + 1.6 * gust)
+      this.snowU.uSway!.value = 0.7 * (1 + 4 * gust)
       // At night, bigger, brighter, softer flakes and no distant pinpricks (they read as stars).
       const night = 1 - Math.min(1, luminance(sky.skyTop) / 0.12)
       this.snowU.uOpacity!.value = 0.95
-      this.snowU.uSize!.value = 0.24 + 0.26 * night
-      this.snowU.uMinPx!.value = 2.5 + 7 * night
+      const gustK = Math.max(0, this.intensity - 0.5) * 2
+      this.snowU.uSize!.value = (0.24 + 0.26 * night) * (1 + 0.7 * gustK)
+      this.snowU.uMinPx!.value = (2.5 + 7 * night) * (1 + 0.5 * gustK)
       ;(this.snowU.uColor!.value as THREE.Color).set('#f4f7ff').lerp(SNOW_NIGHT, night * 0.5)
     }
     // Clouds close over the sky for rain, storm and snow.
@@ -458,7 +467,20 @@ export class WeatherFx {
       const night = luminance(a.skyTop) < 0.08
       for (const key of ['skyTop', 'skyHorizon', 'fog'] as const) out[key] = '#' + new THREE.Color(out[key]).lerp(night ? new THREE.Color(out[key]).multiplyScalar(1.6) : pale, snow * 0.45).getHexString()
       out.ground = '#' + new THREE.Color(out.ground).lerp(new THREE.Color(night ? '#8d98ad' : '#e9eef5'), snow * 0.75).getHexString()
-      out.fogFar *= 1 - 0.35 * snow
+      const gust = Math.max(0, this.intensity - 0.5) * 2
+      out.fogFar *= (1 - 0.35 * snow) * (1 - 0.7 * gust * snow)
+      out.fogNear *= 1 - 0.8 * gust * snow
+      if (gust > 0) {
+        // A blizzard greys the whole sky over to a white-out (whatever the hour) and dims the sun.
+        for (const key of ['skyTop', 'skyHorizon', 'fog'] as const) out[key] = '#' + new THREE.Color(out[key]).lerp(night ? new THREE.Color(out[key]).multiplyScalar(1.4) : pale, gust * snow * 0.7).getHexString()
+        out.sunIntensity *= 1 - 0.5 * gust * snow
+        out.sunGlow *= 1 - gust * snow
+        // The painted sky's own clouds go storm-grey and close over too.
+        const o = out as AtmospherePreset & { cloudLit?: string, cloudShade?: string, cloudCover?: number }
+        if (o.cloudLit) o.cloudLit = '#' + new THREE.Color(o.cloudLit).lerp(pale, gust * snow * 0.8).getHexString()
+        if (o.cloudShade) o.cloudShade = '#' + new THREE.Color(o.cloudShade).lerp(new THREE.Color('#9aa4b4'), gust * snow * 0.8).getHexString()
+        if (o.cloudCover !== undefined) o.cloudCover = Math.max(o.cloudCover, 0.9 * gust * snow)
+      }
       out.sunIntensity *= 1 - 0.35 * snow
       out.fogWarm = '#' + new THREE.Color(out.fogWarm).lerp(night ? new THREE.Color(out.fog) : pale, snow * 0.6).getHexString()
       out.cloudCover = Math.min(0.95, out.cloudCover + 0.35 * snow)

@@ -22,11 +22,24 @@ const moving = (ops: Op[], state: WorldState, kinds?: RegExp) => ops.some(o => (
 const airborne = (ops: Op[], state: WorldState) => ops.some(o => (o.op === 'spawn' || o.op === 'modify') && o.set?.altitude !== undefined) && state.entities.some(e => e.pos[1] > 1)
 const weather = (ops: Op[], state: WorldState, w: RegExp) => ops.some(o => o.op === 'atmosphere' && ((o.weather && w.test(o.weather) && !!state.atmosphere.weather) || (o.event && w.test(o.event))))
 
+const atmo = (ops: Op[], key: 'gravity' | 'fly' | 'moons' | 'sky', test: (v: unknown) => boolean) => ops.some(o => o.op === 'atmosphere' && o[key] !== undefined && test(o[key]))
+const physics = (ops: Op[], key: 'drop' | 'throw' | 'tip') => ops.some(o => (o.op === 'spawn' || o.op === 'modify') && o.set?.[key] !== undefined)
+const stacked = (ops: Op[]) => ops.some(o => o.op === 'spawn' && ((o.arrange === 'stack' && (o.count ?? 1) > 1) || o.at?.side === 'on_top'))
+const weightless = (ops: Op[]) => atmo(ops, 'gravity', v => v === false)
+
 const acting = (ops: Op[], act: RegExp) => ops.some(o => (o.op === 'spawn' || o.op === 'modify') && !!o.set?.act && act.test(o.set.act))
 
 const CLAIMS: Claim[] = [
-  { words: /\b(fl(y|ies|ying|ew|ight)|soar\w*|wing\w*|circl\w*|orbit\w*|wheel\w*|swoop\w*)\b/i, holds: (o, s) => moving(o, s, /orbit|fly|drift|hover/) },
-  { words: /\b(drift\w*|float\w*|bob\w*|hover\w*|ascend\w*|aloft|sail\w*)\b/i, holds: (o, s) => moving(o, s) || airborne(o, s) },
+  { words: /\b(fl(y|ies|ying|ew|ight)|soar\w*|wing\w*|circl\w*|orbit\w*|wheel\w*|swoop\w*)\b/i, holds: (o, s) => moving(o, s, /orbit|fly|drift|hover/) || atmo(o, 'fly', v => v === true) || physics(o, 'throw') },
+  { words: /\b(drift\w*|float\w*|bob\w*|hover\w*|ascend\w*|aloft|sail\w*)\b/i, holds: (o, s) => moving(o, s) || airborne(o, s) || weightless(o) || physics(o, 'throw') || atmo(o, 'fly', v => v === true) },
+  // Gauntlet loop 1, physics-lite: stacking, gravity, flips, throws and drops only when an op really did them.
+  { words: /\b(stack\w*|piled (high|up)|on top of (each|one) (other|another)|one atop another)\b/i, holds: o => stacked(o) },
+  { words: /\b(gravity|weightless\w*|zero[- ]g)\b/i, holds: o => atmo(o, 'gravity', () => true) },
+  { words: /\b(upside[- ]down|flip\w*|topple\w*|overturn\w*|tip(s|ped)? over|on (its|their) (head|heads|side|roof)|head over heels)\b/i, holds: o => physics(o, 'tip') },
+  { words: /\b(throw\w*|thrown|threw|hurl\w*|toss\w*|lob(s|bed)?|fling\w*|flung)\b/i, holds: o => physics(o, 'throw') },
+  { words: /\b(drop(s|ped)?|plummet\w*|slam\w*|from the sky)\b/i, holds: o => physics(o, 'drop') || atmo(o, 'gravity', v => v === true) },
+  { words: /\b(two|twin|three|double|second) moons?\b/i, holds: o => atmo(o, 'moons', v => typeof v === 'number' && v >= 2) },
+  { words: /\bswirl\w*\b/i, holds: () => false },
   { words: /\b(gallop\w*|run|runs|running|race[sd]?|racing|stamped\w*|wander\w*|roam\w*|prowl\w*|trot\w*)\b/i, holds: (o, s) => moving(o, s, /gallop|wander|orbit|fly/) },
   { words: /\b(spin\w*|twirl\w*|whirl\w*|sway\w*|danc\w*)\b/i, holds: (o, s) => moving(o, s) || acting(o, /dance/) },
   { words: /\b(rain\w*|drizzl\w*|downpour)\b/i, holds: (o, s) => weather(o, s, /rain|storm/) },
@@ -87,7 +100,12 @@ export function effectLine(ops: Op[], state: WorldState): string {
       if (o.event) bits.push(EVENT_LINE[o.event] ?? 'Behold.')
       if (o.playerScale !== undefined) bits.push(o.playerScale < 1 ? 'You shrink.' : o.playerScale > 1 ? 'You grow.' : 'Yourself again.')
       if (o.fog !== undefined && !o.weather) bits.push(o.fog > 0.2 ? 'The air thickens.' : 'The air clears.')
-    } else if (o.op === 'move') bits.push('Moved.')
+      if (o.gravity !== undefined) bits.push(o.gravity ? 'Gravity returns.' : 'Gravity lets go.')
+      if (o.fly !== undefined) bits.push(o.fly ? 'You can fly.' : 'Back on your feet.')
+      if (o.sky || o.horizon) bits.push('The sky turns.')
+      if (o.moons !== undefined && o.moons > 1) bits.push(`${NUMBERS[o.moons]} moons.`)
+    } else if (o.op === 'goto') bits.push('Up you go.')
+    else if (o.op === 'move') bits.push('Moved.')
     else if (o.op === 'remove') bits.push('Gone.')
     else if (o.op === 'undo') bits.push('Unmade.')
     else if (o.op === 'reset') bits.push('A blank slate.')
@@ -106,5 +124,6 @@ export function noOpLine(ops: Op[]): string {
   if (o.op === 'modify') return 'Nothing here to change, yet.'
   if (o.op === 'undo') return 'Nothing to undo.'
   if (o.op === 'reset') return 'Already a blank slate.'
+  if (o.op === 'goto') return 'Nothing there to stand on, yet.'
   return 'Alas, nothing here answers to that.'
 }

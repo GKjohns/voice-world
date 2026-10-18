@@ -1,0 +1,608 @@
+{
+ "url": "http://localhost:3091/",
+ "startedAt": "2026-10-18T03:14:25.502Z",
+ "minutes": 3.4,
+ "spend": 0.29198739999999995,
+ "spendBy": {
+  "/api/intent (est)": 0.006,
+  "/api/director": 0.1632215,
+  "/api/npc/persona": 0.0069084,
+  "/api/forge": 0.11522,
+  "/api/npc/cast": 0.0006375
+ },
+ "forgeStatus": {
+  "total": 1.0071,
+  "session": 0.1152,
+  "calls": 38,
+  "cap": 12,
+  "sessionCap": 1.5
+ },
+ "results": [
+  {
+   "id": "tp_spaceship",
+   "group": "teleport",
+   "steps": [
+    {
+     "step": 1,
+     "text": "take me to the bridge of a spaceship",
+     "thought": true,
+     "idleMs": 3176,
+     "intent": {
+      "model": "haiku",
+      "ms": 3064,
+      "firstOpMs": 3062,
+      "count": 2
+     },
+     "entry": {
+      "model": "haiku",
+      "ms": 3064,
+      "ops": [
+       "teleport spaceship bridge"
+      ],
+      "dropped": 0,
+      "notes": [],
+      "say": [
+       "Engage. The stars await."
+      ],
+      "spawned": 0,
+      "modified": 0,
+      "removed": 0
+     },
+     "director": {
+      "world": "spaceship bridge",
+      "status": "done",
+      "ops": 35,
+      "dropped": 0,
+      "firstOpMs": 4407,
+      "doneMs": 19177,
+      "usd": 0.0307595,
+      "error": null
+     },
+     "forge": [
+      {
+       "kind": "captain_chair",
+       "tier": "good",
+       "outcome": "refined",
+       "refinedMs": 14862,
+       "parts": 24,
+       "usd": 0.0312,
+       "library": false
+      }
+     ],
+     "fps": {
+      "avg": 60,
+      "min1": 56,
+      "gap": 83
+     },
+     "before": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "after": {
+      "pos": [
+       0,
+       1.7,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "census": {
+      "entities": 36,
+      "kinds": 14,
+      "top": [
+       "bridge_console×7",
+       "light_strip×6",
+       "wall×5",
+       "hanging_lamp×4",
+       "person×4",
+       "chair×2",
+       "floor×1",
+       "rug×1",
+       "ceiling×1",
+       "viewport_frame×1",
+       "captain_chair×1",
+       "neon_sign×1"
+      ],
+      "time": "interior"
+     },
+     "hud": "",
+     "shot": "001_tp_spaceship_s1_take_me_to_the_bridge_of_a_s.jpg"
+    }
+   ],
+   "fps": {
+    "avg": 60,
+    "min1": 56,
+    "gap": 83
+   },
+   "usd": 0.0643,
+   "errors": [],
+   "errorCount": 0
+  },
+  {
+   "id": "tp_underwater",
+   "group": "teleport",
+   "steps": [
+    {
+     "step": 1,
+     "text": "take me to the bottom of the ocean",
+     "thought": true,
+     "idleMs": 1676,
+     "intent": {
+      "model": "haiku",
+      "ms": 1762,
+      "firstOpMs": 1657,
+      "count": 2
+     },
+     "entry": {
+      "ops": [
+       "teleport ocean depths"
+      ],
+      "dropped": 0,
+      "notes": [],
+      "say": [],
+      "spawned": 0,
+      "modified": 0,
+      "removed": 0
+     },
+     "director": {
+      "world": "ocean depths",
+      "status": "done",
+      "ops": 30,
+      "dropped": 0,
+      "firstOpMs": 10944,
+      "doneMs": 24109,
+      "usd": 0.0260715,
+      "error": null
+     },
+     "forge": [
+      {
+       "kind": "glow_coral",
+       "tier": "good",
+       "outcome": "library hit",
+       "refinedMs": 11,
+       "parts": 18,
+       "usd": 0,
+       "library": true
+      }
+     ],
+     "fps": {
+      "avg": 60,
+      "min1": 56,
+      "gap": 83
+     },
+     "before": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "after": {
+      "pos": [
+       0,
+       1.7,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "census": {
+      "entities": 66,
+      "kinds": 11,
+      "top": [
+       "kelp×31",
+       "rock×13",
+       "glow_coral×7",
+       "jagged_spire×5",
+       "fish_school×4",
+       "floor×1",
+       "rug×1",
+       "mountain_range×1",
+       "whale×1",
+       "fireflies×1",
+       "dust_motes×1"
+      ],
+      "time": "night"
+     },
+     "hud": "",
+     "shot": "002_tp_underwater_s1_take_me_to_the_bottom_of_the.jpg"
+    }
+   ],
+   "fps": {
+    "avg": 60,
+    "min1": 56,
+    "gap": 83
+   },
+   "usd": 0.0271,
+   "errors": [],
+   "errorCount": 0
+  },
+  {
+   "id": "tp_castle",
+   "group": "teleport",
+   "steps": [
+    {
+     "step": 1,
+     "text": "take me to a medieval castle courtyard",
+     "thought": true,
+     "idleMs": 1474,
+     "intent": {
+      "model": "haiku",
+      "ms": 1583,
+      "firstOpMs": 1456,
+      "count": 2
+     },
+     "entry": {
+      "ops": [
+       "teleport castle courtyard"
+      ],
+      "dropped": 0,
+      "notes": [],
+      "say": [],
+      "spawned": 0,
+      "modified": 0,
+      "removed": 0
+     },
+     "director": {
+      "world": "castle courtyard",
+      "status": "done",
+      "ops": 43,
+      "dropped": 0,
+      "firstOpMs": 3110,
+      "doneMs": 20929,
+      "usd": 0.0363755,
+      "error": null
+     },
+     "forge": [
+      {
+       "kind": "castle_gate",
+       "tier": "good",
+       "outcome": "refined",
+       "refinedMs": 9697,
+       "parts": 32,
+       "usd": 0.0292,
+       "library": false
+      }
+     ],
+     "fps": {
+      "avg": 60,
+      "min1": 60,
+      "gap": 17
+     },
+     "before": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "after": {
+      "pos": [
+       0,
+       1.7,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "census": {
+      "entities": 49,
+      "kinds": 17,
+      "top": [
+       "wall_torch×8",
+       "person×6",
+       "bird×6",
+       "wall×5",
+       "corner_tower×4",
+       "banner×4",
+       "rock×3",
+       "bush×3",
+       "embers×2",
+       "floor×1",
+       "rug×1",
+       "castle_gate×1"
+      ],
+      "time": "dusk"
+     },
+     "hud": "",
+     "shot": "003_tp_castle_s1_take_me_to_a_medieval_castle.jpg"
+    }
+   ],
+   "fps": {
+    "avg": 60,
+    "min1": 60,
+    "gap": 17
+   },
+   "usd": 0.069,
+   "errors": [],
+   "errorCount": 0
+  },
+  {
+   "id": "tp_rome",
+   "group": "teleport",
+   "steps": [
+    {
+     "step": 1,
+     "text": "take me to ancient Rome",
+     "thought": true,
+     "idleMs": 1432,
+     "intent": {
+      "model": "haiku",
+      "ms": 1603,
+      "firstOpMs": 1419,
+      "count": 2
+     },
+     "entry": {
+      "ops": [
+       "teleport ancient Rome"
+      ],
+      "dropped": 0,
+      "notes": [],
+      "say": [],
+      "spawned": 0,
+      "modified": 0,
+      "removed": 0
+     },
+     "director": {
+      "world": "ancient Rome",
+      "status": "done",
+      "ops": 36,
+      "dropped": 0,
+      "firstOpMs": 2797,
+      "doneMs": 21602,
+      "usd": 0.0379995,
+      "error": null
+     },
+     "forge": [
+      {
+       "kind": "roman_temple",
+       "tier": "good",
+       "outcome": "refined",
+       "refinedMs": 9166,
+       "parts": 40,
+       "usd": 0.0291,
+       "library": false
+      }
+     ],
+     "fps": {
+      "avg": 60,
+      "min1": 60,
+      "gap": 17
+     },
+     "before": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "after": {
+      "pos": [
+       0,
+       1.7,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "census": {
+      "entities": 75,
+      "kinds": 19,
+      "top": [
+       "marble_column×10",
+       "oak×10",
+       "colonnade_arch×8",
+       "wall_torch×8",
+       "person×7",
+       "market_stall×6",
+       "bird×6",
+       "potted_plant×4",
+       "house×3",
+       "lamp×2",
+       "bench×2",
+       "hill×2"
+      ],
+      "time": "golden"
+     },
+     "hud": "",
+     "shot": "004_tp_rome_s1_take_me_to_ancient_Rome.jpg"
+    }
+   ],
+   "fps": {
+    "avg": 60,
+    "min1": 60,
+    "gap": 17
+   },
+   "usd": 0.0711,
+   "errors": [],
+   "errorCount": 0
+  },
+  {
+   "id": "tp_laundromat",
+   "group": "teleport",
+   "steps": [
+    {
+     "step": 1,
+     "text": "put me in a laundromat at 2am",
+     "thought": true,
+     "idleMs": 1551,
+     "intent": {
+      "model": "haiku",
+      "ms": 1586,
+      "firstOpMs": 1528,
+      "count": 2
+     },
+     "entry": {
+      "ops": [
+       "teleport laundromat"
+      ],
+      "dropped": 0,
+      "notes": [],
+      "say": [],
+      "spawned": 0,
+      "modified": 0,
+      "removed": 0
+     },
+     "director": {
+      "world": "laundromat",
+      "status": "done",
+      "ops": 36,
+      "dropped": 0,
+      "firstOpMs": 2848,
+      "doneMs": 19245,
+      "usd": 0.0320155,
+      "error": null
+     },
+     "forge": [
+      {
+       "kind": "washer",
+       "tier": "good",
+       "outcome": "refined",
+       "refinedMs": 7802,
+       "parts": 16,
+       "usd": 0.0258,
+       "library": false
+      }
+     ],
+     "fps": {
+      "avg": 60,
+      "min1": 60,
+      "gap": 17
+     },
+     "before": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "after": {
+      "pos": [
+       0,
+       1.7,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "census": {
+      "entities": 48,
+      "kinds": 15,
+      "top": [
+       "washer×9",
+       "fluorescent_tube×8",
+       "dryer×7",
+       "chair×7",
+       "wall×4",
+       "vending_machine×2",
+       "window×2",
+       "person×2",
+       "floor×1",
+       "rug×1",
+       "ceiling×1",
+       "folding_table×1"
+      ],
+      "time": "interior"
+     },
+     "hud": "",
+     "shot": "005_tp_laundromat_s1_put_me_in_a_laundromat_at_2a.jpg"
+    }
+   ],
+   "fps": {
+    "avg": 60,
+    "min1": 60,
+    "gap": 17
+   },
+   "usd": 0.0595,
+   "errors": [],
+   "errorCount": 0
+  },
+  {
+   "id": "tp_skyisland",
+   "group": "teleport",
+   "steps": [
+    {
+     "step": 1,
+     "text": "a floating island in the clouds with waterfalls pouring off the edges",
+     "thought": true,
+     "idleMs": 1492,
+     "intent": {
+      "model": "haiku",
+      "ms": 1687,
+      "firstOpMs": 1373,
+      "count": 3
+     },
+     "entry": {
+      "ops": [
+       "spawn island×1"
+      ],
+      "dropped": 0,
+      "notes": [],
+      "say": [],
+      "spawned": 1,
+      "modified": 0,
+      "removed": 0
+     },
+     "director": null,
+     "forge": [],
+     "fps": {
+      "avg": 58,
+      "min1": 46,
+      "gap": 167
+     },
+     "before": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "after": {
+      "pos": [
+       0,
+       1.6,
+       0.13
+      ],
+      "yaw": 0,
+      "pitch": 0.63
+     },
+     "census": {
+      "entities": 5,
+      "kinds": 2,
+      "top": [
+       "waterfall×4",
+       "island×1"
+      ],
+      "time": "dusk"
+     },
+     "hud": "Clouds part. An island floats.",
+     "shot": "006_tp_skyisland_s1_a_floating_island_in_the_clo.jpg"
+    }
+   ],
+   "fps": {
+    "avg": 58,
+    "min1": 46,
+    "gap": 167
+   },
+   "usd": 0.001,
+   "errors": [],
+   "errorCount": 0
+  }
+ ]
+}

@@ -88,7 +88,9 @@ function commit(next: WorldState, effects: Effects) {
  * the forge, wipe every mind, forget the saved view and walk the player back to the start.
  */
 function afterReset(prev: WorldState) {
-  beforeReset = prev.entities.length || prev.log.length ? exportWorld(prev) : beforeReset
+  // Starting over an already blank world forgets the old one: an undo later must never bring back a world
+  // from several resets ago (Gauntlet loop 1: the harness's reset, then a say-only wish, restored a forest).
+  beforeReset = prev.entities.length || prev.log.length ? exportWorld(prev) : null
   useDirector().abort()
   useForge().cancelAll()
   useNpc().wipe()
@@ -105,7 +107,9 @@ function undoReset(raw: unknown, label: string, meta: RunMeta): BatchResult | nu
   const saved = beforeReset
   if (!saved || state.value.log.length) return null
   const { ops } = parseOps(raw)
-  if (!ops.length || ops.some(o => o.op !== 'undo' && o.op !== 'say')) return null
+  // Only an actual undo brings it back: a batch of nothing but a say ("purple seven banana sideways" answered
+  // with a line) is not an undo.
+  if (!ops.some(o => o.op === 'undo') || ops.some(o => o.op !== 'undo' && o.op !== 'say')) return null
   beforeReset = null
   load(saved, 'before the reset')
   history.value = [...history.value, { n: ++counter, label, ops, dropped: [], notes: ['restored the world from before the reset'], say: [], spawned: state.value.entities.length, modified: 0, removed: 0, undone: false, source: meta.source, model: meta.model, ms: meta.ms }]

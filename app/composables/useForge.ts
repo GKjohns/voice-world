@@ -278,6 +278,19 @@ async function polish(job: Job, text: string, current: Part[], code: string | un
   }
 }
 
+/**
+ * Forge one learned kind at the good tier whatever its count (Gauntlet loop 1: the Director's signature
+ * prop for a place, often several instances: every one sweeps into the refined look). Same library, spend
+ * caps and abort rules as `consider`.
+ */
+function forgeKind(kind: string, text: string) {
+  if (disabled.value) return
+  watchWorld()
+  const desc = useWorld().state.value.kinds[kind]
+  if (!desc?.learned || (desc.quality && desc.quality !== 'draft')) return
+  void start(kind, text, 'good', { t0: performance.now() })
+}
+
 /** "Start over": every in-flight refine stops (the library on the server keeps what it already forged). */
 function cancelAll() {
   const r = useWorld().renderer()
@@ -291,5 +304,5 @@ function cancelAll() {
 }
 
 export function useForge() {
-  return { session, spent, disabled, log, consider, cancelAll, busy: () => jobs.size }
+  return { session, spent, disabled, log, consider, forgeKind, cancelAll, busy: () => jobs.size }
 }

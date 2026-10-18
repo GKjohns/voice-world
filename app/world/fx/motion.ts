@@ -84,6 +84,9 @@ export function motionPose(e: MotionEntity, t: number, height = 1, style?: Motio
       const lift = y0 < 0.3 ? 1.5 : 0
       return { ...base, x: x0 + dx, z: z0 + dz, y: y0 + lift + 1.4 * Math.sin(t * 0.21 * k + ph) + 0.3 * Math.sin(t * 0.9 * k + ph * 2), yaw: e.rotY + t * 0.08 * k * (seedOf(e.id, 3) > 0.5 ? 1 : -1), roll: 0.06 * Math.sin(t * 0.7 * k + ph), pitch: 0.05 * Math.sin(t * 0.55 * k + ph * 1.3) }
     }
+    case 'follow':
+      // Trails the player: the renderer steps it every frame (followStep), since it needs where you are.
+      return null
     case 'spin':
       return { ...base, yaw: e.rotY + t * 1.2 * k }
     case 'sway':
@@ -448,4 +451,176 @@ export function rig(kind: RigKind, d: Drive): Rig {
     out.head = { pitch: 0.1 * Math.sin(t * 1.3 + ph), yaw: 0.3 * Math.sin(t * 0.45 + ph * 2) }
   }
   return out
+}
+
+// ---------- Gauntlet loop 1: physics-lite (drops, throws, flips, no gravity) and followers ----------
+
+export const GRAVITY = 9.8
+/** How bouncy a landing is (each bounce keeps this share of the speed) and how many bounces play. */
+const RESTITUTION = 0.32
+const BOUNCES = 2
+
+/** Where a flight began (the kernel's Entity.launch) and what made it. */
+export interface Flight { from: Vec3, kind: 'drop' | 'throw' }
+
+/** One flight's timing: when it first hits (s), and when the last bounce settles. */
+export function flightTimes(e: { pos: Vec3, launch?: Flight }): { land: number, settle: number, bounce: number[] } | null {
+  const l = e.launch
+  if (!l) return null
+  const v = landingSpeed(e.pos, l)
+  const land = airTime(e.pos, l)
+  const bounce: number[] = []
+  let t = land
+  let u = v * RESTITUTION
+  for (let i = 0; i < BOUNCES && u > 0.6; i++) {
+    t += (2 * u) / GRAVITY
+    bounce.push(t)
+    u *= RESTITUTION
+  }
+  return { land, settle: t, bounce }
+}
+
+function apexOf(to: Vec3, l: Flight): number {
+  const d = Math.hypot(to[0] - l.from[0], to[2] - l.from[2])
+  return Math.min(30, Math.max(1.5, d * 0.22)) + Math.max(0, to[1] - l.from[1])
+}
+
+function airTime(to: Vec3, l: Flight): number {
+  if (l.kind === 'drop') return Math.sqrt((2 * Math.max(0, l.from[1] - to[1])) / GRAVITY)
+  // A throw rises `apex` over the launch height and comes down to the landing height.
+  const apex = apexOf(to, l)
+  const up = Math.sqrt((2 * apex) / GRAVITY)
+  const down = Math.sqrt((2 * Math.max(0.01, l.from[1] + apex - to[1])) / GRAVITY)
+  return up + down
+}
+
+function landingSpeed(to: Vec3, l: Flight): number {
+  const fall = l.kind === 'drop' ? l.from[1] - to[1] : l.from[1] + apexOf(to, l) - to[1]
+  return Math.sqrt(2 * GRAVITY * Math.max(0, fall))
+}
+
+/**
+ * The flight at `t` seconds: ballistic from `from` to the resting spot, then a couple of decaying bounces.
+ * A throw lands 90% of the way and the bounces carry it the rest. Null once it has settled. Spins while airborne.
+ */
+export function flightPose(e: { id: string, pos: Vec3, rotY: number, launch?: Flight }, t: number): Pose | null {
+  const l = e.launch
+  const times = flightTimes(e)
+  if (!l || !times || t >= times.settle || t < 0) return null
+  const [x1, y1, z1] = e.pos
+  const throwing = l.kind === 'throw'
+  const k = throwing ? 0.9 : 1
+  const lx = l.from[0] + (x1 - l.from[0]) * k
+  const lz = l.from[2] + (z1 - l.from[2]) * k
+  const spin = seedOf(e.id, 11) > 0.5 ? 1 : -1
+  if (t < times.land) {
+    const s = t / times.land
+    let y: number
+    if (throwing) {
+      const apex = apexOf(e.pos, l)
+      const vy = Math.sqrt(2 * GRAVITY * apex)
+      y = l.from[1] + vy * t - 0.5 * GRAVITY * t * t
+    } else {
+      y = l.from[1] - 0.5 * GRAVITY * t * t
+    }
+    return { x: l.from[0] + (lx - l.from[0]) * s, y: Math.max(y1, y), z: l.from[2] + (lz - l.from[2]) * s, yaw: e.rotY + (throwing ? t * 2 * spin : 0), roll: throwing ? 0 : 0.12 * Math.sin(t * 5) * spin, pitch: throwing ? t * 7 * spin : 0.06 * Math.sin(t * 4) }
+  }
+  // Bounces: each a smaller parabola, sliding the last stretch to the resting spot.
+  let t0 = times.land
+  let u = landingSpeed(e.pos, l) * RESTITUTION
+  for (let i = 0; i < times.bounce.length; i++) {
+    const t1 = times.bounce[i]!
+    if (t < t1) {
+      const tau = t - t0
+      const s0 = i / times.bounce.length
+      const s1 = (i + 1) / times.bounce.length
+      const s = s0 + (s1 - s0) * (tau / (t1 - t0))
+      return { x: lx + (x1 - lx) * s, y: y1 + u * tau - 0.5 * GRAVITY * tau * tau, z: lz + (z1 - lz) * s, yaw: e.rotY, roll: 0, pitch: throwing ? (t1 - t) * 3 * spin : 0 }
+    }
+    t0 = t1
+    u *= RESTITUTION
+  }
+  return null
+}
+
+/** How high (m) a tipped thing's base must lift so the turned box doesn't sink: half-width `w`, height `h`, roll `a`. */
+export function tipLift(a: number, w: number, h: number): number {
+  const c = Math.cos(a)
+  const s = Math.sin(a)
+  // The box's corners in its own x–y plane, rolled about the base pivot (rotation about local z).
+  let min = Infinity
+  for (const [x, y] of [[-w, 0], [w, 0], [-w, h], [w, h]] as const) min = Math.min(min, x * s + y * c)
+  return Math.max(0, -min)
+}
+
+/** Seconds a flip or topple takes. */
+export const TIP_SECONDS = 0.9
+
+/**
+ * The roll (rad) and lift for a tip, `t` seconds after it changed from `fromDeg` to `toDeg`: it turns over
+ * on its edge (the lift keeps the lowest corner on the ground) with a little hop at the top of the turn.
+ */
+export function tipPose(fromDeg: number, toDeg: number, t: number, w: number, h: number): { roll: number, lift: number } {
+  const k = Math.min(1, Math.max(0, t / TIP_SECONDS))
+  const e = k < 0.5 ? 4 * k * k * k : 1 - (-2 * k + 2) ** 3 / 2
+  const a = ((fromDeg + (toDeg - fromDeg) * e) * Math.PI) / 180
+  return { roll: a, lift: tipLift(a, w, h) + Math.sin(Math.PI * k) * 0.08 * h }
+}
+
+/** No gravity: how high a loose thing has floated `t` seconds after gravity went (it rises and slows). */
+export function floatHeight(id: string, t: number, height: number): number {
+  const top = (2.5 + 5.5 * seedOf(id, 21)) * Math.max(1, Math.sqrt(Math.max(0.3, height)))
+  const delay = seedOf(id, 23) * 0.8
+  const s = Math.max(0, t - delay)
+  return top * (1 - Math.exp(-s / 4.5)) + 0.25 * Math.sin(s * 0.9 + seedOf(id) * 6) * Math.min(1, s)
+}
+
+/**
+ * The weightless offset: `off` = seconds since gravity went; `on` = seconds since it came back (or
+ * undefined while it's still off). Floating things rise and tumble slowly; when gravity returns they fall
+ * back with a little bounce. Null when nothing to add.
+ */
+export function weightlessPose(id: string, height: number, off: number, on?: number): { dy: number, yaw: number, roll: number, pitch: number } | null {
+  if (on === undefined) {
+    const s = Math.max(0, off)
+    const w = 0.15 + 0.25 * seedOf(id, 25)
+    const dir = seedOf(id, 27) > 0.5 ? 1 : -1
+    return { dy: floatHeight(id, s, height), yaw: s * w * dir, roll: 0.5 * Math.sin(s * w * 0.8 + seedOf(id) * 4) * Math.min(1, s / 3), pitch: 0.4 * Math.sin(s * w * 0.6 + seedOf(id, 29) * 4) * Math.min(1, s / 3) }
+  }
+  const h0 = floatHeight(id, Math.max(0, off - on), height)
+  const tf = Math.sqrt((2 * h0) / GRAVITY)
+  if (on < tf) return { dy: Math.max(0, h0 - 0.5 * GRAVITY * on * on), yaw: 0, roll: 0, pitch: 0 }
+  const u = GRAVITY * tf * RESTITUTION
+  const tb = (2 * u) / GRAVITY
+  const tau = on - tf
+  if (tau < tb) return { dy: Math.max(0, u * tau - 0.5 * GRAVITY * tau * tau), yaw: 0, roll: 0, pitch: 0 }
+  return null
+}
+
+/** A follower's spot this frame (Gauntlet loop 1: "a dog that follows me around"). */
+export interface FollowState { x: number, z: number, yaw: number }
+
+/**
+ * Trot toward a spot a few metres ahead of the player and off to one side (so it's in the lower part of the
+ * view while you walk), fast enough to keep up with a run. Far behind (a teleport, a giant's stride): it
+ * bounds over at once. Facing: where it goes, or you when it's settled.
+ */
+export function followStep(cur: FollowState, id: string, player: { x: number, z: number, yaw: number }, dt: number, size = 1): FollowState {
+  const side = seedOf(id, 31) > 0.5 ? 1 : -1
+  const ahead = 2.6 + size * 0.8
+  const off = 1.3 + size * 0.5
+  const gx = player.x - Math.sin(player.yaw) * ahead + Math.cos(player.yaw) * off * side
+  const gz = player.z - Math.cos(player.yaw) * ahead - Math.sin(player.yaw) * off * side
+  const dx = gx - cur.x
+  const dz = gz - cur.z
+  const d = Math.hypot(dx, dz)
+  if (d > 60) return { x: gx, z: gz, yaw: Math.atan2(player.x - gx, player.z - gz) }
+  if (d < 0.3) {
+    const face = Math.atan2(player.x - cur.x, player.z - cur.z)
+    return { ...cur, yaw: cur.yaw + wrap(face - cur.yaw) * Math.min(1, dt * 3) }
+  }
+  const v = Math.min(18, d * 2.6)
+  const step = Math.min(d, v * dt)
+  const heading = Math.atan2(dx, dz)
+  return { x: cur.x + (dx / d) * step, z: cur.z + (dz / d) * step, yaw: cur.yaw + wrap(heading - cur.yaw) * Math.min(1, dt * 8) }
 }

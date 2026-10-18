@@ -1,0 +1,1436 @@
+{
+ "url": "http://localhost:3091/",
+ "startedAt": "2026-10-18T03:10:48.252Z",
+ "minutes": 3.1,
+ "spend": 0.03782800000000001,
+ "spendBy": {
+  "/api/intent (est)": 0.01800000000000001,
+  "/api/forge": 0.019828
+ },
+ "forgeStatus": {
+  "total": 0.8602,
+  "session": 0.0198,
+  "calls": 33,
+  "cap": 12,
+  "sessionCap": 1.5
+ },
+ "results": [
+  {
+   "id": "sky_aurora",
+   "group": "sky",
+   "steps": [
+    {
+     "step": 1,
+     "text": "make it night with the northern lights",
+     "thought": true,
+     "idleMs": 1041,
+     "intent": {
+      "model": "haiku",
+      "ms": 1103,
+      "firstOpMs": 1026,
+      "count": 2
+     },
+     "entry": {
+      "ops": [
+       "atmosphere night/aurora"
+      ],
+      "dropped": 0,
+      "notes": [],
+      "say": [],
+      "spawned": 0,
+      "modified": 0,
+      "removed": 0
+     },
+     "director": null,
+     "forge": [],
+     "fps": {
+      "avg": 60,
+      "min1": 60,
+      "gap": 17
+     },
+     "before": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "after": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": 0.5
+     },
+     "census": {
+      "entities": 0,
+      "kinds": 0,
+      "top": [],
+      "time": "night",
+      "weather": "aurora"
+     },
+     "hud": "Night falls.",
+     "shot": "001_sky_aurora_s1_make_it_night_with_the_north.jpg"
+    }
+   ],
+   "fps": {
+    "avg": 60,
+    "min1": 60,
+    "gap": 17
+   },
+   "usd": 0.001,
+   "errors": [],
+   "errorCount": 0
+  },
+  {
+   "id": "sky_two_moons",
+   "group": "sky",
+   "steps": [
+    {
+     "step": 1,
+     "text": "turn the sky purple and give it two moons",
+     "thought": true,
+     "idleMs": 992,
+     "intent": {
+      "model": "haiku",
+      "ms": 1060,
+      "firstOpMs": 981,
+      "count": 2
+     },
+     "entry": {
+      "ops": [
+       "atmosphere #7b4fa6"
+      ],
+      "dropped": 0,
+      "notes": [],
+      "say": [],
+      "spawned": 0,
+      "modified": 0,
+      "removed": 0
+     },
+     "director": null,
+     "forge": [],
+     "fps": {
+      "avg": 60,
+      "min1": 60,
+      "gap": 17
+     },
+     "before": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "after": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "census": {
+      "entities": 0,
+      "kinds": 0,
+      "top": [],
+      "time": "dusk"
+     },
+     "hud": "A purple sky. Two moons rise.",
+     "shot": "002_sky_two_moons_s1_turn_the_sky_purple_and_give.jpg"
+    }
+   ],
+   "fps": {
+    "avg": 60,
+    "min1": 60,
+    "gap": 17
+   },
+   "usd": 0.001,
+   "errors": [],
+   "errorCount": 0
+  },
+  {
+   "id": "sky_blizzard",
+   "group": "sky",
+   "steps": [
+    {
+     "step": 1,
+     "text": "some pine trees",
+     "thought": true,
+     "idleMs": 2990,
+     "intent": {
+      "model": "haiku",
+      "ms": 2955,
+      "firstOpMs": 2878,
+      "count": 2
+     },
+     "entry": {
+      "model": "haiku",
+      "ms": 2955,
+      "ops": [
+       "spawn pine×5"
+      ],
+      "dropped": 0,
+      "notes": [],
+      "say": [
+       "A grove rises."
+      ],
+      "spawned": 5,
+      "modified": 0,
+      "removed": 0
+     },
+     "director": null,
+     "forge": [],
+     "fps": {
+      "avg": 59,
+      "min1": 54,
+      "gap": 83
+     },
+     "before": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "after": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "census": {
+      "entities": 5,
+      "kinds": 1,
+      "top": [
+       "pine×5"
+      ],
+      "time": "dusk"
+     },
+     "hud": "A grove rises.",
+     "shot": "003_sky_blizzard_s1_some_pine_trees.jpg"
+    },
+    {
+     "step": 2,
+     "text": "now a blizzard",
+     "thought": true,
+     "idleMs": 1181,
+     "intent": {
+      "model": "haiku",
+      "ms": 1289,
+      "firstOpMs": 1168,
+      "count": 2
+     },
+     "entry": {
+      "ops": [
+       "atmosphere snow"
+      ],
+      "dropped": 0,
+      "notes": [],
+      "say": [],
+      "spawned": 0,
+      "modified": 0,
+      "removed": 0
+     },
+     "director": null,
+     "forge": [],
+     "fps": {
+      "avg": 60,
+      "min1": 60,
+      "gap": 17
+     },
+     "before": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "after": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "census": {
+      "entities": 5,
+      "kinds": 1,
+      "top": [
+       "pine×5"
+      ],
+      "time": "dusk",
+      "weather": "snow"
+     },
+     "hud": "The white wind comes.",
+     "shot": "004_sky_blizzard_s2_now_a_blizzard.jpg"
+    }
+   ],
+   "fps": {
+    "avg": 60,
+    "min1": 54,
+    "gap": 83
+   },
+   "usd": 0.002,
+   "errors": [],
+   "errorCount": 0
+  },
+  {
+   "id": "phys_drop",
+   "group": "phys",
+   "steps": [
+    {
+     "step": 1,
+     "text": "drop a piano from the sky",
+     "thought": true,
+     "idleMs": 1141,
+     "intent": {
+      "model": "haiku",
+      "ms": 2991,
+      "firstOpMs": 1120,
+      "count": 3
+     },
+     "entry": {
+      "ops": [
+       "spawn piano×1"
+      ],
+      "dropped": 0,
+      "notes": [
+       "unknown kind \"piano\": holding its spot with a placeholder until it's defined"
+      ],
+      "say": [],
+      "spawned": 1,
+      "modified": 0,
+      "removed": 0
+     },
+     "director": null,
+     "forge": [
+      {
+       "kind": "piano",
+       "tier": "good",
+       "outcome": "library hit",
+       "draftMs": 2900,
+       "refinedMs": 3804,
+       "parts": 29,
+       "usd": 0,
+       "library": true
+      }
+     ],
+     "fps": {
+      "avg": 60,
+      "min1": 57,
+      "gap": 67
+     },
+     "before": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "after": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "census": {
+      "entities": 1,
+      "kinds": 1,
+      "top": [
+       "piano×1"
+      ],
+      "time": "dusk"
+     },
+     "hud": "Look out below! A piano falls.",
+     "shot": "005_phys_drop_s1_drop_a_piano_from_the_sky.jpg"
+    }
+   ],
+   "fps": {
+    "avg": 60,
+    "min1": 57,
+    "gap": 67
+   },
+   "usd": 0.001,
+   "errors": [],
+   "errorCount": 0
+  },
+  {
+   "id": "phys_stack",
+   "group": "phys",
+   "steps": [
+    {
+     "step": 1,
+     "text": "stack five wooden crates on top of each other",
+     "thought": true,
+     "idleMs": 1200,
+     "intent": {
+      "model": "haiku",
+      "ms": 1917,
+      "firstOpMs": 1186,
+      "count": 3
+     },
+     "entry": {
+      "ops": [
+       "spawn crate×5"
+      ],
+      "dropped": 0,
+      "notes": [
+       "unknown kind \"crate\": holding its spot with a placeholder until it's defined"
+      ],
+      "say": [],
+      "spawned": 5,
+      "modified": 0,
+      "removed": 0
+     },
+     "director": null,
+     "forge": [],
+     "fps": {
+      "avg": 60,
+      "min1": 60,
+      "gap": 17
+     },
+     "before": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "after": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": 0.43
+     },
+     "census": {
+      "entities": 5,
+      "kinds": 1,
+      "top": [
+       "crate×5"
+      ],
+      "time": "dusk"
+     },
+     "hud": "Five crates, stacked high.",
+     "shot": "006_phys_stack_s1_stack_five_wooden_crates_on_.jpg"
+    }
+   ],
+   "fps": {
+    "avg": 60,
+    "min1": 60,
+    "gap": 17
+   },
+   "usd": 0.001,
+   "errors": [],
+   "errorCount": 0
+  },
+  {
+   "id": "phys_gravity",
+   "group": "phys",
+   "steps": [
+    {
+     "step": 1,
+     "text": "a pile of beach balls",
+     "thought": true,
+     "idleMs": 1169,
+     "intent": {
+      "model": "haiku",
+      "ms": 1968,
+      "firstOpMs": 1157,
+      "count": 3
+     },
+     "entry": {
+      "ops": [
+       "spawn beach_ball×7"
+      ],
+      "dropped": 0,
+      "notes": [
+       "unknown kind \"beach_ball\": holding its spot with a placeholder until it's defined"
+      ],
+      "say": [],
+      "spawned": 7,
+      "modified": 0,
+      "removed": 0
+     },
+     "director": null,
+     "forge": [],
+     "fps": {
+      "avg": 60,
+      "min1": 60,
+      "gap": 17
+     },
+     "before": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "after": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": 0.56
+     },
+     "census": {
+      "entities": 7,
+      "kinds": 1,
+      "top": [
+       "beach_ball×7"
+      ],
+      "time": "dusk"
+     },
+     "hud": "A tumble of colour.",
+     "shot": "007_phys_gravity_s1_a_pile_of_beach_balls.jpg"
+    },
+    {
+     "step": 2,
+     "text": "turn gravity off",
+     "thought": true,
+     "idleMs": 1134,
+     "intent": {
+      "model": "haiku",
+      "ms": 1239,
+      "firstOpMs": 1122,
+      "count": 2
+     },
+     "entry": {
+      "ops": [
+       "atmosphere "
+      ],
+      "dropped": 0,
+      "notes": [],
+      "say": [],
+      "spawned": 0,
+      "modified": 0,
+      "removed": 0
+     },
+     "director": null,
+     "forge": [],
+     "fps": {
+      "avg": 60,
+      "min1": 60,
+      "gap": 17
+     },
+     "before": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": 0.56
+     },
+     "after": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": 0.56
+     },
+     "census": {
+      "entities": 7,
+      "kinds": 1,
+      "top": [
+       "beach_ball×7"
+      ],
+      "time": "dusk"
+     },
+     "hud": "Gravity lets go. Up they drift.",
+     "shot": "008_phys_gravity_s2_turn_gravity_off.jpg"
+    }
+   ],
+   "fps": {
+    "avg": 60,
+    "min1": 60,
+    "gap": 17
+   },
+   "usd": 0.002,
+   "errors": [],
+   "errorCount": 0
+  },
+  {
+   "id": "phys_throw",
+   "group": "phys",
+   "steps": [
+    {
+     "step": 1,
+     "text": "throw a ball as far as you can",
+     "thought": true,
+     "idleMs": 1350,
+     "intent": {
+      "model": "haiku",
+      "ms": 1884,
+      "firstOpMs": 1336,
+      "count": 3
+     },
+     "entry": {
+      "ops": [
+       "spawn ball×1"
+      ],
+      "dropped": 0,
+      "notes": [
+       "unknown kind \"ball\": holding its spot with a placeholder until it's defined"
+      ],
+      "say": [],
+      "spawned": 1,
+      "modified": 0,
+      "removed": 0
+     },
+     "director": null,
+     "forge": [
+      {
+       "kind": "ball",
+       "tier": "good",
+       "outcome": "refined",
+       "draftMs": 1794,
+       "refinedMs": 9092,
+       "parts": 9,
+       "usd": 0.0198,
+       "library": false
+      }
+     ],
+     "fps": {
+      "avg": 60,
+      "min1": 60,
+      "gap": 17
+     },
+     "before": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "after": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.03
+     },
+     "census": {
+      "entities": 1,
+      "kinds": 1,
+      "top": [
+       "ball×1"
+      ],
+      "time": "dusk"
+     },
+     "hud": "",
+     "shot": "009_phys_throw_s1_throw_a_ball_as_far_as_you_c.jpg"
+    }
+   ],
+   "fps": {
+    "avg": 60,
+    "min1": 60,
+    "gap": 17
+   },
+   "usd": 0.0208,
+   "errors": [],
+   "errorCount": 0
+  },
+  {
+   "id": "nav_walk",
+   "group": "nav",
+   "steps": [
+    {
+     "step": 1,
+     "text": "a lighthouse over there",
+     "thought": true,
+     "idleMs": 1250,
+     "intent": {
+      "model": "haiku",
+      "ms": 2718,
+      "firstOpMs": 1231,
+      "count": 3
+     },
+     "entry": {
+      "ops": [
+       "spawn lighthouse×1"
+      ],
+      "dropped": 0,
+      "notes": [
+       "unknown kind \"lighthouse\": holding its spot with a placeholder until it's defined"
+      ],
+      "say": [],
+      "spawned": 1,
+      "modified": 0,
+      "removed": 0
+     },
+     "director": null,
+     "forge": [
+      {
+       "kind": "lighthouse",
+       "tier": "good",
+       "outcome": "library hit",
+       "draftMs": 2652,
+       "refinedMs": 3555,
+       "parts": 36,
+       "usd": 0,
+       "library": true
+      }
+     ],
+     "fps": {
+      "avg": 60,
+      "min1": 60,
+      "gap": 17
+     },
+     "before": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "after": {
+      "pos": [
+       0,
+       1.6,
+       1.5
+      ],
+      "yaw": 0,
+      "pitch": 0.39
+     },
+     "census": {
+      "entities": 1,
+      "kinds": 1,
+      "top": [
+       "lighthouse×1"
+      ],
+      "time": "dusk"
+     },
+     "hud": "A beacon rises over the water.",
+     "shot": "010_nav_walk_s1_a_lighthouse_over_there.jpg"
+    },
+    {
+     "step": 2,
+     "action": "hold w 3000 ms",
+     "fps": {
+      "avg": 60,
+      "min1": 60,
+      "gap": 17
+     },
+     "before": {
+      "pos": [
+       0,
+       1.6,
+       1.5
+      ],
+      "yaw": 0,
+      "pitch": 0.39
+     },
+     "after": {
+      "pos": [
+       0,
+       1.6,
+       -11.1
+      ],
+      "yaw": 0,
+      "pitch": 0.39
+     },
+     "census": {
+      "entities": 1,
+      "kinds": 1,
+      "top": [
+       "lighthouse×1"
+      ],
+      "time": "dusk"
+     },
+     "hud": "",
+     "shot": "011_nav_walk_s2_walk.jpg"
+    },
+    {
+     "step": 3,
+     "action": "drag 420,0",
+     "fps": {
+      "avg": 61,
+      "min1": 60,
+      "gap": 17
+     },
+     "before": {
+      "pos": [
+       0,
+       1.6,
+       -11.1
+      ],
+      "yaw": 0,
+      "pitch": 0.39
+     },
+     "after": {
+      "pos": [
+       0,
+       1.6,
+       -11.1
+      ],
+      "yaw": -1.68,
+      "pitch": 0.39
+     },
+     "census": {
+      "entities": 1,
+      "kinds": 1,
+      "top": [
+       "lighthouse×1"
+      ],
+      "time": "dusk"
+     },
+     "hud": "",
+     "shot": "012_nav_walk_s3_look_right.jpg"
+    },
+    {
+     "step": 4,
+     "action": "hold shift+w 2500 ms",
+     "fps": {
+      "avg": 60,
+      "min1": 60,
+      "gap": 17
+     },
+     "before": {
+      "pos": [
+       0,
+       1.6,
+       -11.1
+      ],
+      "yaw": -1.68,
+      "pitch": 0.39
+     },
+     "after": {
+      "pos": [
+       35.72,
+       1.6,
+       -7.18
+      ],
+      "yaw": -1.68,
+      "pitch": 0.39
+     },
+     "census": {
+      "entities": 1,
+      "kinds": 1,
+      "top": [
+       "lighthouse×1"
+      ],
+      "time": "dusk"
+     },
+     "hud": "",
+     "shot": "013_nav_walk_s4_run.jpg"
+    }
+   ],
+   "fps": {
+    "avg": 60,
+    "min1": 60,
+    "gap": 17
+   },
+   "usd": 0.001,
+   "errors": [],
+   "errorCount": 0
+  },
+  {
+   "id": "nav_top",
+   "group": "nav",
+   "steps": [
+    {
+     "step": 1,
+     "text": "a really tall tower",
+     "thought": true,
+     "idleMs": 1142,
+     "intent": {
+      "model": "haiku",
+      "ms": 1263,
+      "firstOpMs": 1125,
+      "count": 2
+     },
+     "entry": {
+      "ops": [
+       "spawn tower×1"
+      ],
+      "dropped": 0,
+      "notes": [],
+      "say": [],
+      "spawned": 1,
+      "modified": 0,
+      "removed": 0
+     },
+     "director": null,
+     "forge": [],
+     "fps": {
+      "avg": 60,
+      "min1": 60,
+      "gap": 17
+     },
+     "before": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "after": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": 0.56
+     },
+     "census": {
+      "entities": 1,
+      "kinds": 1,
+      "top": [
+       "tower×1"
+      ],
+      "time": "dusk"
+     },
+     "hud": "Reaching for the clouds.",
+     "shot": "014_nav_top_s1_a_really_tall_tower.jpg"
+    },
+    {
+     "step": 2,
+     "text": "take me to the top of it",
+     "thought": true,
+     "idleMs": 1088,
+     "intent": {
+      "model": "haiku",
+      "ms": 1136,
+      "firstOpMs": 1068,
+      "count": 2
+     },
+     "entry": {
+      "ops": [
+       "goto"
+      ],
+      "dropped": 0,
+      "notes": [],
+      "say": [],
+      "spawned": 0,
+      "modified": 0,
+      "removed": 0
+     },
+     "director": null,
+     "forge": [],
+     "fps": {
+      "avg": 60,
+      "min1": 60,
+      "gap": 17
+     },
+     "before": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": 0.56
+     },
+     "after": {
+      "pos": [
+       0,
+       73.6,
+       -54.56
+      ],
+      "yaw": 0,
+      "pitch": -0.46
+     },
+     "census": {
+      "entities": 1,
+      "kinds": 1,
+      "top": [
+       "tower×1"
+      ],
+      "time": "dusk"
+     },
+     "hud": "Up you go. Mind the edge.",
+     "shot": "015_nav_top_s2_take_me_to_the_top_of_it.jpg"
+    }
+   ],
+   "fps": {
+    "avg": 60,
+    "min1": 60,
+    "gap": 17
+   },
+   "usd": 0.002,
+   "errors": [],
+   "errorCount": 0
+  },
+  {
+   "id": "nav_fly",
+   "group": "nav",
+   "steps": [
+    {
+     "step": 1,
+     "text": "let me fly",
+     "thought": true,
+     "idleMs": 1271,
+     "intent": {
+      "model": "haiku",
+      "ms": 1347,
+      "firstOpMs": 1262,
+      "count": 2
+     },
+     "entry": {
+      "ops": [
+       "atmosphere "
+      ],
+      "dropped": 0,
+      "notes": [],
+      "say": [],
+      "spawned": 0,
+      "modified": 0,
+      "removed": 0
+     },
+     "director": null,
+     "forge": [],
+     "fps": {
+      "avg": 60,
+      "min1": 60,
+      "gap": 17
+     },
+     "before": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "after": {
+      "pos": [
+       0,
+       5.36,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "census": {
+      "entities": 0,
+      "kinds": 0,
+      "top": [],
+      "time": "dusk"
+     },
+     "hud": "Rise! Space lifts you; look and walk to steer.",
+     "shot": "016_nav_fly_s1_let_me_fly.jpg"
+    },
+    {
+     "step": 2,
+     "action": "hold w 3000 ms",
+     "fps": {
+      "avg": 60,
+      "min1": 60,
+      "gap": 17
+     },
+     "before": {
+      "pos": [
+       0,
+       5.36,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "after": {
+      "pos": [
+       0,
+       5.36,
+       -29.44
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "census": {
+      "entities": 0,
+      "kinds": 0,
+      "top": [],
+      "time": "dusk"
+     },
+     "hud": "",
+     "shot": "017_nav_fly_s2_fly_forward.jpg"
+    }
+   ],
+   "fps": {
+    "avg": 60,
+    "min1": 60,
+    "gap": 17
+   },
+   "usd": 0.001,
+   "errors": [],
+   "errorCount": 0
+  },
+  {
+   "id": "absurd_upside",
+   "group": "absurd",
+   "steps": [
+    {
+     "step": 1,
+     "text": "a big house",
+     "thought": true,
+     "idleMs": 1938,
+     "intent": {
+      "model": "haiku",
+      "ms": 2001,
+      "firstOpMs": 1924,
+      "count": 2
+     },
+     "entry": {
+      "ops": [
+       "spawn house×1"
+      ],
+      "dropped": 0,
+      "notes": [],
+      "say": [],
+      "spawned": 1,
+      "modified": 0,
+      "removed": 0
+     },
+     "director": null,
+     "forge": [],
+     "fps": {
+      "avg": 60,
+      "min1": 60,
+      "gap": 17
+     },
+     "before": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "after": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": 0.17
+     },
+     "census": {
+      "entities": 1,
+      "kinds": 1,
+      "top": [
+       "house×1"
+      ],
+      "time": "dusk"
+     },
+     "hud": "A grand house rises.",
+     "shot": "018_absurd_upside_s1_a_big_house.jpg"
+    },
+    {
+     "step": 2,
+     "text": "flip it upside down",
+     "thought": true,
+     "idleMs": 1128,
+     "intent": {
+      "model": "haiku",
+      "ms": 1164,
+      "firstOpMs": 1108,
+      "count": 2
+     },
+     "entry": {
+      "ops": [
+       "modify {\"ref\":\"gaze\"}→{\"tip\":180}"
+      ],
+      "dropped": 0,
+      "notes": [],
+      "say": [],
+      "spawned": 0,
+      "modified": 1,
+      "removed": 0
+     },
+     "director": null,
+     "forge": [],
+     "fps": {
+      "avg": 60,
+      "min1": 60,
+      "gap": 17
+     },
+     "before": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": 0.17
+     },
+     "after": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": 0.17
+     },
+     "census": {
+      "entities": 1,
+      "kinds": 1,
+      "top": [
+       "house×1"
+      ],
+      "time": "dusk"
+     },
+     "hud": "Upside down, as you wish.",
+     "shot": "019_absurd_upside_s2_flip_it_upside_down.jpg"
+    }
+   ],
+   "fps": {
+    "avg": 60,
+    "min1": 60,
+    "gap": 17
+   },
+   "usd": 0.002,
+   "errors": [],
+   "errorCount": 0
+  },
+  {
+   "id": "fail_reset",
+   "group": "fail",
+   "steps": [
+    {
+     "step": 1,
+     "text": "a forest with a river",
+     "thought": true,
+     "idleMs": 1249,
+     "intent": {
+      "model": "haiku",
+      "ms": 1571,
+      "firstOpMs": 1234,
+      "count": 4
+     },
+     "entry": {
+      "ops": [
+       "spawn pine×30"
+      ],
+      "dropped": 0,
+      "notes": [],
+      "say": [],
+      "spawned": 30,
+      "modified": 0,
+      "removed": 0
+     },
+     "director": null,
+     "forge": [],
+     "fps": {
+      "avg": 59,
+      "min1": 50,
+      "gap": 183
+     },
+     "before": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "after": {
+      "pos": [
+       -2.18,
+       1.6,
+       24.91
+      ],
+      "yaw": -0.05,
+      "pitch": 0.06
+     },
+     "census": {
+      "entities": 46,
+      "kinds": 3,
+      "top": [
+       "pine×30",
+       "oak×15",
+       "river×1"
+      ],
+      "time": "dusk"
+     },
+     "hud": "A forest, and a river winding through.",
+     "shot": "020_fail_reset_s1_a_forest_with_a_river.jpg"
+    },
+    {
+     "step": 2,
+     "text": "start over",
+     "thought": true,
+     "idleMs": 1132,
+     "intent": {
+      "model": "haiku",
+      "ms": 1181,
+      "firstOpMs": 1109,
+      "count": 2
+     },
+     "entry": {
+      "ops": [
+       "reset"
+      ],
+      "dropped": 0,
+      "notes": [],
+      "say": [],
+      "spawned": 0,
+      "modified": 0,
+      "removed": 46
+     },
+     "director": null,
+     "forge": [],
+     "fps": {
+      "avg": 60,
+      "min1": 60,
+      "gap": 17
+     },
+     "before": {
+      "pos": [
+       -2.18,
+       1.6,
+       24.91
+      ],
+      "yaw": -0.05,
+      "pitch": 0.06
+     },
+     "after": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "census": {
+      "entities": 0,
+      "kinds": 0,
+      "top": [],
+      "time": "dusk"
+     },
+     "hud": "Speak, and it shall be. Try: “raise a castle on a hill” just start typing (or press Enter) · tap the to speak · drag to look · W A S D to walk A blank slate.",
+     "shot": "021_fail_reset_s2_start_over.jpg"
+    }
+   ],
+   "fps": {
+    "avg": 59,
+    "min1": 50,
+    "gap": 183
+   },
+   "usd": 0.002,
+   "errors": [],
+   "errorCount": 0
+  },
+  {
+   "id": "fail_nonsense",
+   "group": "fail",
+   "steps": [
+    {
+     "step": 1,
+     "text": "purple seven banana sideways",
+     "thought": true,
+     "idleMs": 1517,
+     "intent": {
+      "model": "haiku",
+      "ms": 2154,
+      "firstOpMs": 1498,
+      "count": 3
+     },
+     "entry": {
+      "ops": [
+       "spawn banana×7"
+      ],
+      "dropped": 0,
+      "notes": [
+       "unknown kind \"banana\": holding its spot with a placeholder until it's defined"
+      ],
+      "say": [],
+      "spawned": 7,
+      "modified": 0,
+      "removed": 0
+     },
+     "director": null,
+     "forge": [],
+     "fps": {
+      "avg": 60,
+      "min1": 60,
+      "gap": 17
+     },
+     "before": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "after": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "census": {
+      "entities": 7,
+      "kinds": 1,
+      "top": [
+       "banana×7"
+      ],
+      "time": "dusk"
+     },
+     "hud": "Seven purple bananas, tipped on their sides.",
+     "shot": "022_fail_nonsense_s1_purple_seven_banana_sideways.jpg"
+    }
+   ],
+   "fps": {
+    "avg": 60,
+    "min1": 60,
+    "gap": 17
+   },
+   "usd": 0.001,
+   "errors": [],
+   "errorCount": 0
+  }
+ ]
+}

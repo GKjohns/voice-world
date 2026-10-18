@@ -28,6 +28,11 @@ export interface View {
 const MARGIN = 0.92
 /** The furthest a framing move may carry you (m). Everything bigger is seen from where you stand. */
 export const MAX_BACK = 7
+/**
+ * Outdoors (no ceiling over you) a framing move may back you this far (Gauntlet loop 1): a cabin made three
+ * times bigger or a castle with tall towers is seen whole, not cropped. Walls still stop the dolly.
+ */
+export const OUTDOOR_BACK = 30
 /** How far short of a wall a step back stops (m). */
 const WALL_GAP = 0.8
 
@@ -42,7 +47,7 @@ export interface FrameOpts {
 export function backLadder(maxBack: number, free = Infinity): number[] {
   const lim = Math.max(0, Math.min(maxBack, free - WALL_GAP))
   const out = [0]
-  for (const b of [1.5, 3, 4.5, 6, 7, 8]) if (b <= lim + 1e-6) out.push(b)
+  for (const b of [1.5, 3, 4.5, 6, 7, 8, 11, 15, 20, 25, 30]) if (b <= lim + 1e-6) out.push(b)
   if (lim > 0.5 && out[out.length - 1]! < lim - 0.25) out.push(lim)
   return out
 }
@@ -86,7 +91,8 @@ function worst(pts: THREE.Vector3[]): number {
     v.copy(p).applyMatrix4(scratch.matrixWorldInverse)
     if (v.z > -0.8) return Infinity
     v.applyMatrix4(scratch.projectionMatrix)
-    w = Math.max(w, Math.abs(v.x), Math.abs(v.y))
+    // Vertical is stricter (Gauntlet loop 1): captions and the HUD sit over the bottom of the frame.
+    w = Math.max(w, Math.abs(v.x), Math.abs(v.y) * 1.12)
   }
   return w
 }

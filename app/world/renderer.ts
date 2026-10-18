@@ -24,11 +24,15 @@ import { Gathering } from './fx/anticipate'
 import { Placeholder } from './fx/placeholder'
 import { beam, dissolve, shimmer, shockwave, sparkle } from './fx/arrival'
 import type { Fx } from './fx/common'
-import { skyTilt, solveFrame } from './fx/frame'
+import { OUTDOOR_BACK, skyTilt, solveFrame } from './fx/frame'
 import type { FrameBox, View } from './fx/frame'
 import { Vortex } from './fx/vortex'
-import { applyPose, blendedPose, driveOf, motionPose } from './fx/motion'
-import type { Drive, MotionStyle } from './fx/motion'
+import { applyPose, blendedPose, driveOf, flightPose, flightTimes, followStep, motionPose, tipPose, weightlessPose, GRAVITY, TIP_SECONDS } from './fx/motion'
+import { customizeSky, moonSpot } from './fx/skymods'
+import { slideOut } from './fx/collide'
+import type { Circle } from './fx/collide'
+import { isLoose } from '#shared/world/state'
+import type { Drive, FollowState, MotionStyle, Pose } from './fx/motion'
 import { WeatherFx } from './fx/weather'
 import { softDot } from './fx/common'
 import { LightPool } from './perf/lights'
@@ -82,6 +86,17 @@ interface StudioReq {
   id: string
   body?: THREE.Group
   resolve: (url: string | null) => void
+}
+
+/** Gauntlet loop 1 (track B): one item's physics-lite clocks (its flight, its tip, when it first appeared). */
+interface PhysClock {
+  key: string
+  t0: number
+  hits: number
+  tipFrom: number
+  tipTo: number
+  tipAt: number
+  seen: number
 }
 
 interface Item {
@@ -225,6 +240,24 @@ export class WorldRenderer {
   private studioQueue: StudioReq[] = []
   private studioCam = new THREE.PerspectiveCamera(40, STUDIO_W / STUDIO_H, 0.05, 2000)
   private studioPixels = new Uint8Array(STUDIO_W * STUDIO_H * 4)
+  // Gauntlet loop 1 (track B): physics-lite clocks per item, followers, no-gravity, flight, the "take me to
+  // the top" glide, a soft camera track on things that arrive moving, and the extra moons.
+  private phys = new Map<string, PhysClock>()
+  private posed = new Set<string>()
+  private follow = new Map<string, FollowState & { speed: number, stride: number }>()
+  private live = new Set<string>()
+  private gravityOff: number | null = null
+  private gravityOn: number | null = null
+  private flying = false
+  private falling = false
+  private flyY = 0
+  private flyVel = 0
+  private glide: { from: THREE.Vector3, to: THREE.Vector3, start: number, dur: number, yaw0: number, yaw1: number, pitch0: number, pitch1: number } | null = null
+  private track: { ids: string[], start: number, until: number } | null = null
+  private extraMoons: THREE.Sprite[] = []
+  private moonYaw = 0
+  /** Where a goto left you standing (the top of a tower): you stay up there until you step off it. */
+  private perch: { x: number, z: number, r: number, y: number, id: string } | null = null
 
   constructor(host: HTMLElement) {
     this.host = host
@@ -465,6 +498,7 @@ export class WorldRenderer {
     this.weather.set(state.atmosphere.weather)
     this.sound.setWeather(state.atmosphere.weather)
     this.setPlayerScale(state.atmosphere.playerScale ?? 1, prev ? 1800 : 0)
+    this.syncPlayer(state, prev, fx, now)
     if (prev) {
       for (const ev of fx?.events ?? []) {
         if (ev.kind === 'sunrise') this.sunrise()
@@ -526,7 +560,8 @@ export class WorldRenderer {
     if (d.tags.includes('particles')) return false
     // A sky full of small things (lanterns, a flock) is all around you: look up, don't get turned (Loop 2).
     if (e.pos[1] > 4 && kindHeight(d, e.props) < BIG) return false
-    return kindHeight(d, e.props) >= 0.6
+    // Flat but wide things (a picnic blanket, a pond) count too, so a far-off one gets an approach (track B).
+    return kindHeight(d, e.props) >= 0.6 || (!d.sized && d.footprint * (e.props.scale ?? 1) >= 0.9)
   }
 
   private view(): View {
@@ -556,7 +591,7 @@ export class WorldRenderer {
     // Inside a room (a ceiling over you), framing only turns and tilts: a step back would leave through a
     // wall that may not even have arrived yet (the room's own build backed players 6 m out of it).
     const indoors = !!ceilingOver(this.state, cur.x, cur.z)
-    const to = (preferLift && !indoors ? this.godView(boxes, cur) : solveFrame(this.camera, cur, boxes, this.eyeAt(cur.x, cur.z), { free, maxBack: indoors ? 0 : undefined })) ?? base
+    const to = (preferLift && !indoors ? this.godView(boxes, cur) : solveFrame(this.camera, cur, boxes, this.eyeAt(cur.x, cur.z), { free, maxBack: indoors ? 0 : OUTDOOR_BACK })) ?? base ?? (indoors || preferLift ? null : this.approach(boxes, cur))
     if (!to) return
     if (base) {
       this.camMove = { from: now, to, start: performance.now(), dur: 1400 }
@@ -630,10 +665,18 @@ export class WorldRenderer {
    * a floor, a rug, a bridge) if it's within a step of your feet: a short ray straight down against its
    * visible meshes. So "make me tiny" on a dock keeps you on the planks, never under them.
    */
-  private standAt(x: number, z: number): number {
+  private standAt(x: number, z: number, from = this.groundY): number {
     const terrain = this.groundAt(x, z)
     const step = STEP_UP * Math.max(1, this.playerScale)
-    const top = Math.max(terrain, this.groundY) + step
+    const top = Math.max(terrain, from) + step
+    // Gauntlet loop 1: the top of any solid thing under you (its bounding box) holds you up too: a roof you
+    // flew onto, the tower you were carried to the top of, a crate you stepped up on.
+    let box = Math.max(terrain, this.topAt(x, z, top))
+    const pc = this.perch
+    if (pc) {
+      if (Math.hypot(x - pc.x, z - pc.z) <= pc.r && this.items.has(pc.id)) box = Math.max(box, pc.y)
+      else if (from < pc.y - 0.5 || !this.items.has(pc.id)) this.perch = null
+    }
     const targets: THREE.Object3D[] = []
     for (const item of this.items.values()) {
       const e = item.entity
@@ -643,14 +686,108 @@ export class WorldRenderer {
         if ((o as THREE.Mesh).isMesh) targets.push(o)
       })
     }
-    if (!targets.length) return terrain
+    if (!targets.length) return box
     this.downRay.set(new THREE.Vector3(x, top, z), DOWN)
     this.downRay.far = top - terrain + 0.05
     for (const h of safeHits(this.downRay, targets)) {
       if (!h.face) continue
-      if (this.upN.copy(h.face.normal).transformDirection(h.object.matrixWorld).y > 0.6) return Math.max(terrain, h.point.y)
+      if (this.upN.copy(h.face.normal).transformDirection(h.object.matrixWorld).y > 0.6) return Math.max(box, h.point.y)
     }
-    return terrain
+    return box
+  }
+
+  /** Solid things you collide with and can stand on: not people, movers, flat or walkable kinds, terrain or floaters. */
+  private solid(e: Entity): boolean {
+    if (e.kind === 'person' || (e.props.motion && e.props.motion !== 'none')) return false
+    const d = this.desc(e)
+    if (d.footprint <= 0 || d.surface || isTerrain(d) || d.tags.includes('particles')) return false
+    if (WALKABLE_KIND.test(e.kind) || e.tags.some(t => WALKABLE_TAGS.has(t))) return false
+    if (this.gravityOff !== null && this.state && isLoose(this.state, e)) return false
+    return true
+  }
+
+  /** The built mesh's half-extent on the ground (cached per build): a forged shell can overhang its parts' footprint. */
+  private meshReach(item: Item): number {
+    const u = item.body.userData as { reachKey?: string, reach?: number }
+    if (u.reachKey === item.buildKey && u.reach !== undefined) return u.reach * (item.entity.props.scale ?? 1)
+    // World-space box around the holder (its yaw included, so a rotated square overstates a little: safe side).
+    const box = new THREE.Box3().setFromObject(item.body)
+    const hp = item.holder.position
+    const reach = box.isEmpty() ? 0 : Math.max(box.max.x - hp.x, hp.x - box.min.x, box.max.z - hp.z, hp.z - box.min.z) / Math.max(1e-3, item.entity.props.scale ?? 1)
+    u.reachKey = item.buildKey
+    u.reach = Math.min(reach, 60)
+    return u.reach * (item.entity.props.scale ?? 1)
+  }
+
+  /** The highest solid bounding-box top over (x, z) no higher than `below` (−Infinity if none). */
+  private topAt(x: number, z: number, below: number): number {
+    let best = -Infinity
+    for (const item of this.items.values()) {
+      if (item.leaving || !this.solid(item.entity)) continue
+      const e = item.entity
+      const d = this.desc(e)
+      const r = d.footprint * (e.props.scale ?? 1) * 0.85
+      if (Math.abs(e.pos[0] - x) > r || Math.abs(e.pos[2] - z) > r || Math.hypot(e.pos[0] - x, e.pos[2] - z) > r) continue
+      const t = e.pos[1] + kindHeight(d, e.props)
+      if (t <= below && t > best) best = t
+    }
+    return best
+  }
+
+  /**
+   * Gauntlet loop 1: you no longer walk through things. Each solid thing is a cylinder (its footprint, its
+   * height); a step that would enter one slides along it instead. Things you can step onto (lower than a
+   * step), things above your head and anything you're already inside (it landed on you) never block, so you
+   * can't get stuck. Walls (thin slabs with no footprint) stop you with a knee-high ray.
+   */
+  private collide(move: THREE.Vector3): THREE.Vector3 {
+    if (!this.state) return move
+    const p = this.camera.position
+    const feet = this.flying || this.falling ? this.flyY : this.groundY
+    const step = STEP_UP * Math.max(1, this.playerScale)
+    // The body plus the lens: the camera's near plane must never reach the surface it stops at.
+    const me = 0.5 * this.playerScale
+    const out = move.clone()
+    const walls: THREE.Object3D[] = []
+    const circles: Circle[] = []
+    for (const item of this.items.values()) {
+      if (item.leaving) continue
+      const e = item.entity
+      if (e.tags.includes('wall') && Math.abs(e.pos[0] - p.x) + Math.abs(e.pos[2] - p.z) < 30) {
+        item.holder.traverseVisible((o) => {
+          if ((o as THREE.Mesh).isMesh) walls.push(o)
+        })
+        continue
+      }
+      if (!this.solid(e)) continue
+      const d = this.desc(e)
+      const R = Math.max(d.footprint * (e.props.scale ?? 1) * 0.95, this.meshReach(item)) + me
+      if (Math.abs(p.x - e.pos[0]) > R + 2 || Math.abs(p.z - e.pos[2]) > R + 2) continue
+      const top = e.pos[1] + kindHeight(d, e.props)
+      if (top <= feet + step || e.pos[1] >= feet + EYE * this.playerScale) continue
+      // Tall things keep you a little further off, so you see them instead of pressing your face to them.
+      circles.push({ x: e.pos[0], z: e.pos[2], r: R + (top - feet > 4 ? 0.7 : 0) })
+    }
+    ;[out.x, out.z] = slideOut(p.x, p.z, out.x, out.z, circles)
+    const len = Math.hypot(out.x, out.z)
+    if (walls.length && len > 1e-5) {
+      this.wallRay.set(new THREE.Vector3(p.x, feet + 0.6, p.z), new THREE.Vector3(out.x / len, 0, out.z / len))
+      this.wallRay.far = len + me + 0.1
+      const hit = safeHits(this.wallRay, walls)[0]
+      if (hit?.face) {
+        const n = this.upN.copy(hit.face.normal).transformDirection(hit.object.matrixWorld)
+        n.y = 0
+        if (n.lengthSq() > 1e-6) {
+          n.normalize()
+          const into = out.x * n.x + out.z * n.z
+          if (into < 0) {
+            out.x -= into * n.x
+            out.z -= into * n.z
+          }
+        }
+      }
+    }
+    return out
   }
 
   /** Ground height at (x, z): the terrain surface, or 0 on the flat world. */
@@ -667,9 +804,14 @@ export class WorldRenderer {
    * Walk by `move` over the terrain: downhill and gentle slopes are free; anything steeper than MAX_SLOPE
    * slides you along the contour instead of up it, and a wall of rock stops you.
    */
-  private walk(move: THREE.Vector3): void {
+  private walk(move0: THREE.Vector3): void {
     const p = this.camera.position
     if (this.lift > 0.5 || !this.state) {
+      p.add(move0)
+      return
+    }
+    const move = this.collide(move0)
+    if (this.flying || this.falling) {
       p.add(move)
       return
     }
@@ -850,6 +992,7 @@ export class WorldRenderer {
     const s = e.props.scale ?? 1
     const h = e.props.height ?? 1
     const y0 = e.pos[1]
+    // Where it rests is read live (item.entity.pos): a stack can settle onto its real size mid-arrival.
     const tall = kindHeight(desc, e.props)
     const reach = entityReach(desc, e)
     const flat = tall < 0.6 || desc.tags.includes('particles')
@@ -918,9 +1061,9 @@ export class WorldRenderer {
       holder.scale.setScalar(s)
       stretch.scale.y = h
       this.tween(at, fallDur, (t) => {
-        holder.position.y = y0 + 32 * (1 - ease.inOut(t))
+        holder.position.y = item.entity.pos[1] + 32 * (1 - ease.inOut(t))
       }, () => {
-        holder.position.y = y0
+        holder.position.y = item.entity.pos[1]
       }, show)
       if (loud || cue.index === 0) this.sound.sfxWhaleSong(at - now)
     } else if (airborne) {
@@ -929,10 +1072,10 @@ export class WorldRenderer {
       holder.scale.setScalar(0.001)
       stretch.scale.y = h
       this.tween(at, fallDur, (t) => {
-        holder.position.y = y0 - rise * (1 - ease.out(t))
+        holder.position.y = item.entity.pos[1] - rise * (1 - ease.out(t))
         holder.scale.setScalar(Math.max(0.001, s * Math.min(1, t * 2.5)))
       }, () => {
-        holder.position.y = y0
+        holder.position.y = item.entity.pos[1]
       }, show)
       sparkleAt(at + 80, tall * 0.5 - rise)
     } else if (fall === 'drop') {
@@ -941,12 +1084,12 @@ export class WorldRenderer {
       if (tier === 'big' && loud) {
         const H0 = 12 + tall * 0.9
         fallDur = 950 + Math.min(650, tall * 9)
-        holder.position.y = y0 + H0
+        holder.position.y = item.entity.pos[1] + H0
         // Accelerating down (it has weight), then a short squash as it hits.
         this.tween(at, fallDur, (t) => {
-          holder.position.y = y0 + H0 * (1 - t * t)
+          holder.position.y = item.entity.pos[1] + H0 * (1 - t * t)
         }, () => {
-          holder.position.y = y0
+          holder.position.y = item.entity.pos[1]
           this.tween(performance.now(), 380, (t) => {
             const k = Math.sin(Math.PI * t) * (1 - t)
             holder.scale.set(s * (1 + 0.05 * k), s * (1 - 0.09 * k), s * (1 + 0.05 * k))
@@ -955,9 +1098,9 @@ export class WorldRenderer {
         }, show)
       } else {
         fallDur = 850
-        holder.position.y = y0 + 7
+        holder.position.y = item.entity.pos[1] + 7
         this.tween(at, 850, (t) => {
-          holder.position.y = y0 + 7 * (1 - ease.bounce(t))
+          holder.position.y = item.entity.pos[1] + 7 * (1 - ease.bounce(t))
         }, () => {
           this.puff(holder.position, this.desc(item.entity).footprint * s)
           if (tier === 'small') sparkleAt(performance.now(), tall * 0.5)
@@ -969,13 +1112,13 @@ export class WorldRenderer {
       fallDur = 2600 + Math.min(1400, tall * 4)
       holder.scale.set(s, s * 0.55, s)
       stretch.scale.y = h
-      holder.position.y = y0 - tall * 0.75
+      holder.position.y = item.entity.pos[1] - tall * 0.75
       this.tween(at, fallDur, (t) => {
         const k = ease.out(t)
-        holder.position.y = y0 - tall * 0.75 * (1 - k)
+        holder.position.y = item.entity.pos[1] - tall * 0.75 * (1 - k)
         holder.scale.y = s * (0.55 + 0.45 * k)
       }, () => {
-        holder.position.y = y0
+        holder.position.y = item.entity.pos[1]
         holder.scale.setScalar(s)
         impact(performance.now())
       }, show)
@@ -1100,6 +1243,7 @@ export class WorldRenderer {
    * old silhouette for a frame and springs into the new one; a morph pops in with a puff.
    */
   private rebuild(item: Item, e: Entity, at: number, morph: boolean, fromStretch = item.stretch.scale.y): void {
+    this.settleHolder(item, e, at)
     const oldH = boxHeight(item.body)
     const { body, key } = this.build(e)
     disposeObject(item.body)
@@ -1247,6 +1391,7 @@ export class WorldRenderer {
    * the identical merged body at the end (or cross-faded, if the fit moved it).
    */
   private refineSwap(item: Item, e: Entity, at: number): void {
+    this.settleHolder(item, e, at)
     const job = this.refining.get(e.kind)
     const desc = this.desc(e)
     const next = buildFromPartsMerged(desc.parts!)
@@ -1576,7 +1721,7 @@ export class WorldRenderer {
   private applyAtmosphere(base: AtmospherePreset): void {
     // The weather grades the time-of-day preset (a storm greys it, snow whitens the ground, a flash lights it).
     this.atmosBase = base
-    const a = this.weather.grade(base)
+    const a = customizeSky(this.weather.grade(base), this.state?.atmosphere)
     this.atmos = a
     this.skyUniforms.top.value.set(a.skyTop)
     this.skyUniforms.horizon.value.set(a.skyHorizon)
@@ -1608,6 +1753,7 @@ export class WorldRenderer {
     this.stars.visible = a.stars > 0.01
     this.moon.visible = a.moon > 0.01
     this.moon.position.copy(skyDir(a.sunPos).multiplyScalar(420))
+    this.placeMoons(a)
     // The sun's disc and horizon band are painted by the sky shader now; the old halo sprite stays dark.
     this.sunGlow.visible = false
     this.sunGlow.material.color.set(a.glowColor)
@@ -1772,16 +1918,19 @@ export class WorldRenderer {
       if (t >= 1) this.camMove = null
     }
     if (this.preLift && !this.camMove && this.lift < 0.5) this.preLift = null
-    // Ride the terrain: ease toward the ground under you (quick up a rise, a touch slower dropping off it).
-    const gy = this.standAt(this.camera.position.x, this.camera.position.z)
-    this.groundY += (gy - this.groundY) * (1 - Math.exp(-dt * (gy > this.groundY ? 12 : 7)))
-    if (Math.abs(gy - this.groundY) > 60) this.groundY = gy // a teleport or a mountain rising under you: no long glide
-    this.camera.position.y = this.groundY + EYE * this.playerScale + this.lift
+    this.trackView(now, dt)
+    if (!this.rideAir(dt, now)) {
+      // Ride the terrain: ease toward the ground under you (quick up a rise, a touch slower dropping off it).
+      const gy = this.standAt(this.camera.position.x, this.camera.position.z)
+      this.groundY += (gy - this.groundY) * (1 - Math.exp(-dt * (gy > this.groundY ? 12 : 7)))
+      if (Math.abs(gy - this.groundY) > 60) this.groundY = gy // a teleport or a mountain rising under you: no long glide
+      this.camera.position.y = this.groundY + EYE * this.playerScale + this.lift
+    }
 
     const f = new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw))
     const r = new THREE.Vector3(-f.z, 0, f.x)
     // Walking speed scales with the eye lift: a giant strides.
-    const sp = (this.keys.shift ? RUN : WALK) * dt * (1 + this.lift / 12) * Math.max(0.2, Math.sqrt(this.playerScale))
+    const sp = (this.keys.shift ? RUN : WALK) * dt * (1 + this.lift / 12) * Math.max(0.2, Math.sqrt(this.playerScale)) * (this.flying ? 1.6 : 1)
     const k = this.keys
     const move = new THREE.Vector3()
     if (k.w || k.arrowup) move.addScaledVector(f, sp)
@@ -1955,6 +2104,7 @@ export class WorldRenderer {
 
   /** Per-frame motion (fx/motion.ts): each moving item's pose goes on its stretch group, blended in from rest. */
   private moveItems(now: number): void {
+    if (this.gravityOn !== null && now - this.gravityOn > 9000) this.gravityOff = this.gravityOn = null
     for (const item of this.items.values()) {
       const e = item.entity
       // People (NPC) are walked and posed by the People runtime (onFrame), not by motion props.
@@ -1963,21 +2113,345 @@ export class WorldRenderer {
       // Creatures (Loop 3) are posed every frame, moving or not: wings, legs, tail and head follow the drive.
       const drive = item.body.userData.drive as ((d: Drive) => void) | undefined
       const style = item.body.userData.motionStyle as MotionStyle | undefined
-      if (!m) {
-        if (this.motionStart.delete(e.id)) applyPose(item, null)
-        if (drive) this.driveCreature(item, drive, now / 1000, style)
+      const h = kindHeight(this.desc(e), e.props)
+      let t = now / 1000
+      let pose: Pose | null = null
+      if (m === 'follow') {
+        this.motionStart.delete(e.id)
+        pose = this.followPose(e)
+      } else if (m) {
+        // The clock restarts when the motion (or where it is) changes, so a modify blends in from where it stands.
+        const key = `${m}|${e.props.speed ?? 1}|${e.path?.c.join(',') ?? ''}|${e.path?.r ?? ''}|${e.pos.join(',')}`
+        let clock = this.motionStart.get(e.id)
+        if (!clock || clock.key !== key) {
+          clock = { key, t0: now }
+          this.motionStart.set(e.id, clock)
+        }
+        t = (now - clock.t0) / 1000
+        pose = blendedPose(e, t, h, style)
+      } else {
+        this.motionStart.delete(e.id)
+        this.follow.delete(e.id)
+      }
+      pose = this.physicsPose(item, pose, h, now)
+      if (pose) {
+        applyPose(item, pose)
+        this.posed.add(e.id)
+      } else if (this.posed.delete(e.id)) {
+        applyPose(item, null)
+      }
+      if (drive) this.driveCreature(item, drive, t, style)
+    }
+  }
+
+  // ---------- Gauntlet loop 1 (track B): physics-lite, followers, flight, goto, tracking, moons ----------
+
+  /** What a sync means for the player and the physics clocks: gravity, flight, a goto glide, a camera track. */
+  private syncPlayer(state: WorldState, prev: WorldState | null, fx: Effects | undefined, now: number): void {
+    const at = state.atmosphere
+    if (at.gravity === false && (this.gravityOff === null || this.gravityOn !== null)) {
+      this.gravityOff = prev ? now : now - 60_000
+      this.gravityOn = null
+    } else if (at.gravity !== false && this.gravityOff !== null && this.gravityOn === null) {
+      this.gravityOn = now
+    }
+    const live = !!prev && Math.abs(state.log.length - prev.log.length) <= 1
+    if (live) for (const id of [...(fx?.spawned ?? []), ...(fx?.modified ?? [])]) this.live.add(id)
+    const ids = new Set(state.entities.map(e => e.id))
+    for (const id of this.phys.keys()) if (!ids.has(id)) this.phys.delete(id)
+    for (const id of this.follow.keys()) if (!ids.has(id)) this.follow.delete(id)
+    // Flight: a hop up into the air (the drag in rideAir settles it ~4 m up); landing falls with gravity.
+    if (at.fly && !this.flying) {
+      this.flying = true
+      this.falling = false
+      this.flyY = this.groundY
+      this.flyVel = prev ? 10 : 0
+    } else if (!at.fly && this.flying) {
+      this.flying = false
+      this.falling = this.flyY > this.groundY + 0.2
+      this.flyVel = 0
+    }
+    this.weather.intensity = at.intensity ?? 0.5
+    if (at.moons !== prev?.atmosphere.moons) this.moonYaw = this.yaw
+    if (fx?.goto && prev) {
+      const cp = this.camera.position
+      const feet = this.flying || this.falling ? this.flyY : this.groundY
+      const to = new THREE.Vector3(...fx.goto.to)
+      const [lx, ly, lz] = fx.goto.look
+      const it = this.items.get(fx.goto.id)
+      let perchR = 1.2
+      if (it && fx.goto.to[1] > 0.5) {
+        // The thing as built (a parapet or roof box a little above its nominal height), and a step toward its
+        // far edge so the view drops away over the world instead of looking at the roof.
+        const box = new THREE.Box3().setFromObject(it.holder)
+        if (box.max.y > to.y && box.max.y - to.y < 4) to.y = box.max.y
+        const r = this.desc(it.entity).footprint * (it.entity.props.scale ?? 1)
+        const ox = lx - to.x
+        const oz = lz - to.z
+        const ol = Math.hypot(ox, oz) || 1
+        to.x += (ox / ol) * r * 0.45
+        to.z += (oz / ol) * r * 0.45
+        perchR = Math.max(1.2, r * 0.9)
+      }
+      this.perch = fx.goto.to[1] > 0.5 ? { x: to.x, z: to.z, r: perchR, y: to.y, id: fx.goto.id } : null
+      const eye = to.y + EYE * this.playerScale
+      const yaw1 = Math.atan2(-(lx - to.x), -(lz - to.z))
+      const pitch1 = Math.max(-0.9, Math.min(0.3, Math.atan2(ly - eye, Math.max(1, Math.hypot(lx - to.x, lz - to.z)))))
+      const dist = Math.hypot(to.x - cp.x, to.z - cp.z) + Math.abs(to.y - feet)
+      this.camMove = null
+      this.lift = 0
+      this.falling = false
+      this.glide = { from: new THREE.Vector3(cp.x, feet, cp.z), to, start: now, dur: Math.min(4200, 1400 + dist * 30), yaw0: this.yaw, yaw1: this.yaw + wrapAngle(yaw1 - this.yaw), pitch0: this.pitch, pitch1 }
+    }
+    // Something that arrives moving (a thrown ball, a dragon taking off) is followed for a few seconds.
+    if (live && fx?.spawned.length && !fx.teleport) {
+      const movers = fx.spawned.map(id => state.entities.find(e => e.id === id)).filter((e): e is Entity => !!e && (e.launch?.kind === 'throw'
+        || ((e.props.motion === 'fly' || e.props.motion === 'orbit') && kindHeight(this.desc(e), e.props) >= 2)))
+      if (movers.length && movers.length <= 3) this.track = { ids: movers.map(e => e.id), start: now + 500, until: now + 5500 }
+    }
+  }
+
+  /** The camera eases its aim onto tracked movers (never while you look or walk yourself). */
+  private trackView(now: number, dt: number): void {
+    const tr = this.track
+    if (!tr) return
+    if (now > tr.until || this.glide || this.userActive()) {
+      this.track = null
+      return
+    }
+    if (now < tr.start) return
+    // The mover outranks a framing glide (a sky tilt would otherwise run out the clock looking at empty sky).
+    this.camMove = null
+    let x = 0
+    let y = 0
+    let z = 0
+    let n = 0
+    for (const id of tr.ids) {
+      const it = this.items.get(id)
+      if (!it) continue
+      const wp = it.stretch.getWorldPosition(this.tmpV)
+      x += wp.x
+      y += wp.y + kindHeight(this.desc(it.entity), it.entity.props) * 0.5
+      z += wp.z
+      n++
+    }
+    if (!n) {
+      this.track = null
+      return
+    }
+    const c = this.camera.position
+    const dx = x / n - c.x
+    const dz = z / n - c.z
+    const yawTo = Math.atan2(-dx, -dz)
+    const pitchTo = Math.max(-1.0, Math.min(0.7, Math.atan2(y / n - c.y, Math.max(1, Math.hypot(dx, dz)))))
+    const k = 1 - Math.exp(-dt * 3.4)
+    this.yaw += wrapAngle(yawTo - this.yaw) * k
+    this.pitch += (pitchTo - this.pitch) * k
+  }
+
+  /**
+   * Flight, landing and the goto glide: true when it set the camera height itself this frame. Flying: Space
+   * (or PageUp) rises, Shift+Space (or PageDown) sinks, and walking while looking up or down climbs or dives;
+   * a drag settles you. Landing falls with gravity onto whatever is under you (a roof, the ground).
+   */
+  private rideAir(dt: number, now: number): boolean {
+    const cp = this.camera.position
+    const eye = EYE * this.playerScale
+    const g = this.glide
+    if (g) {
+      const t = Math.min(1, (now - g.start) / g.dur)
+      const k = ease.inOut(t)
+      cp.x = g.from.x + (g.to.x - g.from.x) * k
+      cp.z = g.from.z + (g.to.z - g.from.z) * k
+      const arc = Math.sin(Math.PI * k) * Math.min(14, 2 + Math.hypot(g.to.x - g.from.x, g.to.z - g.from.z) * 0.15)
+      const feet = g.from.y + (g.to.y - g.from.y) * k + arc
+      if (!this.userActive()) {
+        this.yaw = g.yaw0 + (g.yaw1 - g.yaw0) * k
+        this.pitch = g.pitch0 + (g.pitch1 - g.pitch0) * k
+      }
+      cp.y = feet + eye + this.lift
+      this.groundY = feet
+      if (this.flying) this.flyY = feet
+      if (t >= 1) this.glide = null
+      return true
+    }
+    if (!this.flying && !this.falling) return false
+    const floor = this.standAt(cp.x, cp.z, this.flyY)
+    if (this.flying) {
+      const k = this.keys
+      const up = (k[' '] && !k.shift) || k.pageup
+      const down = (k[' '] && k.shift) || k.pagedown
+      if (up) this.flyVel = Math.min(9, this.flyVel + 22 * dt)
+      if (down) this.flyVel = Math.max(-9, this.flyVel - 22 * dt)
+      this.flyVel *= Math.exp(-dt * (up || down ? 0.6 : 2.6))
+      // Walking while looking up or down climbs or dives (a dead zone keeps level flight level).
+      const fwd = (k.w || k.arrowup ? 1 : 0) - (k.s || k.arrowdown ? 1 : 0)
+      const tilt = Math.abs(this.pitch) > 0.22 ? Math.sin(this.pitch) : 0
+      this.flyY += fwd * tilt * (k.shift ? RUN : WALK) * 1.6 * dt
+    } else {
+      this.flyVel -= GRAVITY * dt
+    }
+    this.flyY = Math.min(400, this.flyY + this.flyVel * dt)
+    if (this.flyY <= floor) {
+      this.flyY = floor
+      this.flyVel = Math.max(0, this.flyVel)
+      if (this.falling) {
+        this.falling = false
+        this.groundY = floor
+        this.addShake(4, new THREE.Vector3(cp.x, floor, cp.z), now, 260)
+      }
+    }
+    if (!this.flying && !this.falling) return false
+    this.groundY = floor
+    cp.y = this.flyY + eye + this.lift
+    return true
+  }
+
+  /** A follower's spot this frame ("a dog that follows me"): a few metres ahead and to one side of you. */
+  private followPose(e: Entity): Pose {
+    const cam = this.camera.position
+    const f = this.follow.get(e.id) ?? { x: e.pos[0], z: e.pos[2], yaw: e.rotY, speed: 0, stride: 0 }
+    const size = this.desc(e).footprint * (e.props.scale ?? 1)
+    const next = followStep(f, e.id, { x: cam.x, z: cam.z, yaw: this.yaw }, this.dt, size)
+    const sp = Math.hypot(next.x - f.x, next.z - f.z) / Math.max(1e-3, this.dt)
+    const speed = f.speed + (Math.min(20, sp) - f.speed) * Math.min(1, this.dt * 6)
+    this.follow.set(e.id, { ...next, speed, stride: f.stride + (speed * this.dt) / Math.max(0.5, size * 1.8) })
+    return { x: next.x, y: this.groundAt(next.x, next.z), z: next.z, yaw: next.yaw, roll: 0, pitch: 0 }
+  }
+
+  /** Flight (drop, throw), tip (flip, topple) and no-gravity on top of the motion pose. Null = at rest. */
+  private physicsPose(item: Item, base: Pose | null, h: number, now: number): Pose | null {
+    const e = item.entity
+    let c = this.phys.get(e.id)
+    if (!c) {
+      c = { key: '', t0: now, hits: 0, tipFrom: e.props.tip ?? 0, tipTo: e.props.tip ?? 0, tipAt: -1e9, seen: now }
+      this.phys.set(e.id, c)
+    }
+    let pose = base
+    const rest = (): Pose => pose ?? { x: e.pos[0], y: e.pos[1], z: e.pos[2], yaw: e.rotY, roll: 0, pitch: 0 }
+    if (e.launch) {
+      const key = `${e.launch.from.join(',')}|${e.pos.join(',')}`
+      if (c.key !== key) {
+        c.key = key
+        c.hits = 0
+        // Only a live wish plays its flight; a page load or a replay shows it already landed.
+        c.t0 = this.live.has(e.id) ? now : now - 1e7
+      }
+      const t = (now - c.t0) / 1000
+      const fp = flightPose(e, t)
+      if (fp) {
+        pose = { ...fp, x: fp.x, y: fp.y, z: fp.z }
+        const times = flightTimes(e)!
+        const marks = [times.land, ...times.bounce]
+        while (c.hits < marks.length && t >= marks[c.hits]!) this.impact(e, h, c.hits++)
+      }
+    }
+    this.live.delete(e.id)
+    const tip = e.props.tip ?? 0
+    if (tip !== c.tipTo) {
+      const k = Math.min(1, (now - c.tipAt) / (TIP_SECONDS * 1000))
+      c.tipFrom = c.tipFrom + (c.tipTo - c.tipFrom) * k
+      c.tipTo = tip
+      c.tipAt = now
+    }
+    if (c.tipTo !== 0 || now - c.tipAt < TIP_SECONDS * 1000) {
+      const w = this.desc(e).footprint * (e.props.scale ?? 1) * 0.8
+      const tp = tipPose(c.tipFrom, c.tipTo, (now - c.tipAt) / 1000, w, h)
+      const r = rest()
+      pose = { ...r, roll: r.roll + tp.roll, y: r.y + tp.lift }
+    }
+    if (this.gravityOff !== null && this.state && isLoose(this.state, e)) {
+      const off = (now - Math.max(this.gravityOff, c.seen)) / 1000
+      const w = weightlessPose(e.id, h, off, this.gravityOn !== null ? (now - this.gravityOn) / 1000 : undefined)
+      if (w) {
+        const r = rest()
+        pose = { ...r, y: r.y + w.dy, yaw: r.yaw + w.yaw, roll: r.roll + w.roll, pitch: r.pitch + w.pitch }
+      }
+    }
+    return pose
+  }
+
+  /** A landing: dust, a thump, and a shake for heavy things (a piano from the sky). Bounces are smaller. */
+  private impact(e: Entity, h: number, i: number): void {
+    const d = this.desc(e)
+    const size = Math.max(h, d.footprint * 2 * (e.props.scale ?? 1))
+    const at = new THREE.Vector3(e.pos[0], e.pos[1], e.pos[2])
+    const now = performance.now()
+    if (i === 0) {
+      this.puff(at, Math.max(0.5, size * 0.55), size > 2 ? 0.34 : 0.22, size > 2 ? 46 : 18)
+      this.sound.sfxThump(Math.min(3, size), 0)
+      if (size > 1.2) this.addShake(Math.max(6, size * 4), at, now, 420)
+    } else if (size > 0.8) {
+      this.puff(at, Math.max(0.4, size * 0.3), 0.18, 10)
+    }
+  }
+
+  /**
+   * Gauntlet loop 1: a small thing that landed far off ("a picnic blanket", 13 m out where the gaze hit the
+   * ground) is a speck. Step toward it until it reads (about 4 m plus its size away), never through a wall.
+   */
+  private approach(boxes: FrameBox[], cur: View): View | null {
+    if (boxes.length > 4) return null
+    let cx = 0
+    let cz = 0
+    let size = 0
+    for (const b of boxes) {
+      cx += b.x / boxes.length
+      cz += b.z / boxes.length
+      size = Math.max(size, b.r * 2, b.h)
+    }
+    if (size > 4) return null
+    const d = Math.hypot(cx - cur.x, cz - cur.z)
+    const want = 3.2 + size * 1.2
+    if (d < want + 6) return null
+    const dx = (cx - cur.x) / d
+    const dz = (cz - cur.z) / d
+    const step = Math.min(d - want, this.freeDist(cur.x, cur.z, dx, dz, d) - 1)
+    if (step < 2) return null
+    const x = cur.x + dx * step
+    const z = cur.z + dz * step
+    const yaw = Math.atan2(-(cx - x), -(cz - z))
+    const pitch = Math.max(-0.75, -Math.atan2(EYE * this.playerScale, Math.max(1, want)) * 0.8)
+    return { yaw: cur.yaw + wrapAngle(yaw - cur.yaw), pitch, x, z, lift: cur.lift }
+  }
+
+  /** The kernel moved it while its kind was being (re)built (a stack settling onto the real size): glide there. */
+  private settleHolder(item: Item, e: Entity, at: number): void {
+    if (!item.entity.pos.some((v, i) => Math.abs(v - e.pos[i]!) > 1e-3)) return
+    const p0 = item.holder.position.clone()
+    const p1 = new THREE.Vector3(...e.pos)
+    this.tween(at, 380, t => item.holder.position.lerpVectors(p0, p1, t * t))
+  }
+
+  /** Extra moons ("give it two moons"), spread apart from the first, smaller and warmer. */
+  private placeMoons(a: AtmospherePreset): void {
+    const n = Math.max(1, Math.min(3, this.state?.atmosphere.moons ?? 1))
+    let base = skyDir(a.sunPos)
+    if (this.state?.atmosphere.moons !== undefined) {
+      // Asked-for moons rise where you were looking when you asked, a little off centre and well up.
+      const el = 0.24
+      const az = this.moonYaw + 0.28
+      base = new THREE.Vector3(-Math.sin(az) * Math.cos(el), Math.sin(el), -Math.cos(az) * Math.cos(el))
+      this.moon.position.copy(base).multiplyScalar(420)
+    }
+    for (let i = 1; i < 3; i++) {
+      let m = this.extraMoons[i - 1]
+      if (i >= n) {
+        if (m) m.visible = false
         continue
       }
-      // The clock restarts when the motion (or where it is) changes, so a modify blends in from where it stands.
-      const key = `${m}|${e.props.speed ?? 1}|${e.path?.c.join(',') ?? ''}|${e.path?.r ?? ''}|${e.pos.join(',')}`
-      let clock = this.motionStart.get(e.id)
-      if (!clock || clock.key !== key) {
-        clock = { key, t0: now }
-        this.motionStart.set(e.id, clock)
+      if (!m) {
+        m = this.moon.clone()
+        m.material = this.moon.material.clone()
+        this.sky.add(m)
+        this.extraMoons[i - 1] = m
       }
-      const t = (now - clock.t0) / 1000
-      applyPose(item, blendedPose(e, t, kindHeight(this.desc(e), e.props), style))
-      if (drive) this.driveCreature(item, drive, t, style)
+      const s = moonSpot(i, base)
+      m.position.copy(s.dir.multiplyScalar(420))
+      m.scale.copy(this.moon.scale).multiplyScalar(s.scale)
+      m.material.color.set(s.tint)
+      m.material.opacity = a.moon
+      m.visible = a.moon > 0.01
     }
   }
 
@@ -1985,6 +2459,13 @@ export class WorldRenderer {
     const e = item.entity
     const c = this.camera.position
     const d = driveOf(e, t, kindHeight(this.desc(e), e.props), style, [c.x, c.y, c.z], this.groundAt(e.pos[0], e.pos[2]))
+    // A follower's legs go at the pace it trots (its pose comes from followPose, not a motion path).
+    const f = e.props.motion === 'follow' ? this.follow.get(e.id) : undefined
+    if (f) {
+      d.speed = f.speed
+      d.stride = f.stride
+      d.step = Math.min(1, f.speed / 2)
+    }
     // An arrival tween lifts the holder (the dragon's dive): it's flying then, whatever the pose says.
     d.air += item.holder.position.y - e.pos[1]
     drive(d)
@@ -2107,7 +2588,7 @@ export class WorldRenderer {
       // defaultPrevented: the HUD took this key as a letter of a sentence (it listens in the capture phase).
       if (typing(e) || e.metaKey || e.ctrlKey || e.defaultPrevented) return
       const key = e.key.toLowerCase()
-      if ('wasd'.includes(key) || key.startsWith('arrow')) this.takeControl()
+      if ('wasd'.includes(key) || key.startsWith('arrow') || (this.flying && (key === ' ' || key.startsWith('page')))) this.takeControl()
       this.keys[key] = true
     })
     on(window, 'keyup', (e) => {

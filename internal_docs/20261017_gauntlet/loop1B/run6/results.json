@@ -1,0 +1,1160 @@
+{
+ "url": "http://localhost:3091/",
+ "startedAt": "2026-10-18T03:39:57.984Z",
+ "minutes": 5.1,
+ "spend": 0.011326000000000003,
+ "spendBy": {
+  "/api/intent (est)": 0.011000000000000003,
+  "/api/npc/persona": 0.000326
+ },
+ "forgeStatus": {
+  "total": 1.157,
+  "session": 0,
+  "calls": 43,
+  "cap": 12,
+  "sessionCap": 1.5
+ },
+ "results": [
+  {
+   "id": "create_piano",
+   "group": "create",
+   "steps": [
+    {
+     "step": 1,
+     "text": "a grand piano right in front of me",
+     "thought": true,
+     "idleMs": 1545,
+     "intent": {
+      "model": "haiku",
+      "ms": 3110,
+      "firstOpMs": 1524,
+      "count": 3
+     },
+     "entry": {
+      "ops": [
+       "spawn piano×1"
+      ],
+      "dropped": 0,
+      "notes": [
+       "unknown kind \"piano\": holding its spot with a placeholder until it's defined"
+      ],
+      "say": [],
+      "spawned": 1,
+      "modified": 0,
+      "removed": 0
+     },
+     "director": null,
+     "forge": [
+      {
+       "kind": "piano",
+       "tier": "good",
+       "outcome": "library hit",
+       "draftMs": 3030,
+       "refinedMs": 3934,
+       "parts": 29,
+       "usd": 0,
+       "library": true
+      }
+     ],
+     "fps": {
+      "avg": 60,
+      "min1": 60,
+      "gap": 17
+     },
+     "before": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "after": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "census": {
+      "entities": 1,
+      "kinds": 1,
+      "top": [
+       "piano×1"
+      ],
+      "time": "golden"
+     },
+     "hud": "A grand piano, before you.",
+     "shot": "001_create_piano_s1_a_grand_piano_right_in_front.jpg"
+    }
+   ],
+   "fps": {
+    "avg": 60,
+    "min1": 60,
+    "gap": 17
+   },
+   "usd": 0.001,
+   "errors": [],
+   "errorCount": 0
+  },
+  {
+   "id": "god_tiny",
+   "group": "god",
+   "steps": [
+    {
+     "step": 1,
+     "text": "a picnic blanket with some food on it",
+     "thought": true,
+     "idleMs": 3508,
+     "intent": {
+      "model": "haiku",
+      "ms": 3726,
+      "firstOpMs": 3502,
+      "count": 3
+     },
+     "entry": {
+      "ops": [
+       "define picnic_blanket(11)"
+      ],
+      "dropped": 0,
+      "notes": [],
+      "say": [],
+      "spawned": 0,
+      "modified": 0,
+      "removed": 0
+     },
+     "director": null,
+     "forge": [
+      {
+       "kind": "picnic_blanket",
+       "tier": "good",
+       "outcome": "library hit",
+       "draftMs": 3506,
+       "refinedMs": 4410,
+       "parts": 25,
+       "usd": 0,
+       "library": true
+      }
+     ],
+     "fps": {
+      "avg": 60,
+      "min1": 60,
+      "gap": 17
+     },
+     "before": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "after": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "census": {
+      "entities": 1,
+      "kinds": 1,
+      "top": [
+       "picnic_blanket×1"
+      ],
+      "time": "golden"
+     },
+     "hud": "A feast on the grass.",
+     "shot": "002_god_tiny_s1_a_picnic_blanket_with_some_f.jpg"
+    },
+    {
+     "step": 2,
+     "text": "shrink me to the size of an ant",
+     "thought": true,
+     "idleMs": 1146,
+     "intent": {
+      "model": "haiku",
+      "ms": 1227,
+      "firstOpMs": 1132,
+      "count": 2
+     },
+     "entry": {
+      "ops": [
+       "atmosphere "
+      ],
+      "dropped": 0,
+      "notes": [],
+      "say": [],
+      "spawned": 0,
+      "modified": 0,
+      "removed": 0
+     },
+     "director": null,
+     "forge": [],
+     "fps": {
+      "avg": 60,
+      "min1": 60,
+      "gap": 17
+     },
+     "before": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "after": {
+      "pos": [
+       0,
+       0.03,
+       0
+      ],
+      "yaw": 0,
+      "pitch": 0.2
+     },
+     "census": {
+      "entities": 1,
+      "kinds": 1,
+      "top": [
+       "picnic_blanket×1"
+      ],
+      "time": "golden"
+     },
+     "hud": "Tiny as an ant. Look up.",
+     "shot": "003_god_tiny_s2_shrink_me_to_the_size_of_an_.jpg"
+    }
+   ],
+   "fps": {
+    "avg": 60,
+    "min1": 60,
+    "gap": 17
+   },
+   "usd": 0.002,
+   "errors": [],
+   "errorCount": 0
+  },
+  {
+   "id": "sky_two_moons",
+   "group": "sky",
+   "steps": [
+    {
+     "step": 1,
+     "text": "turn the sky purple and give it two moons",
+     "thought": true,
+     "idleMs": 1085,
+     "intent": {
+      "model": "haiku",
+      "ms": 1151,
+      "firstOpMs": 1067,
+      "count": 2
+     },
+     "entry": {
+      "ops": [
+       "atmosphere #7b4fa6"
+      ],
+      "dropped": 0,
+      "notes": [],
+      "say": [],
+      "spawned": 0,
+      "modified": 0,
+      "removed": 0
+     },
+     "director": null,
+     "forge": [],
+     "fps": {
+      "avg": 60,
+      "min1": 60,
+      "gap": 17
+     },
+     "before": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "after": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "census": {
+      "entities": 0,
+      "kinds": 0,
+      "top": [],
+      "time": "golden"
+     },
+     "hud": "A purple sky. Two moons rise.",
+     "shot": "004_sky_two_moons_s1_turn_the_sky_purple_and_give.jpg"
+    }
+   ],
+   "fps": {
+    "avg": 60,
+    "min1": 60,
+    "gap": 17
+   },
+   "usd": 0.001,
+   "errors": [],
+   "errorCount": 0
+  },
+  {
+   "id": "sky_blizzard",
+   "group": "sky",
+   "steps": [
+    {
+     "step": 1,
+     "text": "some pine trees",
+     "thought": true,
+     "idleMs": 45006,
+     "intent": null,
+     "entry": null,
+     "director": null,
+     "forge": [],
+     "fps": {
+      "avg": 60,
+      "min1": 60,
+      "gap": 17
+     },
+     "before": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "after": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "census": {
+      "entities": 0,
+      "kinds": 0,
+      "top": [],
+      "time": "golden"
+     },
+     "hud": "“some pine trees”",
+     "shot": "005_sky_blizzard_s1_some_pine_trees.jpg"
+    },
+    {
+     "step": 2,
+     "text": "now a blizzard",
+     "thought": true,
+     "idleMs": 1205,
+     "intent": {
+      "model": "haiku",
+      "ms": 1361,
+      "firstOpMs": 1190,
+      "count": 2
+     },
+     "entry": {
+      "ops": [
+       "atmosphere snow"
+      ],
+      "dropped": 0,
+      "notes": [],
+      "say": [],
+      "spawned": 0,
+      "modified": 0,
+      "removed": 0
+     },
+     "director": null,
+     "forge": [],
+     "fps": {
+      "avg": 60,
+      "min1": 60,
+      "gap": 17
+     },
+     "before": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "after": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "census": {
+      "entities": 0,
+      "kinds": 0,
+      "top": [],
+      "time": "golden",
+      "weather": "snow"
+     },
+     "hud": "“now a blizzard” Winter comes, all white.",
+     "shot": "006_sky_blizzard_s2_now_a_blizzard.jpg"
+    }
+   ],
+   "fps": {
+    "avg": 60,
+    "min1": 60,
+    "gap": 17
+   },
+   "usd": 0.001,
+   "errors": [],
+   "errorCount": 0
+  },
+  {
+   "id": "life_dog",
+   "group": "life",
+   "steps": [
+    {
+     "step": 1,
+     "text": "a dog that follows me around",
+     "thought": true,
+     "idleMs": 1049,
+     "intent": {
+      "model": "haiku",
+      "ms": 1138,
+      "firstOpMs": 1030,
+      "count": 2
+     },
+     "entry": {
+      "ops": [
+       "spawn dog×1"
+      ],
+      "dropped": 0,
+      "notes": [],
+      "say": [],
+      "spawned": 1,
+      "modified": 0,
+      "removed": 0
+     },
+     "director": null,
+     "forge": [],
+     "fps": {
+      "avg": 60,
+      "min1": 60,
+      "gap": 17
+     },
+     "before": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "after": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "census": {
+      "entities": 1,
+      "kinds": 1,
+      "top": [
+       "dog×1"
+      ],
+      "time": "golden"
+     },
+     "hud": "“a dog that follows me around” A loyal shadow, at your heel.",
+     "shot": "007_life_dog_s1_a_dog_that_follows_me_around.jpg"
+    },
+    {
+     "step": 2,
+     "action": "hold w 2500 ms",
+     "fps": {
+      "avg": 60,
+      "min1": 60,
+      "gap": 17
+     },
+     "before": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "after": {
+      "pos": [
+       0,
+       1.6,
+       -15.4
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "census": {
+      "entities": 1,
+      "kinds": 1,
+      "top": [
+       "dog×1"
+      ],
+      "time": "golden"
+     },
+     "hud": "“a dog that follows me around”",
+     "shot": "008_life_dog_s2_walked.jpg"
+    }
+   ],
+   "fps": {
+    "avg": 60,
+    "min1": 60,
+    "gap": 17
+   },
+   "usd": 0.001,
+   "errors": [],
+   "errorCount": 0
+  },
+  {
+   "id": "people_wizard",
+   "group": "people",
+   "steps": [
+    {
+     "step": 1,
+     "text": "put a wizard right in front of me",
+     "thought": true,
+     "idleMs": 1168,
+     "intent": {
+      "model": "haiku",
+      "ms": 1311,
+      "firstOpMs": 1157,
+      "count": 2
+     },
+     "entry": {
+      "ops": [
+       "spawn person×1"
+      ],
+      "dropped": 0,
+      "notes": [],
+      "say": [],
+      "spawned": 1,
+      "modified": 0,
+      "removed": 0
+     },
+     "director": null,
+     "forge": [],
+     "fps": {
+      "avg": 60,
+      "min1": 60,
+      "gap": 17
+     },
+     "before": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "after": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "census": {
+      "entities": 1,
+      "kinds": 1,
+      "top": [
+       "person×1"
+      ],
+      "time": "golden"
+     },
+     "hud": "“put a wizard right in front of me” A wizard steps forth.",
+     "shot": "009_people_wizard_s1_put_a_wizard_right_in_front_.jpg"
+    },
+    {
+     "step": 2,
+     "text": "hello! who are you?",
+     "thought": true,
+     "idleMs": 45006,
+     "intent": null,
+     "entry": null,
+     "director": null,
+     "forge": [],
+     "replyMs": 15002,
+     "fps": {
+      "avg": 60,
+      "min1": 60,
+      "gap": 17
+     },
+     "before": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "after": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "census": {
+      "entities": 1,
+      "kinds": 1,
+      "top": [
+       "person×1"
+      ],
+      "time": "golden"
+     },
+     "hud": "",
+     "shot": "010_people_wizard_s2_hello_who_are_you.jpg"
+    },
+    {
+     "step": 3,
+     "text": "can you follow me?",
+     "thought": true,
+     "idleMs": 45116,
+     "intent": null,
+     "entry": null,
+     "director": null,
+     "forge": [],
+     "replyMs": 12169,
+     "fps": {
+      "avg": 60,
+      "min1": 60,
+      "gap": 17
+     },
+     "before": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "after": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "census": {
+      "entities": 1,
+      "kinds": 1,
+      "top": [
+       "person×1"
+      ],
+      "time": "golden"
+     },
+     "hud": "PIA Well, I've things to do. Back I go.",
+     "shot": "011_people_wizard_s3_can_you_follow_me.jpg"
+    },
+    {
+     "step": 4,
+     "action": "hold w 2500 ms",
+     "fps": {
+      "avg": 60,
+      "min1": 60,
+      "gap": 17
+     },
+     "before": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "after": {
+      "pos": [
+       0,
+       1.6,
+       -15.4
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "census": {
+      "entities": 1,
+      "kinds": 1,
+      "top": [
+       "person×1"
+      ],
+      "time": "golden"
+     },
+     "hud": "PIA (behind you) Well, I've things to do. Back I go.",
+     "shot": "012_people_wizard_s4_walked.jpg"
+    }
+   ],
+   "fps": {
+    "avg": 60,
+    "min1": 60,
+    "gap": 17
+   },
+   "usd": 0.0013,
+   "errors": [],
+   "errorCount": 0
+  },
+  {
+   "id": "phys_drop",
+   "group": "phys",
+   "steps": [
+    {
+     "step": 1,
+     "text": "drop a piano from the sky",
+     "thought": true,
+     "idleMs": 1422,
+     "intent": {
+      "model": "haiku",
+      "ms": 3204,
+      "firstOpMs": 1415,
+      "count": 3
+     },
+     "entry": {
+      "ops": [
+       "spawn piano×1"
+      ],
+      "dropped": 0,
+      "notes": [
+       "unknown kind \"piano\": holding its spot with a placeholder until it's defined"
+      ],
+      "say": [],
+      "spawned": 1,
+      "modified": 0,
+      "removed": 0
+     },
+     "director": null,
+     "forge": [
+      {
+       "kind": "piano",
+       "tier": "good",
+       "outcome": "library hit",
+       "draftMs": 3205,
+       "refinedMs": 4108,
+       "parts": 29,
+       "usd": 0,
+       "library": true
+      }
+     ],
+     "fps": {
+      "avg": 60,
+      "min1": 60,
+      "gap": 17
+     },
+     "before": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "after": {
+      "pos": [
+       0,
+       1.6,
+       -7.19
+      ],
+      "yaw": 0,
+      "pitch": -0.21
+     },
+     "census": {
+      "entities": 1,
+      "kinds": 1,
+      "top": [
+       "piano×1"
+      ],
+      "time": "golden"
+     },
+     "hud": "“drop a piano from the sky” Look out below!",
+     "shot": "013_phys_drop_s1_drop_a_piano_from_the_sky.jpg"
+    }
+   ],
+   "fps": {
+    "avg": 60,
+    "min1": 60,
+    "gap": 17
+   },
+   "usd": 0.001,
+   "errors": [],
+   "errorCount": 0
+  },
+  {
+   "id": "phys_stack",
+   "group": "phys",
+   "steps": [
+    {
+     "step": 1,
+     "text": "stack five wooden crates on top of each other",
+     "thought": true,
+     "idleMs": 1041,
+     "intent": {
+      "model": "haiku",
+      "ms": 1754,
+      "firstOpMs": 1032,
+      "count": 3
+     },
+     "entry": {
+      "ops": [
+       "spawn crate×5"
+      ],
+      "dropped": 0,
+      "notes": [
+       "unknown kind \"crate\": holding its spot with a placeholder until it's defined"
+      ],
+      "say": [],
+      "spawned": 5,
+      "modified": 0,
+      "removed": 0
+     },
+     "director": null,
+     "forge": [],
+     "fps": {
+      "avg": 60,
+      "min1": 60,
+      "gap": 17
+     },
+     "before": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "after": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": 0.43
+     },
+     "census": {
+      "entities": 5,
+      "kinds": 1,
+      "top": [
+       "crate×5"
+      ],
+      "time": "golden"
+     },
+     "hud": "“stack five wooden crates on top of each other” Five crates, stacked high.",
+     "shot": "014_phys_stack_s1_stack_five_wooden_crates_on_.jpg"
+    }
+   ],
+   "fps": {
+    "avg": 60,
+    "min1": 60,
+    "gap": 17
+   },
+   "usd": 0.001,
+   "errors": [],
+   "errorCount": 0
+  },
+  {
+   "id": "nav_walk",
+   "group": "nav",
+   "steps": [
+    {
+     "step": 1,
+     "text": "a lighthouse over there",
+     "thought": true,
+     "idleMs": 1223,
+     "intent": {
+      "model": "haiku",
+      "ms": 2783,
+      "firstOpMs": 1207,
+      "count": 3
+     },
+     "entry": {
+      "ops": [
+       "spawn lighthouse×1"
+      ],
+      "dropped": 0,
+      "notes": [
+       "unknown kind \"lighthouse\": holding its spot with a placeholder until it's defined"
+      ],
+      "say": [],
+      "spawned": 1,
+      "modified": 0,
+      "removed": 0
+     },
+     "director": null,
+     "forge": [
+      {
+       "kind": "lighthouse",
+       "tier": "good",
+       "outcome": "library hit",
+       "draftMs": 2736,
+       "refinedMs": 3641,
+       "parts": 36,
+       "usd": 0,
+       "library": true
+      }
+     ],
+     "fps": {
+      "avg": 60,
+      "min1": 60,
+      "gap": 17
+     },
+     "before": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "after": {
+      "pos": [
+       0,
+       1.6,
+       4.11
+      ],
+      "yaw": 0,
+      "pitch": 0.35
+     },
+     "census": {
+      "entities": 1,
+      "kinds": 1,
+      "top": [
+       "lighthouse×1"
+      ],
+      "time": "golden"
+     },
+     "hud": "“a lighthouse over there” A beacon stands over there.",
+     "shot": "015_nav_walk_s1_a_lighthouse_over_there.jpg"
+    },
+    {
+     "step": 2,
+     "action": "hold w 3000 ms",
+     "fps": {
+      "avg": 60,
+      "min1": 60,
+      "gap": 17
+     },
+     "before": {
+      "pos": [
+       0,
+       1.6,
+       4.11
+      ],
+      "yaw": 0,
+      "pitch": 0.35
+     },
+     "after": {
+      "pos": [
+       0,
+       1.6,
+       -9.99
+      ],
+      "yaw": 0,
+      "pitch": 0.35
+     },
+     "census": {
+      "entities": 1,
+      "kinds": 1,
+      "top": [
+       "lighthouse×1"
+      ],
+      "time": "golden"
+     },
+     "hud": "“a lighthouse over there”",
+     "shot": "016_nav_walk_s2_walk.jpg"
+    },
+    {
+     "step": 3,
+     "action": "drag 420,0",
+     "fps": {
+      "avg": 61,
+      "min1": 60,
+      "gap": 17
+     },
+     "before": {
+      "pos": [
+       0,
+       1.6,
+       -9.99
+      ],
+      "yaw": 0,
+      "pitch": 0.35
+     },
+     "after": {
+      "pos": [
+       0,
+       1.6,
+       -9.99
+      ],
+      "yaw": -1.68,
+      "pitch": 0.35
+     },
+     "census": {
+      "entities": 1,
+      "kinds": 1,
+      "top": [
+       "lighthouse×1"
+      ],
+      "time": "golden"
+     },
+     "hud": "“a lighthouse over there”",
+     "shot": "017_nav_walk_s3_look_right.jpg"
+    },
+    {
+     "step": 4,
+     "action": "hold shift+w 2500 ms",
+     "fps": {
+      "avg": 60,
+      "min1": 60,
+      "gap": 17
+     },
+     "before": {
+      "pos": [
+       0,
+       1.6,
+       -9.99
+      ],
+      "yaw": -1.68,
+      "pitch": 0.35
+     },
+     "after": {
+      "pos": [
+       35.72,
+       1.6,
+       -6.08
+      ],
+      "yaw": -1.68,
+      "pitch": 0.35
+     },
+     "census": {
+      "entities": 1,
+      "kinds": 1,
+      "top": [
+       "lighthouse×1"
+      ],
+      "time": "golden"
+     },
+     "hud": "“a lighthouse over there”",
+     "shot": "018_nav_walk_s4_run.jpg"
+    }
+   ],
+   "fps": {
+    "avg": 60,
+    "min1": 60,
+    "gap": 17
+   },
+   "usd": 0.001,
+   "errors": [],
+   "errorCount": 0
+  },
+  {
+   "id": "fail_vague",
+   "group": "fail",
+   "steps": [
+    {
+     "step": 1,
+     "text": "do something cool",
+     "thought": true,
+     "idleMs": 1159,
+     "intent": {
+      "model": "haiku",
+      "ms": 1230,
+      "firstOpMs": 1141,
+      "count": 2
+     },
+     "entry": {
+      "ops": [
+       "spawn oak×5"
+      ],
+      "dropped": 0,
+      "notes": [],
+      "say": [],
+      "spawned": 5,
+      "modified": 0,
+      "removed": 0
+     },
+     "director": null,
+     "forge": [],
+     "fps": {
+      "avg": 60,
+      "min1": 60,
+      "gap": 17
+     },
+     "before": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "after": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": -0.02,
+      "pitch": 0.17
+     },
+     "census": {
+      "entities": 5,
+      "kinds": 1,
+      "top": [
+       "oak×5"
+      ],
+      "time": "golden"
+     },
+     "hud": "“do something cool” Behold: a grove.",
+     "shot": "019_fail_vague_s1_do_something_cool.jpg"
+    }
+   ],
+   "fps": {
+    "avg": 60,
+    "min1": 60,
+    "gap": 17
+   },
+   "usd": 0.001,
+   "errors": [],
+   "errorCount": 0
+  }
+ ]
+}

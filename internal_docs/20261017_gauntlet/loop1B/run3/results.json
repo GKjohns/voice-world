@@ -1,0 +1,1333 @@
+{
+ "url": "http://localhost:3091/",
+ "startedAt": "2026-10-18T03:17:49.625Z",
+ "minutes": 3.4,
+ "spend": 0.07745840000000001,
+ "spendBy": {
+  "/api/intent (est)": 0.016000000000000007,
+  "/api/forge": 0.061132,
+  "/api/npc/persona": 0.00032639999999999996
+ },
+ "forgeStatus": {
+  "total": 1.0682,
+  "session": 0.0611,
+  "calls": 40,
+  "cap": 12,
+  "sessionCap": 1.5
+ },
+ "results": [
+  {
+   "id": "create_piano",
+   "group": "create",
+   "steps": [
+    {
+     "step": 1,
+     "text": "a grand piano right in front of me",
+     "thought": true,
+     "idleMs": 1147,
+     "intent": {
+      "model": "haiku",
+      "ms": 2738,
+      "firstOpMs": 1130,
+      "count": 3
+     },
+     "entry": {
+      "ops": [
+       "spawn grand_piano×1"
+      ],
+      "dropped": 0,
+      "notes": [
+       "unknown kind \"grand_piano\": holding its spot with a placeholder until it's defined"
+      ],
+      "say": [],
+      "spawned": 1,
+      "modified": 0,
+      "removed": 0
+     },
+     "director": null,
+     "forge": [
+      {
+       "kind": "grand_piano",
+       "tier": "good",
+       "outcome": "library hit",
+       "draftMs": 2678,
+       "refinedMs": 3584,
+       "parts": 39,
+       "usd": 0,
+       "library": true
+      }
+     ],
+     "fps": {
+      "avg": 60,
+      "min1": 60,
+      "gap": 17
+     },
+     "before": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "after": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "census": {
+      "entities": 1,
+      "kinds": 1,
+      "top": [
+       "grand_piano×1"
+      ],
+      "time": "dusk"
+     },
+     "hud": "A grand piano, as you wish.",
+     "shot": "001_create_piano_s1_a_grand_piano_right_in_front.jpg"
+    }
+   ],
+   "fps": {
+    "avg": 60,
+    "min1": 60,
+    "gap": 17
+   },
+   "usd": 0.001,
+   "errors": [],
+   "errorCount": 0
+  },
+  {
+   "id": "sets_stones",
+   "group": "sets",
+   "steps": [
+    {
+     "step": 1,
+     "text": "a circle of standing stones around me",
+     "thought": true,
+     "idleMs": 1899,
+     "intent": {
+      "model": "haiku",
+      "ms": 1980,
+      "firstOpMs": 1886,
+      "count": 3
+     },
+     "entry": {
+      "ops": [
+       "define standing_stone(3)"
+      ],
+      "dropped": 0,
+      "notes": [],
+      "say": [],
+      "spawned": 0,
+      "modified": 0,
+      "removed": 0
+     },
+     "director": null,
+     "forge": [],
+     "fps": {
+      "avg": 60,
+      "min1": 60,
+      "gap": 17
+     },
+     "before": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "after": {
+      "pos": [
+       0,
+       1.6,
+       15
+      ],
+      "yaw": 0,
+      "pitch": 0.01
+     },
+     "census": {
+      "entities": 10,
+      "kinds": 1,
+      "top": [
+       "standing_stone×10"
+      ],
+      "time": "dusk"
+     },
+     "hud": "Ten standing stones.",
+     "shot": "002_sets_stones_s1_a_circle_of_standing_stones_.jpg"
+    }
+   ],
+   "fps": {
+    "avg": 60,
+    "min1": 60,
+    "gap": 17
+   },
+   "usd": 0.001,
+   "errors": [],
+   "errorCount": 0
+  },
+  {
+   "id": "edit_cabin",
+   "group": "edit",
+   "steps": [
+    {
+     "step": 1,
+     "text": "build a little log cabin",
+     "thought": true,
+     "idleMs": 1210,
+     "intent": {
+      "model": "haiku",
+      "ms": 2684,
+      "firstOpMs": 1201,
+      "count": 3
+     },
+     "entry": {
+      "ops": [
+       "spawn log_cabin×1"
+      ],
+      "dropped": 0,
+      "notes": [
+       "unknown kind \"log_cabin\": holding its spot with a placeholder until it's defined"
+      ],
+      "say": [],
+      "spawned": 1,
+      "modified": 0,
+      "removed": 0
+     },
+     "director": null,
+     "forge": [
+      {
+       "kind": "log_cabin",
+       "tier": "good",
+       "outcome": "refined",
+       "draftMs": 2579,
+       "refinedMs": 16384,
+       "parts": 39,
+       "usd": 0.0305,
+       "library": false
+      }
+     ],
+     "fps": {
+      "avg": 60,
+      "min1": 60,
+      "gap": 17
+     },
+     "before": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "after": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "census": {
+      "entities": 1,
+      "kinds": 1,
+      "top": [
+       "log_cabin×1"
+      ],
+      "time": "dusk"
+     },
+     "hud": "",
+     "shot": "003_edit_cabin_s1_build_a_little_log_cabin.jpg"
+    },
+    {
+     "step": 2,
+     "text": "paint it blue",
+     "thought": true,
+     "idleMs": 1293,
+     "intent": {
+      "model": "haiku",
+      "ms": 1356,
+      "firstOpMs": 1286,
+      "count": 2
+     },
+     "entry": {
+      "ops": [
+       "modify {\"ref\":\"gaze\"}→{\"color\":\"#3a6fc0\"}"
+      ],
+      "dropped": 0,
+      "notes": [],
+      "say": [],
+      "spawned": 0,
+      "modified": 1,
+      "removed": 0
+     },
+     "director": null,
+     "forge": [],
+     "fps": {
+      "avg": 60,
+      "min1": 60,
+      "gap": 17
+     },
+     "before": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "after": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "census": {
+      "entities": 1,
+      "kinds": 1,
+      "top": [
+       "log_cabin×1"
+      ],
+      "time": "dusk"
+     },
+     "hud": "Blue it is.",
+     "shot": "004_edit_cabin_s2_paint_it_blue.jpg"
+    },
+    {
+     "step": 3,
+     "text": "make it three times bigger",
+     "thought": true,
+     "idleMs": 1312,
+     "intent": {
+      "model": "haiku",
+      "ms": 1383,
+      "firstOpMs": 1295,
+      "count": 2
+     },
+     "entry": {
+      "ops": [
+       "modify {\"ref\":\"gaze\"}→{\"scale\":3}"
+      ],
+      "dropped": 0,
+      "notes": [],
+      "say": [],
+      "spawned": 0,
+      "modified": 1,
+      "removed": 0
+     },
+     "director": null,
+     "forge": [],
+     "fps": {
+      "avg": 60,
+      "min1": 60,
+      "gap": 17
+     },
+     "before": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "after": {
+      "pos": [
+       0,
+       1.6,
+       6
+      ],
+      "yaw": 0,
+      "pitch": 0.36
+     },
+     "census": {
+      "entities": 1,
+      "kinds": 1,
+      "top": [
+       "log_cabin×1"
+      ],
+      "time": "dusk"
+     },
+     "hud": "Three times the cabin, behold.",
+     "shot": "005_edit_cabin_s3_make_it_three_times_bigger.jpg"
+    },
+    {
+     "step": 4,
+     "text": "make it glow",
+     "thought": true,
+     "idleMs": 1437,
+     "intent": {
+      "model": "haiku",
+      "ms": 1475,
+      "firstOpMs": 1411,
+      "count": 2
+     },
+     "entry": {
+      "ops": [
+       "modify {\"ref\":\"gaze\"}→{\"glow\":3}"
+      ],
+      "dropped": 0,
+      "notes": [],
+      "say": [],
+      "spawned": 0,
+      "modified": 1,
+      "removed": 0
+     },
+     "director": null,
+     "forge": [],
+     "fps": {
+      "avg": 60,
+      "min1": 60,
+      "gap": 17
+     },
+     "before": {
+      "pos": [
+       0,
+       1.6,
+       6
+      ],
+      "yaw": 0,
+      "pitch": 0.36
+     },
+     "after": {
+      "pos": [
+       0,
+       1.6,
+       6
+      ],
+      "yaw": 0,
+      "pitch": 0.36
+     },
+     "census": {
+      "entities": 1,
+      "kinds": 1,
+      "top": [
+       "log_cabin×1"
+      ],
+      "time": "dusk"
+     },
+     "hud": "It burns with light.",
+     "shot": "006_edit_cabin_s4_make_it_glow.jpg"
+    }
+   ],
+   "fps": {
+    "avg": 60,
+    "min1": 60,
+    "gap": 17
+   },
+   "usd": 0.0345,
+   "errors": [],
+   "errorCount": 0
+  },
+  {
+   "id": "god_tiny",
+   "group": "god",
+   "steps": [
+    {
+     "step": 1,
+     "text": "a picnic blanket with some food on it",
+     "thought": true,
+     "idleMs": 3296,
+     "intent": {
+      "model": "haiku",
+      "ms": 3589,
+      "firstOpMs": 3281,
+      "count": 3
+     },
+     "entry": {
+      "ops": [
+       "define picnic_blanket(9)"
+      ],
+      "dropped": 0,
+      "notes": [],
+      "say": [],
+      "spawned": 0,
+      "modified": 0,
+      "removed": 0
+     },
+     "director": null,
+     "forge": [
+      {
+       "kind": "picnic_blanket",
+       "tier": "good",
+       "outcome": "refined",
+       "draftMs": 3287,
+       "refinedMs": 14794,
+       "parts": 25,
+       "usd": 0.0306,
+       "library": false
+      }
+     ],
+     "fps": {
+      "avg": 59,
+      "min1": 42,
+      "gap": 250
+     },
+     "before": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "after": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "census": {
+      "entities": 1,
+      "kinds": 1,
+      "top": [
+       "picnic_blanket×1"
+      ],
+      "time": "dusk"
+     },
+     "hud": "",
+     "shot": "007_god_tiny_s1_a_picnic_blanket_with_some_f.jpg"
+    },
+    {
+     "step": 2,
+     "text": "shrink me to the size of an ant",
+     "thought": true,
+     "idleMs": 1018,
+     "intent": {
+      "model": "haiku",
+      "ms": 1065,
+      "firstOpMs": 1000,
+      "count": 2
+     },
+     "entry": {
+      "ops": [
+       "atmosphere "
+      ],
+      "dropped": 0,
+      "notes": [],
+      "say": [],
+      "spawned": 0,
+      "modified": 0,
+      "removed": 0
+     },
+     "director": null,
+     "forge": [],
+     "fps": {
+      "avg": 60,
+      "min1": 60,
+      "gap": 17
+     },
+     "before": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "after": {
+      "pos": [
+       0,
+       0.03,
+       0
+      ],
+      "yaw": 0,
+      "pitch": 0.2
+     },
+     "census": {
+      "entities": 1,
+      "kinds": 1,
+      "top": [
+       "picnic_blanket×1"
+      ],
+      "time": "dusk"
+     },
+     "hud": "Tiny as an ant. Look up.",
+     "shot": "008_god_tiny_s2_shrink_me_to_the_size_of_an_.jpg"
+    }
+   ],
+   "fps": {
+    "avg": 59,
+    "min1": 42,
+    "gap": 250
+   },
+   "usd": 0.0326,
+   "errors": [],
+   "errorCount": 0
+  },
+  {
+   "id": "life_birds",
+   "group": "life",
+   "steps": [
+    {
+     "step": 1,
+     "text": "a flock of birds circling overhead",
+     "thought": true,
+     "idleMs": 1521,
+     "intent": {
+      "model": "haiku",
+      "ms": 1307,
+      "firstOpMs": 1226,
+      "count": 2
+     },
+     "entry": {
+      "model": "haiku",
+      "ms": 1307,
+      "ops": [
+       "spawn bird×14"
+      ],
+      "dropped": 0,
+      "notes": [],
+      "say": [
+       "Wings on the wind."
+      ],
+      "spawned": 14,
+      "modified": 0,
+      "removed": 0
+     },
+     "director": null,
+     "forge": [],
+     "fps": {
+      "avg": 59,
+      "min1": 53,
+      "gap": 83
+     },
+     "before": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "after": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": -0.07,
+      "pitch": 0.4
+     },
+     "census": {
+      "entities": 14,
+      "kinds": 1,
+      "top": [
+       "bird×14"
+      ],
+      "time": "dusk"
+     },
+     "hud": "",
+     "shot": "009_life_birds_s1_a_flock_of_birds_circling_ov.jpg"
+    }
+   ],
+   "fps": {
+    "avg": 59,
+    "min1": 53,
+    "gap": 83
+   },
+   "usd": 0.001,
+   "errors": [],
+   "errorCount": 0
+  },
+  {
+   "id": "life_octopus",
+   "group": "life",
+   "steps": [
+    {
+     "step": 1,
+     "text": "a giant octopus crawling across the field",
+     "thought": true,
+     "idleMs": 1281,
+     "intent": {
+      "model": "haiku",
+      "ms": 3985,
+      "firstOpMs": 1252,
+      "count": 3
+     },
+     "entry": {
+      "ops": [
+       "spawn octopus×1"
+      ],
+      "dropped": 0,
+      "notes": [
+       "unknown kind \"octopus\": holding its spot with a placeholder until it's defined"
+      ],
+      "say": [],
+      "spawned": 1,
+      "modified": 0,
+      "removed": 0
+     },
+     "director": null,
+     "forge": [
+      {
+       "kind": "octopus",
+       "tier": "good",
+       "outcome": "library hit",
+       "draftMs": 3846,
+       "refinedMs": 4754,
+       "parts": 44,
+       "usd": 0,
+       "library": true
+      }
+     ],
+     "fps": {
+      "avg": 60,
+      "min1": 60,
+      "gap": 17
+     },
+     "before": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "after": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "census": {
+      "entities": 1,
+      "kinds": 1,
+      "top": [
+       "octopus×1"
+      ],
+      "time": "dusk"
+     },
+     "hud": "Tentacles stir across the field.",
+     "shot": "010_life_octopus_s1_a_giant_octopus_crawling_acr.jpg"
+    }
+   ],
+   "fps": {
+    "avg": 60,
+    "min1": 60,
+    "gap": 17
+   },
+   "usd": 0.001,
+   "errors": [],
+   "errorCount": 0
+  },
+  {
+   "id": "life_dog",
+   "group": "life",
+   "steps": [
+    {
+     "step": 1,
+     "text": "a dog that follows me around",
+     "thought": true,
+     "idleMs": 1120,
+     "intent": {
+      "model": "haiku",
+      "ms": 1221,
+      "firstOpMs": 1102,
+      "count": 2
+     },
+     "entry": {
+      "ops": [
+       "spawn dog×1"
+      ],
+      "dropped": 0,
+      "notes": [],
+      "say": [],
+      "spawned": 1,
+      "modified": 0,
+      "removed": 0
+     },
+     "director": null,
+     "forge": [],
+     "fps": {
+      "avg": 60,
+      "min1": 60,
+      "gap": 17
+     },
+     "before": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "after": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "census": {
+      "entities": 1,
+      "kinds": 1,
+      "top": [
+       "dog×1"
+      ],
+      "time": "dusk"
+     },
+     "hud": "A loyal shadow, at your heel.",
+     "shot": "011_life_dog_s1_a_dog_that_follows_me_around.jpg"
+    },
+    {
+     "step": 2,
+     "action": "hold w 2500 ms",
+     "fps": {
+      "avg": 60,
+      "min1": 60,
+      "gap": 17
+     },
+     "before": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "after": {
+      "pos": [
+       0,
+       1.6,
+       -15.4
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "census": {
+      "entities": 1,
+      "kinds": 1,
+      "top": [
+       "dog×1"
+      ],
+      "time": "dusk"
+     },
+     "hud": "",
+     "shot": "012_life_dog_s2_walked.jpg"
+    }
+   ],
+   "fps": {
+    "avg": 60,
+    "min1": 60,
+    "gap": 17
+   },
+   "usd": 0.001,
+   "errors": [],
+   "errorCount": 0
+  },
+  {
+   "id": "people_wizard",
+   "group": "people",
+   "steps": [
+    {
+     "step": 1,
+     "text": "put a wizard right in front of me",
+     "thought": true,
+     "idleMs": 1384,
+     "intent": {
+      "model": "haiku",
+      "ms": 1411,
+      "firstOpMs": 1372,
+      "count": 2
+     },
+     "entry": {
+      "ops": [
+       "spawn person×1"
+      ],
+      "dropped": 0,
+      "notes": [],
+      "say": [],
+      "spawned": 1,
+      "modified": 0,
+      "removed": 0
+     },
+     "director": null,
+     "forge": [],
+     "fps": {
+      "avg": 60,
+      "min1": 60,
+      "gap": 17
+     },
+     "before": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "after": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "census": {
+      "entities": 1,
+      "kinds": 1,
+      "top": [
+       "person×1"
+      ],
+      "time": "dusk"
+     },
+     "hud": "A wizard, right before you.",
+     "shot": "013_people_wizard_s1_put_a_wizard_right_in_front_.jpg"
+    },
+    {
+     "step": 2,
+     "text": "hello! who are you?",
+     "thought": false,
+     "idleMs": 4006,
+     "intent": null,
+     "entry": null,
+     "director": null,
+     "forge": [],
+     "replyMs": 1,
+     "fps": {
+      "avg": 60,
+      "min1": 60,
+      "gap": 17
+     },
+     "before": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "after": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "census": {
+      "entities": 1,
+      "kinds": 1,
+      "top": [
+       "person×1"
+      ],
+      "time": "dusk"
+     },
+     "hud": "EDITH I'm Edith, though I'm half up in the clouds most evenings. Mind the scorch marks by the wall, that was my worst experiment.",
+     "shot": "014_people_wizard_s2_hello_who_are_you.jpg"
+    },
+    {
+     "step": 3,
+     "text": "can you follow me?",
+     "thought": false,
+     "idleMs": 4263,
+     "intent": null,
+     "entry": null,
+     "director": null,
+     "forge": [],
+     "replyMs": 1,
+     "fps": {
+      "avg": 60,
+      "min1": 60,
+      "gap": 17
+     },
+     "before": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "after": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "census": {
+      "entities": 1,
+      "kinds": 1,
+      "top": [
+       "person×1"
+      ],
+      "time": "dusk"
+     },
+     "hud": "EDITH Yes, I'll come along, though the first star is about to appear and I'd hate to miss it. Lead on.",
+     "shot": "015_people_wizard_s3_can_you_follow_me.jpg"
+    },
+    {
+     "step": 4,
+     "action": "hold w 2500 ms",
+     "fps": {
+      "avg": 60,
+      "min1": 60,
+      "gap": 17
+     },
+     "before": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "after": {
+      "pos": [
+       0,
+       1.6,
+       -15.4
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "census": {
+      "entities": 1,
+      "kinds": 1,
+      "top": [
+       "person×1"
+      ],
+      "time": "dusk"
+     },
+     "hud": "",
+     "shot": "016_people_wizard_s4_walked.jpg"
+    }
+   ],
+   "fps": {
+    "avg": 60,
+    "min1": 60,
+    "gap": 17
+   },
+   "usd": 0.0013,
+   "errors": [],
+   "errorCount": 0
+  },
+  {
+   "id": "absurd_cheese",
+   "group": "absurd",
+   "steps": [
+    {
+     "step": 1,
+     "text": "a castle made of cheese",
+     "thought": true,
+     "idleMs": 1989,
+     "intent": {
+      "model": "haiku",
+      "ms": 4055,
+      "firstOpMs": 1618,
+      "count": 3
+     },
+     "entry": {
+      "ops": [
+       "spawn castle_of_cheese×1"
+      ],
+      "dropped": 0,
+      "notes": [
+       "unknown kind \"castle_of_cheese\": holding its spot with a placeholder until it's defined"
+      ],
+      "say": [],
+      "spawned": 1,
+      "modified": 0,
+      "removed": 0
+     },
+     "director": null,
+     "forge": [
+      {
+       "kind": "castle_of_cheese",
+       "tier": "good",
+       "outcome": "library hit",
+       "draftMs": 4070,
+       "refinedMs": 4974,
+       "parts": 53,
+       "usd": 0,
+       "library": true
+      }
+     ],
+     "fps": {
+      "avg": 58,
+      "min1": 42,
+      "gap": 200
+     },
+     "before": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "after": {
+      "pos": [
+       0,
+       1.6,
+       12.39
+      ],
+      "yaw": 0,
+      "pitch": 0.39
+     },
+     "census": {
+      "entities": 1,
+      "kinds": 1,
+      "top": [
+       "castle_of_cheese×1"
+      ],
+      "time": "dusk"
+     },
+     "hud": "A fortress of cheese, rising.",
+     "shot": "017_absurd_cheese_s1_a_castle_made_of_cheese.jpg"
+    }
+   ],
+   "fps": {
+    "avg": 58,
+    "min1": 42,
+    "gap": 200
+   },
+   "usd": 0.001,
+   "errors": [],
+   "errorCount": 0
+  },
+  {
+   "id": "absurd_vangogh",
+   "group": "absurd",
+   "steps": [
+    {
+     "step": 1,
+     "text": "a few houses and trees",
+     "thought": true,
+     "idleMs": 1083,
+     "intent": {
+      "model": "haiku",
+      "ms": 1327,
+      "firstOpMs": 1060,
+      "count": 3
+     },
+     "entry": {
+      "ops": [
+       "spawn house×3"
+      ],
+      "dropped": 0,
+      "notes": [],
+      "say": [],
+      "spawned": 3,
+      "modified": 0,
+      "removed": 0
+     },
+     "director": null,
+     "forge": [],
+     "fps": {
+      "avg": 60,
+      "min1": 60,
+      "gap": 17
+     },
+     "before": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "after": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0.31,
+      "pitch": 0.08
+     },
+     "census": {
+      "entities": 8,
+      "kinds": 2,
+      "top": [
+       "pine×5",
+       "house×3"
+      ],
+      "time": "dusk"
+     },
+     "hud": "A small village grows.",
+     "shot": "018_absurd_vangogh_s1_a_few_houses_and_trees.jpg"
+    },
+    {
+     "step": 2,
+     "text": "make everything look like a Van Gogh painting",
+     "thought": true,
+     "idleMs": 1589,
+     "intent": {
+      "model": "haiku",
+      "ms": 1860,
+      "firstOpMs": 1572,
+      "count": 3
+     },
+     "entry": {
+      "ops": [
+       "modify {\"ref\":\"all\"}→{\"color\":\"#e8c547\"}"
+      ],
+      "dropped": 0,
+      "notes": [],
+      "say": [],
+      "spawned": 0,
+      "modified": 8,
+      "removed": 0
+     },
+     "director": null,
+     "forge": [],
+     "fps": {
+      "avg": 60,
+      "min1": 60,
+      "gap": 17
+     },
+     "before": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0.31,
+      "pitch": 0.08
+     },
+     "after": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0.31,
+      "pitch": 0.08
+     },
+     "census": {
+      "entities": 8,
+      "kinds": 2,
+      "top": [
+       "pine×5",
+       "house×3"
+      ],
+      "time": "dusk"
+     },
+     "hud": "Swirls are beyond me; yes.",
+     "shot": "019_absurd_vangogh_s2_make_everything_look_like_a_.jpg"
+    }
+   ],
+   "fps": {
+    "avg": 60,
+    "min1": 60,
+    "gap": 17
+   },
+   "usd": 0.002,
+   "errors": [],
+   "errorCount": 0
+  },
+  {
+   "id": "fail_vague",
+   "group": "fail",
+   "steps": [
+    {
+     "step": 1,
+     "text": "do something cool",
+     "thought": true,
+     "idleMs": 1306,
+     "intent": {
+      "model": "haiku",
+      "ms": 1435,
+      "firstOpMs": 1291,
+      "count": 2
+     },
+     "entry": {
+      "ops": [
+       "spawn dragon×1"
+      ],
+      "dropped": 0,
+      "notes": [],
+      "say": [],
+      "spawned": 1,
+      "modified": 0,
+      "removed": 0
+     },
+     "director": null,
+     "forge": [],
+     "fps": {
+      "avg": 60,
+      "min1": 60,
+      "gap": 17
+     },
+     "before": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "after": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": -3.38,
+      "pitch": 0.7
+     },
+     "census": {
+      "entities": 1,
+      "kinds": 1,
+      "top": [
+       "dragon×1"
+      ],
+      "time": "dusk"
+     },
+     "hud": "Wings unfurl. Something cool, behold.",
+     "shot": "020_fail_vague_s1_do_something_cool.jpg"
+    }
+   ],
+   "fps": {
+    "avg": 60,
+    "min1": 60,
+    "gap": 17
+   },
+   "usd": 0.001,
+   "errors": [],
+   "errorCount": 0
+  }
+ ]
+}

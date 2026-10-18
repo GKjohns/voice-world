@@ -183,6 +183,7 @@ export function layout(state: WorldState, spec: LayoutSpec, ctx: OpContext, rand
   const vary = spec.vary ?? (n > 1 ? (desc.randomYaw ? 0.3 : 0.15) : 0)
   let arrange: Arrangement | 'single' = spec.arrange ?? (anchor.ringRadius ? 'ring' : 'cluster')
   if (n === 1 && arrange !== 'along') arrange = 'single'
+  const stack = arrange === 'stack'
 
   const gap = spec.at?.gap ?? (r > 0 ? 0.6 * r + 0.3 : 1)
   const spacing = Math.max(1, 2 * r + gap)
@@ -210,6 +211,19 @@ export function layout(state: WorldState, spec: LayoutSpec, ctx: OpContext, rand
     ? (desc.length ? desc.length / 2 : 0)
     : arrange === 'grid' ? Math.hypot(cols, rows) * spacing / 2 : arrange === 'ring' ? R : 0
   const c: Vec3 = [...anchor.center]
+  // "Right in front of me" (anchor player, an explicit few metres): honour the distance, but never inside
+  // you, and a big thing still steps back until all of it fits the view (a giant robot "in front of me").
+  const nearPlayer = !room && !horizon && !around && anchorKind === 'player' && spec.at?.dist !== undefined && spec.at.dir !== 'around'
+  if (nearPlayer && r + extent > 0 && !airborne) {
+    const d = distXZ(c, ctx.player.pos)
+    const eye = Math.max(0.3, (ctx.player.pos[1] || 1.6) - groundHeight(state, ctx.player.pos[0], ctx.player.pos[2]))
+    const need = Math.max(extent + r + 1.2, tall > eye + 0.5 ? extent + r + fitDistance(tall, eye) : 0)
+    if (d < need) {
+      const dir = d > 1e-3 ? norm2(c[0] - ctx.player.pos[0], c[2] - ctx.player.pos[2]) : forward(yaw)
+      c[0] = ctx.player.pos[0] + dir[0] * need
+      c[2] = ctx.player.pos[2] + dir[1] * need
+    }
+  }
   if (gazeAnchored && r + extent > 0) {
     const d = distXZ(c, ctx.player.pos)
     const need = airborne ? extent + clear : Math.max(extent + clear, extent + r + fitDistance(tall, Math.max(0.3, (ctx.player.pos[1] || 1.6) - groundHeight(state, ctx.player.pos[0], ctx.player.pos[2]))))
@@ -237,8 +251,8 @@ export function layout(state: WorldState, spec: LayoutSpec, ctx: OpContext, rand
     const sky = skyDome(ctx.player.pos, away > 3 ? norm2(c[0] - ctx.player.pos[0], c[2] - ctx.player.pos[2]) : forward(yaw), n, rand)
     pts = sky.pts
     domeY = sky.ys
-  } else if (arrange === 'single') {
-    pts = [[c[0], c[1], c[2]]]
+  } else if (arrange === 'single' || stack) {
+    pts = stack ? Array.from({ length: n }, () => [c[0], c[1], c[2]] as Vec3) : [[c[0], c[1], c[2]]]
   } else if (arrange === 'cluster' || arrange === 'scatter') {
     const minSep = arrange === 'cluster' ? 2 * r * 1.05 : 2 * r * 1.6
     pts = poissonDisc(c, R, n, minSep, rand, gazeAnchored ? { pos: ctx.player.pos, r: clear } : undefined)
@@ -277,10 +291,11 @@ export function layout(state: WorldState, spec: LayoutSpec, ctx: OpContext, rand
   const uniformYaw = roomYaw ?? faceToward(c, ctx.player.pos)
 
   const placed: Placed[] = pts.map((p) => {
-    const regular = arrange !== 'cluster' && arrange !== 'scatter' && arrange !== 'single'
-    const jitter = regular ? vary * Math.max(r, 0.5) * 0.5 : 0
+    const regular = arrange !== 'cluster' && arrange !== 'scatter' && arrange !== 'single' && !stack
+    // A stack is slightly offset like a real one (a hand-stacked pile is never a perfect column).
+    const jitter = stack ? Math.max(r, 0.3) * 0.08 : regular ? vary * Math.max(r, 0.5) * 0.5 : 0
     const pos: Vec3 = [p[0] + (rand() * 2 - 1) * jitter, p[1], p[2] + (rand() * 2 - 1) * jitter]
-    const scale = Math.max(0.4, 1 + (rand() * 2 - 1) * vary * 0.6)
+    const scale = stack ? 1 : Math.max(0.4, 1 + (rand() * 2 - 1) * vary * 0.6)
     const hue = (rand() * 2 - 1) * vary * 0.08
     let rotY: number
     if (facing === 'random') rotY = rand() * TAU
@@ -289,11 +304,24 @@ export function layout(state: WorldState, spec: LayoutSpec, ctx: OpContext, rand
     else if (facing === 'uniform') rotY = uniformYaw
     else rotY = faceToward(pos, ctx.player.pos)
     if (facing !== 'random' && !(room && spec.yaw !== undefined)) rotY += (rand() * 2 - 1) * vary * 0.3
+    if (stack) rotY += (rand() * 2 - 1) * 0.18
     return { pos, rotY, scale: round(scale, 3), hue: round(hue, 4) }
   })
 
   // The Director lays rooms out by hand (a lamp hangs over its table on purpose), so room placements never get pushed.
-  if (!room && !anchor.onTop && !terrain && !airborne && r > 0) deOverlap(state, placed, r, ctx, new Set(), rand)
+  if (stack) {
+    // One column: the base finds a free spot (or the top of whatever it is stacked on), the rest ride on it.
+    const base = placed[0]!
+    const b0: Vec3 = [...base.pos]
+    if (!room && !anchor.onTop && !terrain && !airborne && r > 0) deOverlap(state, [base], r, ctx, new Set(), rand)
+    const y0 = anchor.onTop && !onSurface ? c[1] : supportAt(state, base.pos[0], base.pos[2], r)
+    const each = tall
+    const sx = base.pos[0] - b0[0]
+    const sz = base.pos[2] - b0[2]
+    placed.forEach((p, i) => {
+      p.pos = i ? [p.pos[0] + sx, y0 + i * each, p.pos[2] + sz] : [p.pos[0], y0, p.pos[2]]
+    })
+  } else if (!room && !anchor.onTop && !terrain && !airborne && r > 0) deOverlap(state, placed, r, ctx, new Set(), rand)
   if (airborne) {
     for (const [i, p] of placed.entries()) {
       if (lid && !underLid(lid, p.pos[0], p.pos[2])) p.pos = insideLid(lid, rand)
@@ -304,7 +332,7 @@ export function layout(state: WorldState, spec: LayoutSpec, ctx: OpContext, rand
     }
   }
   // Terrain snap: anything spawned over a hill, mountain or cliff stands on its surface.
-  if (!terrain && !(anchor.onTop && !onSurface)) {
+  if (!terrain && !(anchor.onTop && !onSurface) && !stack) {
     for (const p of placed) p.pos = [p.pos[0], p.pos[1] + groundUnder(state, p.pos[0], p.pos[2], r * p.scale), p.pos[2]]
   }
   for (const p of placed) p.pos = [round(p.pos[0], 3), round(p.pos[1], 3), round(p.pos[2], 3)]
@@ -312,6 +340,28 @@ export function layout(state: WorldState, spec: LayoutSpec, ctx: OpContext, rand
 }
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v))
+
+/**
+ * Gauntlet loop 1, physics-lite: the height something of radius `r` comes to rest at over (x, z). The
+ * terrain, or the top of the highest solid thing under it (its bounding box: footprint circle × height),
+ * so a dropped crate lands on the table and a stack rests on the crate below. Flat kinds (floors, rugs,
+ * roads), terrain and things in the air are never a support; `ignore` skips the falling things themselves.
+ */
+export function supportAt(state: WorldState, x: number, z: number, r = 0.5, ignore: Set<string> = new Set(), accept?: (e: Entity) => boolean): number {
+  let top = groundUnder(state, x, z, r)
+  for (const e of state.entities) {
+    if (ignore.has(e.id) || e.kind === 'person') continue
+    const d = kindOf(state, e.kind)
+    if (d.surface || isTerrain(d) || d.footprint <= 0 || d.tags.includes('particles')) continue
+    if (e.props.motion && e.props.motion !== 'none') continue
+    if (e.props.altitude !== undefined && e.props.altitude !== 0) continue
+    const er = entityRadius(state, e)
+    if (distXZ(e.pos, [x, 0, z]) > er * 0.9 + r * 0.4) continue
+    if (accept && !accept(e)) continue
+    top = Math.max(top, e.pos[1] + entityHeight(state, e))
+  }
+  return round(top, 3)
+}
 
 /** The sky band: 'sky' spreads a flock 15–45 m up (one thing floats at ~24 m); a number jitters ±20% (≤ 6 m) in a group. */
 export const SKY_BAND: [number, number] = [15, 45]

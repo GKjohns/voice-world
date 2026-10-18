@@ -16,6 +16,11 @@ export interface Entity {
   hue?: number // per-instance hue jitter from `vary`, so a cluster never looks copy-pasted
   /** The circle an orbit / gallop / flight follows ([x, z] centre, radius m), resolved by the kernel from `props.around`. */
   path?: { c: [number, number], r: number }
+  /**
+   * Gauntlet loop 1, physics-lite: it arrived through the air (dropped from above, or thrown from the player's
+   * eye), resolved by the kernel. `from` is where the flight began; `pos` is where it came to rest.
+   */
+  launch?: { from: Vec3, kind: 'drop' | 'throw' }
 }
 
 /** Where the player was looking when they started talking. Deictics resolve against this, not live gaze. */
@@ -43,6 +48,15 @@ export interface Atmosphere {
   weather?: Exclude<Weather, 'clear'>
   /** The player's size: 0.1 = ant-sized among giants (eye height and stride scale with it). Absent = 1. */
   playerScale?: number
+  /** Gauntlet loop 1: gravity switched off (loose things float). Absent = on. */
+  gravity?: false
+  /** The player flies. Absent = walking. */
+  fly?: true
+  /** A custom sky over the time-of-day preset: zenith and horizon colours (hex), the moon count, weather strength. */
+  sky?: string
+  horizon?: string
+  moons?: number
+  intensity?: number
 }
 
 export interface Batch {
@@ -91,6 +105,8 @@ export interface Effects {
   notes: string[] // why an op did nothing ("no entities match {tag:'tree'}"), for the op log
   /** One-shot sky events to play (lightning at a point, a meteor shower…). Never replayed on load. */
   events?: { kind: SkyEvent, at?: Vec3 }[]
+  /** "Take me to the top of it": where the player should glide to (feet position) and what to look at. */
+  goto?: { to: Vec3, look: Vec3, id: string }
   /** What actually happened, in words ("40 lantern in the sky 15–45 m up, drifting"), for honest replies. */
   facts?: string[]
 }

@@ -107,7 +107,9 @@ export interface PeopleHooks {
 export const ACT_SECONDS = { dance: [15, 25], sit: [35, 50], own_dance: [15, 22], own_sit: [40, 60] } as const
 /** A follower with no word from you for this long, or this far behind, heads back to their day. */
 export const FOLLOW_QUIET_S = 60
-export const FOLLOW_FAR = 20
+export const FOLLOW_FAR = 45
+/** A follower sprints to keep up with a walking player (6 m/s): Gauntlet loop 1, the wizard fell 15 m behind. */
+const FOLLOW_RUN = 9.5
 
 const TAU = Math.PI * 2
 /** Their own pottering never ends closer than this to you. */
@@ -515,13 +517,16 @@ export class People {
     return sp
   }
 
-  /** Keep a couple of metres off your shoulder (behind and to one side, so they're in view when you turn); hurry to catch up. */
+  /**
+   * Keep a few metres ahead of you and off to one side (Gauntlet loop 1: in the lower part of your view, so
+   * you see them walk with you, not behind you where you never look); sprint to catch up.
+   */
   private followGoal(l: Live, eye: Vec3): void {
     const side = l.seed > 0.5 ? 1 : -1
     const yaw = this.r.yaw
-    // The camera looks down -z at yaw 0: "behind you" is +sin/+cos of yaw.
-    const gx = eye[0] + Math.sin(yaw) * 1.2 - Math.cos(yaw) * 1.7 * side
-    const gz = eye[2] + Math.cos(yaw) * 1.2 + Math.sin(yaw) * 1.7 * side
+    // The camera looks down -z at yaw 0: "ahead of you" is -sin/-cos of yaw, "your right" is +cos/-sin.
+    const gx = eye[0] - Math.sin(yaw) * 3.6 + Math.cos(yaw) * 1.3 * side
+    const gz = eye[2] - Math.cos(yaw) * 3.6 - Math.sin(yaw) * 1.3 * side
     if (Math.hypot(gx - l.x, gz - l.z) > 1.4) {
       l.goal = { ...this.safeSpot(gx, gz, l), activity: 'stand', doing: 'following the visitor', key: 'follow' }
       l.arrived = false
@@ -593,7 +598,7 @@ export class People {
         const catchingUp = l.following || l.mode === 'act'
         // Their own day is an amble; somewhere you asked them to go, a walk (a hurry if it's far).
         const amble = l.mode === 'routine' && !g.hold
-        const pace = fleeing || (catchingUp && d > 7) ? SPEED.run : catchingUp && d > 3 ? SPEED.hurry : amble ? SPEED.stroll * (0.85 + 0.2 * l.seed) : d > 30 ? SPEED.hurry : SPEED.walk * (0.9 + 0.2 * l.seed)
+        const pace = l.following && d > 3 ? Math.max(SPEED.run, Math.min(FOLLOW_RUN, d * 1.5)) : fleeing || (catchingUp && d > 7) ? SPEED.run : catchingUp && d > 3 ? SPEED.hurry : amble ? SPEED.stroll * (0.85 + 0.2 * l.seed) : d > 30 ? SPEED.hurry : SPEED.walk * (0.9 + 0.2 * l.seed)
         want = Math.min(pace, d * 2)
         const solid = obstacles(ents, k => this.footprint(k), [l.x, l.z])
         // Boxed in where they stand (spawned on a house, say): walk out ignoring solids.
