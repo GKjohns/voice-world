@@ -2,7 +2,8 @@
  * POST /api/npc/voice { text, voice, speed? } → audio/mpeg (gateway speech: grok-tts, then tts-1), or 204
  * when no voice could be made (the client falls back to the browser's speechSynthesis).
  */
-import { NPC_VOICES, speak } from '../../utils/npc'
+import { NPC_VOICES } from '#shared/npc/people'
+import { speak } from '../../utils/npc'
 import { ensureKey } from '../../utils/gatewayKey'
 
 const ALL = new Set<string>([...NPC_VOICES.f, ...NPC_VOICES.m])

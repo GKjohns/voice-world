@@ -12,6 +12,7 @@ import type { BanterLine } from '../../shared/npc/reply.ts'
 import type { CastEntry, Memory, Persona, PersonSeed } from '../../shared/npc/persona.ts'
 import { costUsd, MODELS } from './aiModels.ts'
 import type { Usage } from './aiModels.ts'
+import { hash01 } from '../../shared/hash.ts'
 
 export const NPC_MODEL = MODELS.haiku
 const ANTHROPIC_ONLY = { gateway: { only: ['anthropic'] } }
@@ -149,7 +150,7 @@ const EXAMPLES = [
 ]
 
 function how(p: Persona, you: string): string {
-  const ex = EXAMPLES[Math.floor(pickNum(p.name, 'ex') * EXAMPLES.length) % EXAMPLES.length]
+  const ex = EXAMPLES[Math.floor(hash01(p.name, 'ex') * EXAMPLES.length) % EXAMPLES.length]
   return `## How you answer
 - Speak like a real person in a real moment: one or two short sentences, 20 words at most. Answer first; no warm-up, no filler. No narration, no *actions*, no stage directions, no emoji.
 - Be a little sharper than they expect: one concrete detail that only you would notice or remember (what's right next to you, what changed, what they said or did earlier) beats any general remark. Connect things when they connect.
@@ -169,12 +170,6 @@ function how(p: Persona, you: string): string {
 
 Example (the shape only; never reuse its words):
 ${ex}`
-}
-
-function pickNum(id: string, salt: string): number {
-  let h = 2166136261
-  for (const ch of id + salt) h = Math.imul(h ^ ch.charCodeAt(0), 16777619)
-  return ((h ^ (h >>> 15)) >>> 0) / 4294967296
 }
 
 function personaBlock(p: Persona): string {
@@ -372,8 +367,6 @@ export async function summarizeMemory(name: string, prev: string, turns: { who: 
 
 // ---------- voice ----------
 
-/** Gateway speech voices. The genie is OpenAI realtime `cedar`; people never use it. */
-export const NPC_VOICES = { f: ['ara', 'eve', 'una'], m: ['leo', 'rex', 'sal'] } as const
 const TTS_PRIMARY = 'spacexai/grok-tts'
 const TTS_FALLBACK = 'openai/tts-1'
 const FALLBACK_VOICE: Record<string, string> = { ara: 'nova', eve: 'shimmer', una: 'alloy', leo: 'onyx', rex: 'echo', sal: 'fable' }

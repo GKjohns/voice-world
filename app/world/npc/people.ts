@@ -25,6 +25,7 @@ import { applyPose } from '../fx/motion'
 import { restPose } from '../kit/people'
 import type { PersonPose } from '../kit/people'
 import type { WorldRenderer } from '../renderer'
+import { hash01 } from '#shared/hash'
 
 type OneShot = 'wave' | 'bow' | 'cheer' | 'point'
 
@@ -115,12 +116,6 @@ const TAU = Math.PI * 2
 /** Their own pottering never ends closer than this to you. */
 const PERSONAL_SPACE = 2
 const STRIDE_LEN = 1.35 // metres per full stride cycle at a walk
-
-function hash(id: string, salt: string): number {
-  let h = 2166136261
-  for (const ch of id + salt) h = Math.imul(h ^ ch.charCodeAt(0), 16777619)
-  return ((h ^ (h >>> 15)) >>> 0) / 4294967296
-}
 
 function wrap(a: number): number {
   return Math.atan2(Math.sin(a), Math.cos(a))
@@ -224,7 +219,7 @@ export class People {
     }
     const hit = resolvePlace(t, this.placeEntities(), [l.x, l.z], id, 150)
     if (!hit) return false
-    const sp = standPoint(hit, (this.state.kinds[hit.kind] ?? KIT[hit.kind])?.footprint ?? 1, [l.x, l.z], hash(id, 'sp'))
+    const sp = standPoint(hit, (this.state.kinds[hit.kind] ?? KIT[hit.kind])?.footprint ?? 1, [l.x, l.z], hash01(id, 'sp'))
     l.goal = { ...this.safeSpot(sp.x, sp.z, l), yaw: sp.yaw, activity: hit.kind === 'dock' ? 'fish' : 'stand', doing: `walking to the ${hit.kind.replace(/_/g, ' ')}`, hold: 25, key: `walk:${t}` }
     l.arrived = false
     l.following = false
@@ -291,13 +286,13 @@ export class People {
         }
         if (!looked && (startling || d < 25)) {
           l.reactAt = [e.pos[0], Math.max(1.5, e.pos[1] + (startling ? 6 : 0.8)), e.pos[2]]
-          l.reactUntil = now + (startling ? 4200 : 1800) + hash(l.id, String(now)) * 600
+          l.reactUntil = now + (startling ? 4200 : 1800) + hash01(l.id, String(now)) * 600
           looked = true
         }
       }
       if (skyChanged && !looked) {
         l.reactAt = [l.x + Math.sin(l.yaw) * 5, 40, l.z + Math.cos(l.yaw) * 5]
-        l.reactUntil = now + 2600 + hash(l.id, 'sky') * 900
+        l.reactUntil = now + 2600 + hash01(l.id, 'sky') * 900
       }
     }
   }
@@ -358,12 +353,12 @@ export class People {
   private spawn(e: Entity, now: number): Live {
     return {
       id: e.id, name: e.props.name ?? 'someone', x: e.pos[0], z: e.pos[2], y: e.pos[1], yaw: e.rotY, home: [e.pos[0], e.pos[2]],
-      mode: 'routine', goal: null, arrived: false, arrivedAt: now, linger: LINGER_S[0] * hash(e.id, 'l'), speed: 0, stride: hash(e.id, 's'),
-      pose: { ...restPose(), seed: hash(e.id, 'pose') }, oneShot: null, following: false, ownAct: null, suppressAct: false,
+      mode: 'routine', goal: null, arrived: false, arrivedAt: now, linger: LINGER_S[0] * hash01(e.id, 'l'), speed: 0, stride: hash01(e.id, 's'),
+      pose: { ...restPose(), seed: hash01(e.id, 'pose') }, oneShot: null, following: false, ownAct: null, suppressAct: false,
       reactUntil: 0, reactAt: null, fleeFrom: null, fleeUntil: 0, lookAt: null, lookUntil: 0, lookedFor: 0,
       // A person born with an act does it once at birth; one already standing when the page loads doesn't replay it.
       seenActId: now - this.t0 < 2500 ? e.props.actId : undefined,
-      seed: hash(e.id, 'seed'), doing: 'looking around', lastPos: [...e.pos], footT: 0, blockKey: '', stall: 0, hidden: false, bornAt: now,
+      seed: hash01(e.id, 'seed'), doing: 'looking around', lastPos: [...e.pos], footT: 0, blockKey: '', stall: 0, hidden: false, bornAt: now,
       actUntil: 0, ownActUntil: 0, lastTouch: now, mood: 'calm', moodUntil: 0
     }
   }
@@ -501,18 +496,18 @@ export class People {
       if (l.linger <= 0 && !stays) {
         l.goal = this.idleSpot(l, l.goal.activity === 'patrol' || l.goal.activity === 'wander' ? l.goal.activity : 'stand', l.goal.doing, key, [l.goal.x, l.goal.z], POTTER_RADIUS)
         l.arrived = false
-        l.linger = LINGER_S[0] + hash(l.id, String(Math.floor(now / 1000))) * (LINGER_S[1] - LINGER_S[0])
+        l.linger = LINGER_S[0] + hash01(l.id, String(Math.floor(now / 1000))) * (LINGER_S[1] - LINGER_S[0])
       }
     }
   }
 
   /** A stand point at a place that nobody else is already heading for (two people never share one bench seat). */
   private freeStandPoint(place: PlaceEntity, fp: number, l: Live) {
-    let sp = standPoint(place, fp, [l.x, l.z], hash(l.id, 'sp'))
+    let sp = standPoint(place, fp, [l.x, l.z], hash01(l.id, 'sp'))
     for (let k = 1; k <= 5; k++) {
       const taken = [...this.live.values()].some(o => o.id !== l.id && o.goal && Math.hypot(o.goal.x - sp.x, o.goal.z - sp.z) < 0.75)
       if (!taken) break
-      sp = standPoint(place, fp, [l.x, l.z], (hash(l.id, 'sp') + k * 0.37) % 1)
+      sp = standPoint(place, fp, [l.x, l.z], (hash01(l.id, 'sp') + k * 0.37) % 1)
     }
     return sp
   }
@@ -537,8 +532,8 @@ export class People {
   private idleSpot(l: Live, activity: string, doing: string, key: string, around: [number, number] = l.home, R = POTTER_RADIUS): Goal {
     const cam = this.r.camera.position
     for (let i = 0; i < 8; i++) {
-      const a = hash(l.id, `${key}${i}${Math.floor(performance.now() / 4000)}`) * TAU
-      const r = (0.3 + 0.7 * hash(l.id, `r${i}${Math.floor(performance.now() / 4000)}`)) * R
+      const a = hash01(l.id, `${key}${i}${Math.floor(performance.now() / 4000)}`) * TAU
+      const r = (0.3 + 0.7 * hash01(l.id, `r${i}${Math.floor(performance.now() / 4000)}`)) * R
       const x = around[0] + Math.sin(a) * r
       const z = around[1] + Math.cos(a) * r
       if (Math.hypot(x - cam.x, z - cam.z) >= PERSONAL_SPACE && this.standable(x, z)) return { x, z, activity, doing, key: `idle:${key}` }
@@ -592,7 +587,7 @@ export class People {
       if (d < 0.25) {
         l.arrived = true
         l.arrivedAt = performance.now()
-        if (l.mode === 'routine') l.linger = LINGER_S[0] + hash(l.id, String(Math.round(l.arrivedAt))) * (LINGER_S[1] - LINGER_S[0])
+        if (l.mode === 'routine') l.linger = LINGER_S[0] + hash01(l.id, String(Math.round(l.arrivedAt))) * (LINGER_S[1] - LINGER_S[0])
       } else {
         const fleeing = l.mode === 'flee'
         const catchingUp = l.following || l.mode === 'act'

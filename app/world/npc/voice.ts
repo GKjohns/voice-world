@@ -4,15 +4,8 @@
  * per role (a child high and quick, an elder low and slow), and gets quieter with distance.
  */
 import type { Persona } from '#shared/npc/persona'
-import { rolePreset } from '#shared/npc/people'
-
-const VOICES = { f: ['ara', 'eve', 'una'], m: ['leo', 'rex', 'sal'] } as const
-
-function hash(id: string, salt: string): number {
-  let h = 2166136261
-  for (const ch of id + salt) h = Math.imul(h ^ ch.charCodeAt(0), 16777619)
-  return ((h ^ (h >>> 15)) >>> 0) / 4294967296
-}
+import { NPC_VOICES, rolePreset } from '#shared/npc/people'
+import { hash01 } from '#shared/hash'
 
 interface Segment { text: string, audio: Promise<HTMLAudioElement | null> }
 
@@ -40,8 +33,8 @@ export class VoiceQueue {
 
   /** The gateway voice this person always speaks with. */
   get voiceName(): string {
-    const list = VOICES[this.persona.voice]
-    return list[Math.floor(hash(this.id, 'voice') * list.length) % list.length]!
+    const list = NPC_VOICES[this.persona.voice]
+    return list[Math.floor(hash01(this.id, 'voice') * list.length) % list.length]!
   }
 
   push(text: string) {
@@ -110,10 +103,10 @@ export class VoiceQueue {
       const preset = rolePreset(this.persona.occupation)
       const f = this.persona.voice === 'f'
       u.pitch = preset === 'child' ? 1.6 : preset === 'elder' ? (f ? 0.95 : 0.7) : f ? 1.15 : 0.85
-      u.rate = preset === 'elder' ? 0.85 : preset === 'child' ? 1.15 : 0.95 + hash(this.id, 'rate') * 0.15
+      u.rate = preset === 'elder' ? 0.85 : preset === 'child' ? 1.15 : 0.95 + hash01(this.id, 'rate') * 0.15
       u.volume = this.volume()
       const voices = speechSynthesis.getVoices().filter(v => v.lang.startsWith('en'))
-      if (voices.length) u.voice = voices[Math.floor(hash(this.id, 'bv') * voices.length) % voices.length]!
+      if (voices.length) u.voice = voices[Math.floor(hash01(this.id, 'bv') * voices.length) % voices.length]!
       u.onstart = () => this.onFirstAudio?.()
       u.onend = () => resolve()
       u.onerror = () => resolve()

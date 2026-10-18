@@ -7,6 +7,7 @@
 import { balancedJson } from '../json.ts'
 import { personGender, rolePreset } from './people.ts'
 import type { Role } from '../world/ops.ts'
+import { hash01 } from '../hash.ts'
 
 /** Time-of-day slots a routine is written in. The world's time maps onto one or more of them (routine.ts). */
 export const DAY_SLOTS = ['dawn', 'morning', 'midday', 'afternoon', 'evening', 'night'] as const
@@ -129,12 +130,7 @@ const TEMPLATES: Record<Role, { occupation: string, age: [number, number], perso
   }
 }
 
-function hash(id: string, salt: string): number {
-  let h = 2166136261
-  for (const ch of id + salt) h = Math.imul(h ^ ch.charCodeAt(0), 16777619)
-  return ((h ^ (h >>> 15)) >>> 0) / 4294967296
-}
-const pick = <T>(list: T[], id: string, salt: string): T => list[Math.floor(hash(id, salt) * list.length) % list.length]!
+const pick = <T>(list: T[], id: string, salt: string): T => list[Math.floor(hash01(id, salt) * list.length) % list.length]!
 
 /** The seeded stand-in: alive from the first frame, consistent across reloads, and never a model call. */
 export function fallbackPersona(seed: PersonSeed): Persona {
@@ -143,7 +139,7 @@ export function fallbackPersona(seed: PersonSeed): Persona {
   const [a0, a1] = t.age
   return {
     name: seed.name ?? 'Stranger',
-    age: Math.round(a0 + hash(seed.id, 'age') * (a1 - a0)),
+    age: Math.round(a0 + hash01(seed.id, 'age') * (a1 - a0)),
     occupation: seed.role && seed.role !== preset ? seed.role : t.occupation,
     personality: pick(t.personality, seed.id, 'p'),
     speech: pick(t.speech, seed.id, 's'),

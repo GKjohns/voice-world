@@ -5,6 +5,9 @@
  */
 import type { Role } from '../world/ops.ts'
 
+/** Gateway speech voices, by gender. The genie is OpenAI realtime `cedar`; people never use it. */
+export const NPC_VOICES = { f: ['ara', 'eve', 'una'], m: ['leo', 'rex', 'sal'] } as const
+
 /** Words the intent model (or a person) may use for a person, → the role they imply. */
 export const PERSON_WORDS: Record<string, Role | null> = {
   person: null, people: null, human: null, humans: null, npc: null, npcs: null, someone: null, somebody: null, stranger: null,
