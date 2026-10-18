@@ -279,7 +279,7 @@ export function driveOf(e: MotionEntity, t: number, height = 1, style?: MotionSt
   return { motion: m, t, seed, speed, turn, climb, air: here.y - ground, stride, step, look, lookW }
 }
 
-export type RigKind = 'dragon' | 'whale' | 'horse' | 'deer' | 'bird'
+export type RigKind = 'dragon' | 'whale' | 'horse' | 'deer' | 'dog' | 'bird'
 
 /** Joint angles (radians) for one frame. The builder maps them onto its named pivots. */
 export interface Rig {
@@ -305,7 +305,7 @@ export interface Rig {
   breath: number // 0..1 embers from the mouth
 }
 
-const TAIL_SEGS: Record<RigKind, number> = { dragon: 8, whale: 0, horse: 3, deer: 1, bird: 1 }
+const TAIL_SEGS: Record<RigKind, number> = { dragon: 8, whale: 0, horse: 3, deer: 1, dog: 2, bird: 1 }
 
 /** A wing beat with a power stroke: a quick downstroke (42% of the cycle), a slower recovery. -1..1. */
 export function strokeWave(s: number): number {
@@ -384,8 +384,8 @@ export function rig(kind: RigKind, d: Drive): Rig {
   const n = TAIL_SEGS[kind]
   for (let i = 0; i < n; i++) {
     const f = (i + 1) / n
-    const swish = kind === 'dragon' ? (0.035 + 0.06 * f) * (0.7 + 0.3 * flying) : kind === 'bird' ? 0.05 : 0.06 + 0.05 * f
-    const rate = kind === 'dragon' ? 1.25 : kind === 'bird' ? 2 : 1.7 + d.step * 2.5
+    const swish = kind === 'dragon' ? (0.035 + 0.06 * f) * (0.7 + 0.3 * flying) : kind === 'bird' ? 0.05 : kind === 'dog' ? 0.45 : 0.06 + 0.05 * f
+    const rate = kind === 'dragon' ? 1.25 : kind === 'bird' ? 2 : kind === 'dog' ? 9 + d.lookW * 5 : 1.7 + d.step * 2.5
     const yaw = swish * Math.sin(t * rate - i * 0.55 + ph) - clamp(d.turn, -1.2, 1.2) * (kind === 'dragon' ? 0.11 : 0.05)
     let pitch: number
     if (kind === 'dragon') {
@@ -395,6 +395,8 @@ export function rig(kind: RigKind, d: Drive): Rig {
       pitch = air * flying + ground * (1 - flying) + 0.06 * dive
     } else if (kind === 'horse') {
       pitch = (i === 0 ? -0.9 + 0.5 * d.step : 0.05) + 0.04 * Math.sin(t * 2.3 + ph + i)
+    } else if (kind === 'dog') {
+      pitch = i === 0 ? -1.0 : 0.25 // the tail up and curling
     } else if (kind === 'deer') {
       pitch = 0.25 + 0.5 * window01(t, 0.7, ph * 2, 0.7) // the flag flicks up
     } else {
@@ -423,7 +425,7 @@ export function rig(kind: RigKind, d: Drive): Rig {
   // ---- neck and head ----
   const gallop = d.motion === 'gallop' ? d.step : 0
   const nod = gallop * 0.09 * Math.sin(d.stride * TAU) + (1 - gallop) * 0.035 * d.step * Math.sin(d.stride * TAU * 2)
-  if (kind === 'horse' || kind === 'deer') {
+  if (kind === 'horse' || kind === 'deer' || kind === 'dog') {
     // Grazing now and then while it stands or ambles; never while it's looking at you.
     const graze = window01(t, 0.09, ph * 5, 0.1) * (1 - clamp(d.speed / 1.6, 0, 1)) * (1 - d.lookW)
     const alert = kind === 'deer' ? d.lookW * 0.25 : 0

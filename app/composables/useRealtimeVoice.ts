@@ -16,6 +16,7 @@
  * stream so echo cancellation is on (speaker bleed would otherwise barge in on the voice itself) and AGC
  * is off (it pumps room noise over the VAD threshold), the two capture lessons from Camera Shy.
  */
+import { isGenieHail } from '#shared/npc/routing'
 import { gateway } from '@ai-sdk/gateway'
 import { Experimental_AbstractRealtimeSession } from 'ai'
 import type { Experimental_RealtimeServerEvent as RealtimeServerEvent, Experimental_RealtimeState as RealtimeState } from 'ai'
@@ -88,6 +89,19 @@ const saidByItem = new Map<string, string>()
 let ackWanted = false
 let acking = false
 let responseHadAudio = false
+/**
+ * People (NPC). The genie hears everything, but a sentence said to a person is theirs. When speech starts
+ * while someone is in focus (mid-conversation, looked at, or right beside you), the genie's automatic
+ * reply is cancelled before it speaks or calls a tool, and the transcript goes through the same routing
+ * rule as typed text (shared/npc/routing.ts): a person answers in their own voice, a world command goes to
+ * the builder and the genie speaks only its result line. Outside focus, a sentence that names a person
+ * ("hey Mara…") or hails someone nearby is taken from the genie the same way.
+ */
+let npcTurn: string | null = null
+let cancelNext = 0
+let ignoreToolsUntil = 0
+/** "Genie…" on its own (a pause before the wish): the next sentence is the genie's even while facing someone. */
+let genieHailUntil = 0
 
 const presence = computed<VoicePresence>(() => {
   if (isPlaying.value) return 'speaking'
@@ -117,6 +131,11 @@ function handleEvent(event: RealtimeServerEvent) {
     case 'speech-started':
       // The deictic moment: "there" is where you were looking when you started talking.
       stashedCtx = useIntent().capture()
+      npcTurn = performance.now() < genieHailUntil ? null : useNpc().focus()
+      if (npcTurn) {
+        cancelNext = performance.now() + 4000
+        useWorld().renderer()?.anticipate(null)
+      }
       userSpeaking.value = true
       heard.value = ''
       armIdle()
@@ -127,10 +146,13 @@ function handleEvent(event: RealtimeServerEvent) {
       break
     case 'input-transcription-completed':
       heard.value = (event.transcript ?? '').trim()
+      routeHeard(heard.value)
       break
     case 'response-created':
       responsePending.value = true
       responseHadAudio = false
+      // Someone in focus: this reply is not the genie's to give (the transcript decides who answers).
+      if (!acking && performance.now() < cancelNext) cancelGenie()
       break
     case 'response-done':
       responsePending.value = false
@@ -149,6 +171,7 @@ function handleEvent(event: RealtimeServerEvent) {
       }
       break
     case 'audio-transcript-delta': {
+      if (performance.now() < ignoreToolsUntil && !acking) break
       responseHadAudio = true
       const text = (saidByItem.get(event.itemId) ?? '') + event.delta
       saidByItem.set(event.itemId, text)
@@ -176,6 +199,8 @@ async function onToolCall({ toolCall }: { toolCall: { toolCallId: string, toolNa
   const vadToToolMs = speechStoppedAt ? Math.round(calledAt - speechStoppedAt) : undefined
   // The acknowledgement must not grant anything itself (it sometimes re-calls the tool with an embellished wish).
   if (acking) return { outcome: 'IGNORED', result: 'duplicate call: the wish is already being granted' }
+  // A person was being spoken to: the client routes this sentence itself (routeHeard).
+  if (performance.now() < ignoreToolsUntil || npcTurn) return { outcome: 'IGNORED', result: 'the user was talking to a person in the world, not to you; stay silent' }
   ackWanted = true
   const result = await (toolCall.toolName === TELEPORT_TOOL.name ? teleport(args, ctx, calledAt, vadToToolMs) : grant(toolCall.toolName, args, ctx, calledAt, vadToToolMs))
   await ackDone()
@@ -245,6 +270,53 @@ async function teleport(args: Record<string, unknown> | null, ctx: OpContext, ca
     return { outcome: 'started', result: `${place} is assembling around the user now; it takes about ten seconds to finish` }
   } finally {
     toolBusy.value--
+  }
+}
+
+function cancelGenie() {
+  console.info('[voice] genie reply cancelled: a person is being spoken to')
+  cancelNext = 0
+  ignoreToolsUntil = performance.now() + 3500
+  try {
+    session?.cancelResponse()
+    session?.stopPlayback()
+  } catch {
+    // nothing in flight
+  }
+  said.value = ''
+}
+
+/** A finished transcript: who was it for? (Only acts when a person is involved; otherwise the genie already has it.) */
+function routeHeard(text: string) {
+  const npc = useNpc()
+  const ctx = stashedCtx ?? useIntent().capture()
+  const wasFocused = npcTurn
+  npcTurn = null
+  if (!text) return
+  if (npc.isEcho(text)) {
+    // The mic heard a person's own voice from the speakers.
+    if (wasFocused) cancelGenie()
+    return
+  }
+  const r = npc.route(text)
+  console.info(`[voice] heard “${text.slice(0, 60)}” ${speechStoppedAt ? Math.round(performance.now() - speechStoppedAt) : '?'} ms after speech end → ${r.to === 'npc' ? `person (${r.why})` : `genie (${r.why})`}`)
+  if (r.to === 'npc') {
+    if (!wasFocused) cancelGenie()
+    void npc.talk(r.id, r.text, ctx)
+    return
+  }
+  if (!wasFocused) return
+  // Facing someone, but the sentence was the genie's ("genie, make it night", "a thunderstorm"): give the
+  // turn back to the realtime genie. It heard the audio itself, so it grants with its own tools (build,
+  // teleport) and its own voice, even when the transcript was cut short ("Genie." for "Genie. Make it night.").
+  ignoreToolsUntil = 0
+  cancelNext = 0
+  if (isGenieHail(text)) genieHailUntil = performance.now() + 8000
+  session?.requestResponse()
+  // "Let me show you something. Make it glow.": once the genie has granted it, the person hears the rest.
+  if (r.rest) {
+    const rest = r.rest
+    setTimeout(() => void npc.talk(rest.id, rest.text, ctx), 3500)
   }
 }
 
@@ -332,6 +404,8 @@ function teardown() {
   stream = null
   micStream.value = null
   stashedCtx = null
+  npcTurn = null
+  cancelNext = 0
   ackWanted = false
   acking = false
   userSpeaking.value = false

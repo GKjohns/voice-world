@@ -6,7 +6,17 @@ import * as THREE from 'three'
 import type { Slot } from '#shared/world/ops'
 
 /** Props a builder may read. Most read nothing (colour is applied afterwards through the slots). */
-export interface BuildProps { floors?: number, text?: string, length?: number, width?: number, color?: string }
+export interface BuildProps {
+  floors?: number
+  text?: string
+  length?: number
+  width?: number
+  color?: string
+  /** People: the role preset to dress for and the entity id that seeds their looks (skin, hair, height). */
+  role?: string
+  seed?: string
+  name?: string
+}
 export type Build = (props: BuildProps) => THREE.Group
 
 export function mat(color: THREE.ColorRepresentation, opts: THREE.MeshStandardMaterialParameters = {}): THREE.MeshStandardMaterial {

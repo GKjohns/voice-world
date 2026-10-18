@@ -571,7 +571,7 @@ export const whale: Build = () => {
 // =====================================================================================================
 
 interface QuadSpec {
-  name: 'horse' | 'deer'
+  name: 'horse' | 'deer' | 'dog'
   torso: Station[]
   sx: number
   sy: number
@@ -616,6 +616,20 @@ const DEER: QuadSpec = {
   belly: [1.6, 1.5, 1.38]
 }
 
+// A dog (NPC companion): "give her a dog". Built on the deer's skeleton at a third of the size, floppy ears, a wagging tail.
+const DOG: QuadSpec = {
+  name: 'dog',
+  torso: [[-0.4, 0.12], [-0.32, 0.2], [-0.08, 0.22], [0.14, 0.23], [0.3, 0.2], [0.4, 0.13]],
+  sx: 0.82, sy: 1.0, back: 0.5, hipY: -0.06, hipX: 0.1, hipZ: [0.27, -0.28],
+  upper: [0.2, 0.065, 0.048], lower: [0.19, 0.042, 0.034],
+  neckAt: [0.1, 0.34],
+  neck: { segs: 1, len: 0.12, r0: 0.11, r1: 0.09, rest: [-0.55] },
+  head: [[-0.06, 0.09], [0.05, 0.105], [0.13, 0.075], [0.22, 0.05], [0.27, 0.035]],
+  headSy: 1.0, headRest: 0.7,
+  tail: { segs: 2, len: 0.17, r0: 0.035, r1: 0.02, at: [0.14, -0.4] },
+  belly: [1.3, 1.25, 1.15]
+}
+
 const quadGeo = new Map<string, ReturnType<typeof makeQuadGeo>>()
 function makeQuadGeo(q: QuadSpec) {
   const torso = share(paint(lathe(q.torso, 8, q.sx, q.sy), hide(q.belly, 0.86, 0.06, 0.4)))
@@ -634,8 +648,8 @@ function makeQuadGeo(q: QuadSpec) {
   const hoof = share(new THREE.CylinderGeometry(q.lower[2] * 1.15, q.lower[2] * 1.35, 0.1, 6).translate(0, -0.05, 0.01))
   // Horse hair flares toward the end (flattened, like a swishing tail); a deer's flag is short and round.
   const tail = share(new THREE.CylinderGeometry(q.tail.r0, q.tail.r1, q.tail.len, 5).scale(q.name === 'horse' ? 0.6 : 1, 1, 1).translate(0, -q.tail.len / 2, 0))
-  const ear = share(new THREE.ConeGeometry(q.name === 'deer' ? 0.06 : 0.045, q.name === 'deer' ? 0.2 : 0.14, 4).scale(1, 1, 0.5))
-  const eye = share(new THREE.SphereGeometry(q.name === 'deer' ? 0.028 : 0.03, 6, 4))
+  const ear = share(new THREE.ConeGeometry(q.name === 'deer' ? 0.06 : q.name === 'dog' ? 0.045 : 0.045, q.name === 'deer' ? 0.2 : q.name === 'dog' ? 0.11 : 0.14, 4).scale(1, 1, 0.5))
+  const eye = share(new THREE.SphereGeometry(q.name === 'deer' ? 0.028 : q.name === 'dog' ? 0.018 : 0.03, 6, 4))
   const mane = share(new THREE.BoxGeometry(0.05, 0.14, 0.12))
   const antler = q.name === 'deer'
     ? share(merge([
@@ -673,9 +687,11 @@ function quadruped(q: QuadSpec, coat: string, trim: string): THREE.Group {
   const head = pivot(0, 0, q.neck.len + 0.02, mesh(G.head, coatM, 'primary'))
   head.rotation.x = q.headRest
   for (const s of [1, -1]) {
-    const ear = mesh(G.ear, coatM, 'primary', 0.08 * s * (q.name === 'deer' ? 1.3 : 1), 0.14, -0.04)
-    ear.rotation.set(-0.5, 0, -0.35 * s * (q.name === 'deer' ? 2.4 : 1))
-    const eye = mesh(G.eye, dark, null, 0.14 * s * (q.name === 'deer' ? 0.68 : 1), 0.06, 0.08)
+    const dog = q.name === 'dog'
+    const ear = mesh(G.ear, dog ? trimM : coatM, dog ? 'trim' : 'primary', dog ? 0.06 * s : 0.08 * s * (q.name === 'deer' ? 1.3 : 1), dog ? 0.06 : 0.14, dog ? -0.03 : -0.04)
+    // A dog's ears flop down beside its head.
+    ear.rotation.set(dog ? 0.3 : -0.5, 0, dog ? 2.5 * s : -0.35 * s * (q.name === 'deer' ? 2.4 : 1))
+    const eye = mesh(G.eye, dark, null, dog ? 0.048 * s : 0.14 * s * (q.name === 'deer' ? 0.68 : 1), dog ? 0.04 : 0.06, dog ? 0.07 : 0.08)
     head.add(ear, eye)
     if (G.antler) {
       const a = mesh(G.antler, trimM, 'trim', 0.05 * s, 0.13, -0.02)
@@ -709,7 +725,8 @@ function quadruped(q: QuadSpec, coat: string, trim: string): THREE.Group {
   })
 
   const root = group(body)
-  return rigged(root, q.name, { pace: q.name === 'deer' ? 1.1 : 1 }, (r) => {
+  if (q.name === 'dog') head.add(mesh(G.eye, dark, null, 0, 0.0, 0.25))
+  return rigged(root, q.name, { pace: q.name === 'deer' ? 1.1 : q.name === 'dog' ? 0.8 : 1 }, (r) => {
     body.position.y = q.back + r.bob
     body.rotation.set(r.pitch, 0, r.roll)
     neck.forEach((s, i) => {
@@ -728,6 +745,7 @@ function quadruped(q: QuadSpec, coat: string, trim: string): THREE.Group {
 
 export const horse: Build = () => quadruped(HORSE, '#7a4a2a', '#24180f')
 export const deer: Build = () => quadruped(DEER, '#a8703f', '#d9c7a4')
+export const dog: Build = () => quadruped(DOG, '#b07a45', '#3a2618')
 
 // =====================================================================================================
 // Bird (Loop 3 rebuild of the Loop 2 gull): faceted body, inner and outer wing pivots, a tail fan.

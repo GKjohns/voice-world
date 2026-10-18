@@ -1,0 +1,117 @@
+{
+  "timings": {
+    "spawnFisherman": 2124
+  },
+  "npc": [
+    {
+      "id": "person#19",
+      "name": "Yara",
+      "mode": "greet",
+      "voice": "eve",
+      "firstTextMs": 692,
+      "firstAudioMs": 907,
+      "doneMs": 1174,
+      "say": "Oh! Hello, friend. You startled me, I was lost in the pines. Did you see the villagers appear over by the houses just now? I'm still not sure what to make of that.",
+      "actions": [
+        {
+          "act": "look_at",
+          "target": "house"
+        }
+      ]
+    },
+    {
+      "id": "person#19",
+      "name": "Yara",
+      "mode": "talk",
+      "utterance": "What can you tell me about this lake?",
+      "voice": "eve",
+      "firstTextMs": 745,
+      "doneMs": 1380,
+      "say": "The lake? It's kind to us, mostly. Deep past the boat, though, and it's cold enough to steal your breath. My father drowned out near the far shore, so I stay where I can see the dock. Are you thinking of rowing out?",
+      "actions": [
+        {
+          "act": "look_at",
+          "target": "water"
+        }
+      ],
+      "firstAudioMs": 1597
+    },
+    {
+      "id": "person#19",
+      "name": "Yara",
+      "mode": "talk",
+      "utterance": "Did that storm scare you?",
+      "voice": "eve",
+      "firstTextMs": 653,
+      "doneMs": 1361,
+      "say": "Scared? Honestly, a bit. The sky went black so fast, and the lake started slapping the dock like it was angry. I kept whispering sorry to it, friend, though I'm not sure it was listening. Were you out in it?",
+      "actions": [
+        {
+          "act": "look_at",
+          "target": "sky"
+        }
+      ],
+      "firstAudioMs": 1868
+    },
+    {
+      "id": "person#19",
+      "name": "Yara",
+      "mode": "talk",
+      "utterance": "Come with me, I want to show you something.",
+      "voice": "eve",
+      "firstTextMs": 945,
+      "doneMs": 1201,
+      "say": "Show me something? Right now, in this storm? The lake's still slapping the dock, friend. Alright, alright, I'll come. Lead the way.",
+      "actions": [
+        {
+          "act": "follow"
+        }
+      ],
+      "firstAudioMs": 1503
+    },
+    {
+      "id": "person#19",
+      "name": "Yara",
+      "mode": "talk",
+      "utterance": "Thanks. You can go back to fishing now.",
+      "voice": "eve",
+      "firstTextMs": 1572,
+      "doneMs": 2009,
+      "say": "Oh. Right, of course, friend. Back to the nets, then. Mind the storm, though, it's still slapping the dock out there.",
+      "actions": [
+        {
+          "act": "stay"
+        }
+      ]
+    },
+    {
+      "id": "person#19",
+      "name": "Yara",
+      "mode": "greet",
+      "voice": "eve",
+      "firstTextMs": 871,
+      "doneMs": 1409,
+      "say": "Oh, it's you again, friend. Still soaked from that storm, aren't I? Ines and Ada are over by the fire, and Mara can't stop staring at the sky.",
+      "actions": [
+        {
+          "act": "look_at",
+          "target": "sky"
+        }
+      ],
+      "firstAudioMs": 1841
+    }
+  ],
+  "log": [
+    "[npc] Yara: fisherman, 27 · Anxious and sweet, forever apologizing to the water and then thanking it for the catch. · day: dawn dock, morning water, midday campfire, afternoon bench, evening house, night home",
+    "[npc] Ines: net mender and boat repairer, 44 · Gruff and blunt on the surface, quietly generous underneath; hates fuss but never leaves a neighbor short of firewood. · day: dawn dock, morning dock, midday bench, afternoon house, evening campfire, night home",
+    "[npc] Ada: rope-maker, 26 · Suspicious and dry, keeps her distance until someone earns a second look. · day: dawn home, morning bench, midday water, afternoon campfire, evening dock, night home",
+    "[npc] Mara: Traveling actress and self-styled town crier, 54 · Grand, dramatic, and forever performing for an audience that is mostly the pine trees. · day: dawn dock, morning home, midday bench, afternoon wander, evening campfire, night home",
+    "[npc] Yara greet → first text 692 ms · done 1174 ms · “Oh! Hello, friend. You startled me, I was lost in the pines. Did you see the vil” · do look_at",
+    "[npc] Yara talk “What can you tell me about this lake?” → first text 745 ms · done 1380 ms · “The lake? It's kind to us, mostly. Deep past the boat, though, and it's cold eno” · do look_at",
+    "[npc] Yara talk “Did that storm scare you?” → first text 653 ms · done 1361 ms · “Scared? Honestly, a bit. The sky went black so fast, and the lake started slappi” · do look_at",
+    "[npc] Yara talk “Come with me, I want to show you something.” → first text 945 ms · done 1201 ms · “Show me something? Right now, in this storm? The lake's still slapping the dock,” · do follow",
+    "[npc] Yara talk “Thanks. You can go back to fishing now.” → first text 1572 ms · done 2009 ms · “Oh. Right, of course, friend. Back to the nets, then. Mind the storm, though, it” · do stay",
+    "[npc] conversation with Yara ended (you walked away)",
+    "[npc] Yara greet → first text 871 ms · done 1409 ms · “Oh, it's you again, friend. Still soaked from that storm, aren't I? Ines and Ada” · do look_at"
+  ]
+}

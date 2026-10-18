@@ -96,6 +96,14 @@ function takeSnapshot(): OpContext {
   return ctx
 }
 
+/** The scene for the builder, with people where they really are now (they walk; their entity spot is where they were born). */
+function liveScene() {
+  const scene = trimScene(useWorld().state.value)
+  const npc = useNpc()
+  scene.entities = scene.entities.map(e => (e.kind === 'person' ? { ...e, pos: npc.posOf(e.id) ?? e.pos } : e))
+  return scene
+}
+
 function summarize(spawned: string[], modified: number, removed: number, other: string[]): string {
   const kinds = new Map<string, number>()
   for (const id of spawned) {
@@ -243,7 +251,7 @@ async function build(request: string, ctx: OpContext, source: 'text' | 'voice' =
     const res = await fetch(`/api/intent${model.value === 'haiku' ? '' : `?model=${model.value}`}`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ text, state: trimScene(world.state.value), ctx })
+      body: JSON.stringify({ text, state: liveScene(), ctx })
     })
     if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}${res.statusText ? ` ${res.statusText}` : ''}`)
     await readNdjson<IntentEvent>(res, (ev) => {
@@ -336,7 +344,7 @@ function startMic() {
         interim.value = ''
         const ctx = speechCtx ?? capture()
         speechCtx = null
-        void build(said, ctx, 'voice')
+        void useNpc().say(said, ctx, 'voice')
       } else {
         // Chrome fires onspeechstart once per session; a new utterance's first partial re-arms the snapshot.
         if (!speechCtx) speechCtx = capture()

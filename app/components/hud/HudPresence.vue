@@ -14,6 +14,7 @@ const world = useWorld()
 const intent = useIntent()
 const voice = useRealtimeVoice()
 const hud = useHud()
+const npc = useNpc()
 
 const text = ref('')
 const inputOpen = ref(false)
@@ -96,6 +97,7 @@ watch(world.caption, (c) => {
   if (c && !hud.voiceOn.value) showGenie(c.text)
 })
 watch(voice.heard, t => showUser(t))
+watch(npc.playerLine, l => l && showUser(l.text))
 watch(voice.said, t => showGenie(t, 'genie', 5200))
 watch(intent.error, e => e && showGenie(e, 'error', 6000))
 
@@ -125,7 +127,8 @@ async function send() {
   const ctx = intent.takeSnapshot()
   text.value = ''
   closeInput()
-  await intent.build(request, ctx, 'text')
+  // A person you're facing gets the sentence; world commands still go to the genie (shared/npc/routing.ts).
+  await npc.say(request, ctx, 'text')
 }
 
 function onInputKey(e: KeyboardEvent) {

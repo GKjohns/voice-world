@@ -12,6 +12,7 @@ import { parseOps } from './ops.ts'
 import type { DroppedOp, Op, Placement, Props, Selector, SkyEvent, Vec3 } from './ops.ts'
 import { entityHeight, entityRadius, kindOf, select } from './select.ts'
 import type { Batch, Effects, Entity, OpContext, WorldState } from './types.ts'
+import { genderOfWords, personName, personTags, personWord } from '../npc/people.ts'
 
 export const WORLD_VERSION = 1
 
@@ -56,7 +57,8 @@ export function applyOp(state: WorldState, op: Op, ctx: OpContext): { state: Wor
   return { state: res.state, effects }
 }
 
-function step(state: WorldState, op: Op, ctx: OpContext): StepResult {
+function step(state: WorldState, op0: Op, ctx: OpContext): StepResult {
+  const op = asPerson(op0)
   const group = `g${state.nextGroup}`
   const rand = rng(hashSeed(ctx.seed, group, state.nextId, op.op))
 
@@ -86,6 +88,7 @@ function step(state: WorldState, op: Op, ctx: OpContext): StepResult {
         if (p.hue) e.hue = p.hue
         return e
       }), ctx)
+      if (op.kind === 'person') namePeople(state, spawned, op.set?.name, ctx.seed)
       return { state: { ...state, entities: [...state.entities, ...spawned], nextId, lastGroup: group }, notes, facts: skyFacts(spawned, op.set) }
     }
 
@@ -123,6 +126,11 @@ function step(state: WorldState, op: Op, ctx: OpContext): StepResult {
         if (props.motion === 'none') delete props.motion
         const next: Entity = { ...e, props, pos }
         if (!props.motion) delete next.path
+        if (e.kind === 'person') {
+          // Every act is a fresh cue ("wave again" replays even when act was already wave); a new name or role re-tags.
+          if (op.set.act) props.actId = ctx.seed
+          if (op.set.name || op.set.role) next.tags = personTags(kindOf(state, 'person').tags, props.role, props.name)
+        }
         return next
       })
       // A new motion (or a new circle) resolves its path for the whole set at once, so a herd shares one loop.
@@ -210,6 +218,12 @@ function conjure(state: WorldState, sel: Selector, set?: Props, at?: Placement):
   if (sel.ref) return undefined
   const word = (sel.kind ?? sel.tag ?? '').toLowerCase().trim()
   if (!word) return undefined
+  // "Make the fisherman wave" with nobody here: a fisherman walks into being, already waving.
+  const pw = personWord(word)
+  if (pw && !state.entities.some(e => e.kind === 'person' && (!pw.role || e.tags.includes(pw.role)))) {
+    const many = /s$|crowd|people|folk|children|men$/.test(word)
+    return { op: 'spawn', kind: 'person', count: many ? 4 : 1, ...(many ? { arrange: 'cluster' as const, radius: 5 } : {}), at: at ?? { anchor: 'gaze' }, facing: 'player', set: { ...set, ...(pw.role ? { role: pw.role } : {}) } } as Extract<Op, { op: 'spawn' }>
+  }
   const kind = [word, word.replace(/ies$/, 'y'), word.replace(/es$/, ''), word.replace(/s$/, '')].find(w => state.kinds[w] && !state.kinds[w]!.tags.includes('placeholder'))
   if (!kind) return undefined
   // Only when the world truly has none: a "lamp" selector over hanging lamps, or "those houses" with the
@@ -232,6 +246,30 @@ function conjure(state: WorldState, sel: Selector, set?: Props, at?: Placement):
     facing: 'player',
     ...(Object.keys(props).length ? { set: props } : {})
   } as Extract<Op, { op: 'spawn' }>
+}
+
+/** "a fisherman", "some villagers", "a crowd" → the person kind with that role (and the name, if a person's word was a name). */
+function asPerson(op: Op): Op {
+  if (op.op !== 'spawn' || op.kind === 'person') return op
+  const pw = personWord(op.kind)
+  if (!pw) return op
+  const set: Props = { ...op.set }
+  if (pw.role && !set.role) set.role = pw.role
+  const g = genderOfWords(op.kind)
+  if (g && !set.gender) set.gender = g
+  return { ...op, kind: 'person', set }
+}
+
+/** Names at birth (seeded, unique in the world); the role and name become tags; an act at birth is a cue. */
+function namePeople(state: WorldState, spawned: Entity[], asked: string | undefined, seed: number): void {
+  const taken = new Set(state.entities.filter(e => e.kind === 'person' && e.props.name).map(e => e.props.name!.toLowerCase()))
+  spawned.forEach((e, i) => {
+    const name = i === 0 && asked && !taken.has(asked.toLowerCase()) ? asked : personName(e.id, seed, taken, e.props.gender)
+    taken.add(name.toLowerCase())
+    e.props = { ...e.props, name }
+    if (e.props.act) e.props.actId = seed
+    e.tags = personTags(e.tags, e.props.role, name)
+  })
 }
 
 /** A modify's props as a newborn's: absolute values carry over; relative ones only as a scale. */
@@ -356,7 +394,21 @@ export interface BatchResult {
  */
 export function applyBatch(state: WorldState, raw: unknown, ctx: OpContext, label?: string, at = Date.now()): BatchResult {
   const { ops, dropped } = parseOps(raw)
-  return commitOps(state, keepTime(ops, label), dropped, ctx, label, at)
+  return commitOps(state, genderFromLabel(keepTime(ops, label), label), dropped, ctx, label, at)
+}
+
+/**
+ * "two guys playing pool", "an old woman on the bench": the sentence's gender goes onto its person spawns
+ * (unless the op already says), so they're named, dressed and voiced to match. Stored in the logged ops,
+ * so replay agrees. Only when the sentence says one gender.
+ */
+function genderFromLabel(ops: Op[], label: string | undefined): Op[] {
+  const g = label ? genderOfWords(label) : undefined
+  if (!g) return ops
+  return ops.map((o) => {
+    if (o.op !== 'spawn' || o.set?.gender || (o.kind !== 'person' && !personWord(o.kind))) return o
+    return { ...o, set: { ...o.set, gender: g } }
+  })
 }
 
 function commitOps(state: WorldState, ops: Op[], dropped: DroppedOp[], ctx: OpContext, label: string | undefined, at: number): BatchResult {

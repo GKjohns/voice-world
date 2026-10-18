@@ -151,6 +151,12 @@ export function buildContext(state: WorldState & { lastLabel?: string }, ctx: Op
     lines.push('world: empty')
   }
 
+  const people = state.entities.filter(e => e.kind === 'person').sort((a, b) => distXZ(a.pos, pp) - distXZ(b.pos, pp))
+  if (people.length) {
+    const shown = people.slice(0, 10).map(e => `${e.props.name ?? e.id} (${e.props.role ?? 'villager'}${e.props.act && e.props.act !== 'none' ? `, ${e.props.act}` : ''}) ${round1(distXZ(e.pos, pp))} m ${relativeDir(ctx, e.pos)}`)
+    lines.push(`people (select one by name: { kind: "<name lowercase>" }; all of them: { tag: "person" }): ${shown.join(' · ')}${people.length > 10 ? ` · and ${people.length - 10} more` : ''}`)
+  }
+
   const learned = Object.values(state.kinds).filter(k => k.learned)
   if (learned.length) lines.push(`learned kinds (reuse by name, no define needed): ${learned.map(k => `${k.kind} [${k.tags.filter(t => t !== k.kind).join(', ')}]`).join(' · ')}`)
   const placeholders = [...new Set(state.entities.filter(e => !state.kinds[e.kind]).map(e => e.kind))]
