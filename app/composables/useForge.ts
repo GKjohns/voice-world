@@ -16,6 +16,7 @@ import { HERO_WORDS, UPGRADE_WORDS, chooseTier, islands } from '#shared/world/fo
 import type { Tier } from '#shared/world/forge'
 import type { Op, Part } from '#shared/world/ops'
 import { isKitKind } from '#shared/world/kinds'
+import { readNdjson } from '~/utils/ndjson'
 
 export interface ForgeRecord {
   kind: string
@@ -112,30 +113,6 @@ function consider(text: string, ops: Op[], marks: { t0: number, proxyMs?: number
   if (tier) void start(target.kind, wishOf(target.kind), tier, marks)
 }
 
-async function readNdjson(res: Response, onLine: (ev: Record<string, unknown>) => void) {
-  const reader = res.body!.getReader()
-  const dec = new TextDecoder()
-  let buf = ''
-  while (true) {
-    const { value, done } = await reader.read()
-    if (done) break
-    buf += dec.decode(value, { stream: true })
-    let nl = buf.indexOf('\n')
-    while (nl >= 0) {
-      const line = buf.slice(0, nl)
-      buf = buf.slice(nl + 1)
-      if (line.trim()) {
-        try {
-          onLine(JSON.parse(line))
-        } catch {
-          // a torn line
-        }
-      }
-      nl = buf.indexOf('\n')
-    }
-  }
-}
-
 async function start(kind: string, text: string, tier: Tier, marks: { t0: number, proxyMs?: number }, draftAt?: number) {
   const world = useWorld()
   const existing = jobs.get(kind)
@@ -195,7 +172,7 @@ async function start(kind: string, text: string, tier: Tier, marks: { t0: number
       signal: job.ctrl.signal
     })
     if (!res.ok || !res.body) throw new Error(`forge HTTP ${res.status}`)
-    await readNdjson(res, (ev) => {
+    await readNdjson<Record<string, unknown>>(res, (ev) => {
       if (ev.t === 'parts') {
         rec.firstPartMs ??= since()
         world.renderer()?.refineParts(kind, ev.parts as Part[])

@@ -10,6 +10,7 @@ import { honestSay } from '#shared/world/honesty'
 import type { DroppedOp, Op } from '#shared/world/ops'
 import type { BatchResult } from '#shared/world/state'
 import type { OpContext } from '#shared/world/types'
+import { readNdjson } from '~/utils/ndjson'
 
 export type IntentPhase = 'idle' | 'listening' | 'thinking' | 'building'
 
@@ -116,33 +117,6 @@ function summarize(spawned: string[], modified: number, removed: number, other: 
   if (removed) bits.push(`removed ${removed}`)
   bits.push(...other)
   return bits.join(' · ') || 'nothing changed'
-}
-
-/** Read an NDJSON response line by line. Throws on a network failure mid-stream. */
-async function readNdjson<T>(res: Response, onLine: (ev: T) => void) {
-  const reader = res.body!.getReader()
-  const dec = new TextDecoder()
-  let buf = ''
-  const flush = (line: string) => {
-    if (!line.trim()) return
-    try {
-      onLine(JSON.parse(line) as T)
-    } catch (err) {
-      console.warn('[intent] bad line', line.slice(0, 120), err)
-    }
-  }
-  while (true) {
-    const { value, done } = await reader.read()
-    if (done) break
-    buf += dec.decode(value, { stream: true })
-    let nl = buf.indexOf('\n')
-    while (nl >= 0) {
-      flush(buf.slice(0, nl))
-      buf = buf.slice(nl + 1)
-      nl = buf.indexOf('\n')
-    }
-  }
-  flush(buf)
 }
 
 /**
@@ -269,7 +243,7 @@ async function build(request: string, ctx: OpContext, source: 'text' | 'voice' =
       if (ev.t === 'op') apply(ev.op)
       else if (ev.t === 'drop') dropped.push(ev.dropped)
       else end = ev
-    })
+    }, 'intent')
   } catch (err) {
     netError = (err as Error).message
   }

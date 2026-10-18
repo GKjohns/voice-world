@@ -14,6 +14,7 @@ import { shallowRef } from 'vue'
 import { directorToOp } from '#shared/world/ops'
 import type { BatchResult } from '#shared/world/state'
 import type { Batch, Effects } from '#shared/world/types'
+import { readNdjson } from '~/utils/ndjson'
 import { useWorld } from './useWorld'
 import { useForge } from './useForge'
 
@@ -126,9 +127,6 @@ async function start(tp: NonNullable<Effects['teleport']>, batch: Batch) {
     return
   }
 
-  const reader = res.body.getReader()
-  const dec = new TextDecoder()
-  let buf = ''
   // Gauntlet loop 1: the place's signature thing (the define marked hero, else the first define) is forged
   // into a high-quality version once the build is done: one refine per teleport, under the forge's spend caps.
   let hero: string | null = null
@@ -167,24 +165,7 @@ async function start(tp: NonNullable<Effects['teleport']>, batch: Batch) {
     }
   }
   try {
-    while (true) {
-      const { value, done } = await reader.read()
-      if (done) break
-      buf += dec.decode(value, { stream: true })
-      let nl = buf.indexOf('\n')
-      while (nl >= 0) {
-        const line = buf.slice(0, nl).trim()
-        buf = buf.slice(nl + 1)
-        if (line) {
-          try {
-            handle(JSON.parse(line) as DirectorEvent)
-          } catch (err) {
-            console.warn('[director] bad line', line.slice(0, 120), err)
-          }
-        }
-        nl = buf.indexOf('\n')
-      }
-    }
+    await readNdjson<DirectorEvent>(res, handle, 'director')
   } catch (err) {
     if (!mine.signal.aborted) fail((err as Error).message)
     return
