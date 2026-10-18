@@ -6,7 +6,8 @@
  * The model's program runs on the server (forgeRun.ts); only part data is sent. Closing the request aborts.
  */
 import { forgeRefine } from '../../utils/forge'
-import { bodyKind, bodyParts, bodySession, bodyStr, ensureKey } from '../../utils/forgeHttp'
+import { bodyKind, bodyParts, bodySession, bodyStr } from '../../utils/forgeHttp'
+import { ensureKey } from '../../utils/gatewayKey'
 
 export default defineEventHandler(async (event) => {
   const body = await readBody<Record<string, unknown>>(event)

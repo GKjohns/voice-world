@@ -1,11 +1,11 @@
 /**
  * The world language: the single seam between the models, the engine and the renderer.
  *
- * Models emit one flat op shape (`op` is an enum, everything else optional). Structured output validates
- * the wrapper loosely (`OpsEnvelope`) so a provider never rejects a whole sentence over one field; then
+ * Models emit one flat op shape (`op` is an enum, everything else optional) as plain JSON text, and
  * `parseOps` checks each op strictly on its own and drops the bad ones. One bad op never loses the batch.
  */
 import { z } from 'zod'
+import { balancedJson } from '../json.ts'
 
 export type Vec3 = [number, number, number]
 
@@ -177,42 +177,6 @@ export interface Part {
   outline?: [number, number][]
   depth?: number
 }
-
-// ---------- the loose envelope (what structured output validates) ----------
-
-export const LooseOpSchema = z.object({
-  op: z.enum(OP_NAMES),
-  kind: z.string().optional(),
-  count: z.number().optional(),
-  arrange: z.enum(ARRANGEMENTS).optional(),
-  at: PlacementSchema.optional(),
-  radius: z.number().optional(),
-  vary: z.number().optional(),
-  facing: z.enum(FACINGS).optional(),
-  tags: z.array(z.string()).optional(),
-  parts: z.array(PartSchema).optional(),
-  target: SelectorSchema.optional(),
-  set: PropsSchema.optional(),
-  relative: z.boolean().optional(),
-  time: z.enum(TIMES).optional(),
-  fog: z.number().optional(),
-  weather: z.enum(WEATHERS).optional(),
-  event: z.enum(SKY_EVENTS).optional(),
-  playerScale: z.number().optional(),
-  gravity: z.boolean().optional(),
-  fly: z.boolean().optional(),
-  sky: z.string().optional(),
-  horizon: z.string().optional(),
-  moons: z.number().optional(),
-  intensity: z.number().optional(),
-  side: z.string().optional(),
-  world: z.string().optional(),
-  brief: z.string().optional(),
-  text: z.string().optional()
-})
-export type LooseOp = z.infer<typeof LooseOpSchema>
-
-export const OpsEnvelope = z.object({ ops: z.array(LooseOpSchema) })
 
 /**
  * The Director's loose op (Sprint 4): one flat object for spawn / atmosphere / say, placed by room
@@ -451,32 +415,14 @@ export function parseOps(raw: unknown): { ops: Op[], dropped: DroppedOp[] } {
  * closing brace after the array (`"[{...}]}"`), so a plain JSON.parse isn't enough.
  */
 function leadingJsonArray(text: string): unknown[] | null {
-  const start = text.indexOf('[')
-  if (start < 0) return null
-  let depth = 0
-  let inString = false
-  for (let i = start; i < text.length; i++) {
-    const ch = text[i]
-    if (inString) {
-      if (ch === '\\') i++
-      else if (ch === '"') inString = false
-      continue
-    }
-    if (ch === '"') inString = true
-    else if (ch === '[' || ch === '{') depth++
-    else if (ch === ']' || ch === '}') {
-      depth--
-      if (depth === 0) {
-        try {
-          const v = JSON.parse(text.slice(start, i + 1))
-          return Array.isArray(v) ? v : null
-        } catch {
-          return null
-        }
-      }
-    }
+  const body = balancedJson(text, text.indexOf('['))
+  if (!body) return null
+  try {
+    const v = JSON.parse(body)
+    return Array.isArray(v) ? v : null
+  } catch {
+    return null
   }
-  return null
 }
 
 const ACT_ALIASES: Record<string, Act> = {

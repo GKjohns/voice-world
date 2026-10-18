@@ -8,6 +8,7 @@
  */
 import type { Player } from '#shared/world/types'
 import { directScene } from '../utils/director'
+import { ensureKey } from '../utils/gatewayKey'
 
 interface Body {
   world?: string
@@ -19,9 +20,7 @@ export default defineEventHandler(async (event) => {
   const body = await readBody<Body>(event)
   const world = typeof body?.world === 'string' ? body.world.trim() : ''
   if (!world) throw createError({ statusCode: 400, statusMessage: 'world is required' })
-  const config = useRuntimeConfig(event)
-  if (!process.env.AI_GATEWAY_API_KEY && config.aiGatewayApiKey) process.env.AI_GATEWAY_API_KEY = config.aiGatewayApiKey
-  if (!process.env.AI_GATEWAY_API_KEY) throw createError({ statusCode: 500, statusMessage: 'AI_GATEWAY_API_KEY is not set' })
+  ensureKey(event)
   const model = getQuery(event).model
   const brief = typeof body.brief === 'string' ? body.brief : undefined
 

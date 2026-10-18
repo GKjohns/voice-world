@@ -10,6 +10,7 @@
 import type { Scene } from '#shared/world/context'
 import type { OpContext } from '#shared/world/types'
 import { streamIntent } from '../utils/intent'
+import { ensureKey } from '../utils/gatewayKey'
 
 interface Body {
   text?: string
@@ -21,9 +22,7 @@ export default defineEventHandler(async (event) => {
   const body = await readBody<Body>(event)
   const text = typeof body?.text === 'string' ? body.text.trim() : ''
   if (!text) throw createError({ statusCode: 400, statusMessage: 'text is required' })
-  const config = useRuntimeConfig(event)
-  if (!process.env.AI_GATEWAY_API_KEY && config.aiGatewayApiKey) process.env.AI_GATEWAY_API_KEY = config.aiGatewayApiKey
-  if (!process.env.AI_GATEWAY_API_KEY) throw createError({ statusCode: 500, statusMessage: 'AI_GATEWAY_API_KEY is not set' })
+  ensureKey(event)
 
   const c = body.ctx ?? {}
   const ctx: OpContext = {

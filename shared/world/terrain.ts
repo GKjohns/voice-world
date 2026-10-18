@@ -130,10 +130,6 @@ export function surfaceHeight(surface: Surface, x: number, z: number, R: number,
   }
 }
 
-export function surfaceOf(desc: KindDescriptor): Surface | undefined {
-  return desc.surface
-}
-
 /** World height of one terrain entity's surface at (x, z), or 0 if (x, z) is off it. */
 export function entitySurfaceAt(desc: KindDescriptor, e: Entity, x: number, z: number): number {
   if (!desc.surface) return 0

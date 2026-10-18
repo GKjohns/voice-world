@@ -6,7 +6,7 @@
  */
 import type { TalkRequest } from '../../utils/npc'
 import { streamTalk } from '../../utils/npc'
-import { ensureKey } from '../../utils/npcKey'
+import { ensureKey } from '../../utils/gatewayKey'
 
 export default defineEventHandler(async (event) => {
   ensureKey(event)

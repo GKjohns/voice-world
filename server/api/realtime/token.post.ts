@@ -9,11 +9,10 @@
 import { gateway } from '@ai-sdk/gateway'
 import { VOICE_MODELS } from '../../utils/aiModels'
 import { realtimeTools } from '../../utils/realtimeTools'
+import { ensureKey } from '../../utils/gatewayKey'
 
 export default defineEventHandler(async (event) => {
-  const config = useRuntimeConfig(event)
-  if (!process.env.AI_GATEWAY_API_KEY && config.aiGatewayApiKey) process.env.AI_GATEWAY_API_KEY = config.aiGatewayApiKey
-  if (!process.env.AI_GATEWAY_API_KEY) throw createError({ statusCode: 500, statusMessage: 'AI_GATEWAY_API_KEY is not set' })
+  ensureKey(event)
 
   try {
     const [{ token, url, expiresAt }, tools] = await Promise.all([

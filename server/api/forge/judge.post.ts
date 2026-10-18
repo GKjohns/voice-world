@@ -1,6 +1,7 @@
 /** POST /api/forge/judge { text, current, polish (data URLs), session } → { polishWins, why, usd, ms } (both A/B orders must agree). */
 import { forgeJudge } from '../../utils/forge'
-import { bodySession, bodyStr, ensureKey } from '../../utils/forgeHttp'
+import { bodySession, bodyStr } from '../../utils/forgeHttp'
+import { ensureKey } from '../../utils/gatewayKey'
 
 export default defineEventHandler(async (event) => {
   const body = await readBody<Record<string, unknown>>(event)

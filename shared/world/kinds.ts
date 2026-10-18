@@ -174,8 +174,3 @@ export function kindHeight(desc: KindDescriptor, props: Props): number {
   }
   return h * (props.height ?? 1) * (props.scale ?? 1)
 }
-
-/** Catalog lines for the model's instructions: `pine: tree, plant, nature`. */
-export function catalogLines(kinds: Record<string, KindDescriptor>): string[] {
-  return Object.values(kinds).map(k => `${k.kind}: ${k.tags.filter(t => t !== k.kind).join(', ')}${k.learned ? ' (learned)' : ''}`)
-}

@@ -4,6 +4,7 @@
  * if it fails) a seeded fallback built from the role stands in, so a person is alive from the first frame.
  * Pure and three-free: the server route, the client and the tests share it.
  */
+import { balancedJson } from '../json.ts'
 import { personGender, rolePreset } from './people.ts'
 import type { Role } from '../world/ops.ts'
 
@@ -156,33 +157,14 @@ export function fallbackPersona(seed: PersonSeed): Persona {
 
 /** The first balanced JSON object in model text (code fences, prose around it and trailing commas tolerated). */
 export function firstJsonObject(text: string): Record<string, unknown> | null {
-  const start = text.indexOf('{')
-  if (start < 0) return null
-  let depth = 0
-  let inString = false
-  for (let i = start; i < text.length; i++) {
-    const ch = text[i]
-    if (inString) {
-      if (ch === '\\') i++
-      else if (ch === '"') inString = false
-      continue
-    }
-    if (ch === '"') inString = true
-    else if (ch === '{' || ch === '[') depth++
-    else if (ch === '}' || ch === ']') {
-      depth--
-      if (depth === 0) {
-        const body = text.slice(start, i + 1)
-        for (const attempt of [body, body.replace(/,\s*([}\]])/g, '$1')]) {
-          try {
-            const v = JSON.parse(attempt)
-            return v && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, unknown> : null
-          } catch {
-            // try the next repair
-          }
-        }
-        return null
-      }
+  const body = balancedJson(text, text.indexOf('{'))
+  if (!body) return null
+  for (const attempt of [body, body.replace(/,\s*([}\]])/g, '$1')]) {
+    try {
+      const v = JSON.parse(attempt)
+      return v && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, unknown> : null
+    } catch {
+      // try the next repair
     }
   }
   return null

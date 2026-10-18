@@ -5,7 +5,7 @@
  */
 import type { BanterRequest, BanterSpeaker } from '../../utils/npc'
 import { generateBanter } from '../../utils/npc'
-import { ensureKey } from '../../utils/npcKey'
+import { ensureKey } from '../../utils/gatewayKey'
 
 export default defineEventHandler(async (event) => {
   ensureKey(event)

@@ -3,7 +3,7 @@
  * when no voice could be made (the client falls back to the browser's speechSynthesis).
  */
 import { NPC_VOICES, speak } from '../../utils/npc'
-import { ensureKey } from '../../utils/npcKey'
+import { ensureKey } from '../../utils/gatewayKey'
 
 const ALL = new Set<string>([...NPC_VOICES.f, ...NPC_VOICES.m])
 

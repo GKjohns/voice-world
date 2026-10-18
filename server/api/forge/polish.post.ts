@@ -1,6 +1,7 @@
 /** POST /api/forge/polish { kind, text, parts, code?, image?, session } → { ok, parts?, code?, usd, ms, reason? } (hero only, background). */
 import { forgePolish } from '../../utils/forge'
-import { bodyKind, bodyParts, bodySession, bodyStr, ensureKey } from '../../utils/forgeHttp'
+import { bodyKind, bodyParts, bodySession, bodyStr } from '../../utils/forgeHttp'
+import { ensureKey } from '../../utils/gatewayKey'
 
 export default defineEventHandler(async (event) => {
   const body = await readBody<Record<string, unknown>>(event)
