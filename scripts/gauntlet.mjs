@@ -13,6 +13,7 @@
 import { chromium } from 'playwright'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
+import { tmpdir } from 'node:os'
 
 // A step is a sentence, or { say?, keys?: 'w'|'a'|'s'|'d'|'shift+w', ms?, drag?: [dx, dy], look?: [yaw, pitch], wait?, settle?, shot? }.
 export const SCENARIOS = [
@@ -79,7 +80,7 @@ if (args.includes('--list')) {
   for (const s of SCENARIOS) console.log(`${s.id.padEnd(18)} ${s.group.padEnd(9)} ${s.steps.map(x => typeof x === 'string' ? x : x.say ?? JSON.stringify(x)).join(' → ')}`)
   process.exit(0)
 }
-const outDir = resolve(opt('--out', 'internal_docs/20261017_gauntlet/baseline'))
+const outDir = resolve(opt('--out', resolve(tmpdir(), 'conjure-gauntlet')))
 const url = opt('--url', 'http://localhost:3091/')
 const only = opt('--only', '').split(',').map(s => s.trim()).filter(Boolean)
 const maxUsd = Number(opt('--max-usd', 2.5))

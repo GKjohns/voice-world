@@ -92,11 +92,24 @@ The world saves to localStorage, and the console's menu can export and import it
 ```bash
 npm test                    # node --test over the pure kernel, NPC, forge, physics, sky
 npm run typecheck && npm run lint
-npm run shoot               # Playwright screenshots of the canned examples (dev server running)
-node scripts/gauntlet.mjs --list   # scripted "what people try" scenarios against the dev server
-npm run bench:intent        # utterances through haiku and sonnet: pass rate, latency, cost (spends real money)
-node --env-file=.env bench/realtime_check.ts   # live realtime voice check using bench/fixtures/*.wav
 ```
+
+Everything below talks to real models through your key, so it spends real money. The `scripts/` checks
+drive headless Chromium against the running dev server (`npm run dev` first) and write PNGs to `--out`
+(default: the OS temp dir).
+
+| Command | What it checks |
+|---|---|
+| `npm run shoot [scenario]` | Screenshots of the canned example chips (`scripts/shoot.mjs`). |
+| `npm run gauntlet -- --list` | Scripted "what people try" scenarios, with `--only`, `--max-usd` (`scripts/gauntlet.mjs`). |
+| `node scripts/forge-shoot.mjs` | Novel-object wishes through the forge: draft, refine, polish timings, cost and fps. |
+| `node scripts/voice-shoot.mjs` | Realtime voice with a fake mic (a wav), each mic state, and the browser-speech fallback. |
+| `node scripts/npc-shoot.mjs` | People end to end: spawn, talk, world commands mid-conversation, memory after walking away. |
+| `node scripts/npc-calm-shoot.mjs` | Calm mode: nobody speaks first, follow / go-somewhere requests, one line at most for a dragon. |
+| `node scripts/npc-voice-shoot.mjs` | Spoken lines reach the person you face; "Genie, …" reaches the genie. |
+| `npm run bench:intent` | Utterances through Haiku and Sonnet: pass rate, latency, cost. |
+| `npm run bench:director` | A few teleport places through the Director: first op, done, op count, cost. |
+| `npm run bench:realtime` | Realtime voice minus the browser, using `bench/fixtures/*.wav` (needs the dev server for intent). |
 
 The `bench/fixtures/*.wav` files are synthetic speech made with macOS `say`.
 

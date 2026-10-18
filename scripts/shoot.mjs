@@ -1,4 +1,4 @@
-// Headless screenshot loop for the world (adapted from workspace-3d's shoot-workspace.mjs).
+// Headless screenshot loop for the world.
 // Usage: node scripts/shoot.mjs [scenario] [--url http://localhost:3091/] [--w 1440 --h 900] [--out dir]
 // Scenarios drive the HUD's example chips like a person would, then screenshot. PNGs go to --out
 // (default: the OS temp dir) so nothing stray lands in the repo; convert keepers to .webp by hand.

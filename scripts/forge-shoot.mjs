@@ -6,11 +6,12 @@
 // times, $ per object and fps (avg, worst 1 s window, worst gap).
 import { chromium } from 'playwright'
 import { mkdirSync, writeFileSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { tmpdir } from 'node:os'
+import { basename, resolve } from 'node:path'
 
 const args = process.argv.slice(2)
 const opt = (k, d) => (args.includes(k) ? args[args.indexOf(k) + 1] : d)
-const outDir = resolve(opt('--out', 'internal_docs/20261017_progressive_gen/shots'))
+const outDir = resolve(opt('--out', resolve(tmpdir(), 'conjure-forge-shots')))
 const only = opt('--only', '')
 mkdirSync(outDir, { recursive: true })
 const WISHES = [
@@ -110,7 +111,7 @@ for (const [i, wish] of WISHES.entries()) {
     }
   }
   const all = await fps(t0, await page.evaluate(() => performance.now()))
-  const row = { wish, kind: rec.kind, tier: rec.tier, outcome: rec.outcome, proxyMs: rec.proxyMs, draftMs: rec.draftMs, startMs: rec.startMs, firstPartMs: rec.firstPartMs, refinedMs: rec.refinedMs, polishMs: rec.polishMs, usd: +rec.usd.toFixed(4), parts: rec.parts, library: !!rec.library, swapFps, allFps: all, shots: [draftShot, refinedShot, polishShot].filter(Boolean) }
+  const row = { wish, kind: rec.kind, tier: rec.tier, outcome: rec.outcome, proxyMs: rec.proxyMs, draftMs: rec.draftMs, startMs: rec.startMs, firstPartMs: rec.firstPartMs, refinedMs: rec.refinedMs, polishMs: rec.polishMs, usd: +rec.usd.toFixed(4), parts: rec.parts, library: !!rec.library, swapFps, allFps: all, shots: [draftShot, refinedShot, polishShot].filter(Boolean).map(p => basename(p)) }
   results.push(row)
   console.log(' ', JSON.stringify(row))
 }

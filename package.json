@@ -15,7 +15,10 @@
     "typecheck": "nuxt typecheck",
     "test": "node --test tests/*.test.ts",
     "shoot": "node scripts/shoot.mjs",
-    "bench:intent": "node --env-file=.env bench/intent.ts"
+    "gauntlet": "node scripts/gauntlet.mjs",
+    "bench:intent": "node --env-file=.env bench/intent.ts",
+    "bench:director": "node --env-file=.env bench/director.ts",
+    "bench:realtime": "node --env-file=.env bench/realtime_check.ts"
   },
   "devDependencies": {
     "@nuxt/eslint": "^1.17.0",

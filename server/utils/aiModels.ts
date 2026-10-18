@@ -1,5 +1,5 @@
 /**
- * Model aliases (same names as picnic-panic's MODEL_ALIASES) and gateway pricing for cost reports.
+ * Model aliases and gateway pricing for cost reports.
  * Plain module with no Nitro globals, so the bench imports it too.
  */
 import { VOICE_MODEL, VOICE_TRANSCRIBER } from '../../shared/voice.ts'
@@ -13,7 +13,7 @@ export const MODELS = {
 export type ModelAlias = keyof typeof MODELS
 
 /**
- * The realtime voice (Sprint 3): ears and mouth only, one `build` tool. Kept out of MODELS so it can never
+ * The realtime voice (Sprint 3): ears and mouth only, with the `build` and `teleport` tools. Kept out of MODELS so it can never
  * be picked as an op model through `resolveModel` / `?model=`. The ids live in shared/voice.ts because the
  * browser session needs the model id too.
  */
@@ -28,7 +28,7 @@ export function resolveModel(name: string | undefined): { alias: string, id: str
   return { alias: INTENT_MODEL, id: MODELS[INTENT_MODEL] }
 }
 
-/** USD per 1M tokens, from the gateway's /v1/models (base tier), as recorded in picnic-panic 2026-10-11. */
+/** USD per 1M tokens, from the gateway's /v1/models (base tier), as recorded 2026-10-11. */
 const PRICING: Record<string, { input: number, output: number, cacheRead?: number, cacheWrite?: number }> = {
   'anthropic/claude-opus-5.5': { input: 4, output: 20, cacheRead: 0.2, cacheWrite: 5 },
   'anthropic/claude-sonnet-5.5': { input: 2, output: 10, cacheRead: 0.1, cacheWrite: 2.5 },
@@ -38,7 +38,7 @@ const PRICING: Record<string, { input: number, output: number, cacheRead?: numbe
   'google/gemini-3.1-flash-lite-image': { input: 0.1, output: 0.4 }
 }
 
-/** Models the forge uses (conjure-progressive's matrix winners). */
+/** Models the forge uses (the winners of the conjure-progressive prototype's model matrix). */
 export const FORGE_MODELS = {
   refine: 'anthropic/claude-opus-5.5',
   polish: 'openai/gpt-6.1-sol',
