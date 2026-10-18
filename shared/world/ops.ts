@@ -20,7 +20,7 @@ export const SLOTS = ['primary', 'trim', 'glow'] as const
 export const ARRANGEMENTS = ['cluster', 'line', 'ring', 'grid', 'scatter', 'along'] as const
 export const FACINGS = ['player', 'center', 'along', 'random'] as const
 export const TIMES = ['dawn', 'day', 'golden', 'dusk', 'night', 'interior'] as const
-export const OP_NAMES = ['spawn', 'define', 'modify', 'move', 'remove', 'undo', 'atmosphere', 'teleport', 'say'] as const
+export const OP_NAMES = ['spawn', 'define', 'modify', 'move', 'remove', 'undo', 'reset', 'atmosphere', 'teleport', 'say'] as const
 /** Ambient noise beds (synthesized, no files). Director-only: the intent model never sets them. */
 export const AMBIENTS = ['none', 'water', 'wind', 'room', 'city', 'fire'] as const
 /** Loop 2: how a thing moves (rendered per frame by app/world/fx/motion.ts, never stored as positions). */
@@ -315,6 +315,8 @@ const ModifyOp = z.object({
 const MoveOp = z.object({ op: z.literal('move'), target: SelectorSchema, at: PlacementSchema })
 const RemoveOp = z.object({ op: z.literal('remove'), target: SelectorSchema })
 const UndoOp = z.object({ op: z.literal('undo') })
+/** "Start over": back to the starting world (no entities, dusk, clear sky, normal size). Never logged. */
+const ResetOp = z.object({ op: z.literal('reset') })
 
 const AtmosphereOp = z.object({
   op: z.literal('atmosphere'),
@@ -337,6 +339,7 @@ const STRICT = {
   move: MoveOp,
   remove: RemoveOp,
   undo: UndoOp,
+  reset: ResetOp,
   atmosphere: AtmosphereOp,
   teleport: TeleportOp,
   say: SayOp
@@ -348,11 +351,12 @@ export type ModifyOp = z.infer<typeof ModifyOp>
 export type MoveOp = z.infer<typeof MoveOp>
 export type RemoveOp = z.infer<typeof RemoveOp>
 export type UndoOp = z.infer<typeof UndoOp>
+export type ResetOp = z.infer<typeof ResetOp>
 export type AtmosphereOp = z.infer<typeof AtmosphereOp>
 export type TeleportOp = z.infer<typeof TeleportOp>
 export type SayOp = z.infer<typeof SayOp>
 /** A strictly validated op. The engine only ever sees these. */
-export type Op = SpawnOp | DefineOp | ModifyOp | MoveOp | RemoveOp | UndoOp | AtmosphereOp | TeleportOp | SayOp
+export type Op = SpawnOp | DefineOp | ModifyOp | MoveOp | RemoveOp | UndoOp | ResetOp | AtmosphereOp | TeleportOp | SayOp
 
 export interface DroppedOp {
   index: number

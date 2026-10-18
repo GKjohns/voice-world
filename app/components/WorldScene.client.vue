@@ -6,6 +6,7 @@
 import { WorldRenderer } from '~/world/renderer'
 import { EXAMPLES } from '~/world/examples'
 import { useDirector } from '~/composables/useDirector'
+import { VIEW_KEY } from '~/composables/useWorld'
 
 const hostEl = useTemplateRef<HTMLDivElement>('host')
 const world = useWorld()
@@ -14,7 +15,6 @@ let renderer: WorldRenderer | null = null
 
 // The view survives a reload or a hot re-mount like the world does. Without it a re-mount came back at
 // the constructor's default (yaw 0, pitch -0.12) while the restored world kept you tiny on the dock.
-const VIEW_KEY = 'conjure.view'
 function saveView() {
   if (!renderer) return
   const p = renderer.camera.position
@@ -48,6 +48,7 @@ onMounted(async () => {
     run: world.run,
     undo: world.undo,
     clear: world.clear,
+    reset: world.reset,
     example: (id: string) => {
       const ex = EXAMPLES.find(e => e.id === id)
       if (!ex) throw new Error(`no example ${id}`)

@@ -140,6 +140,8 @@ interface Case {
 }
 
 const isTree = (e: Entity) => e.tags.includes('tree')
+/** "Start over": a reset op, and the starting world (nothing left, the starting light and sky). */
+const blank = (o: Outcome) => expect(o.ops.some(op => op.op === 'reset') && o.after.entities.length === 0 && JSON.stringify(o.after.atmosphere) === JSON.stringify(createWorld().atmosphere), `ops ${o.ops.map(op => op.op).join(',')}, ${o.after.entities.length} left, sky ${JSON.stringify(o.after.atmosphere)}`)
 const added = (o: Outcome) => o.after.entities.filter(e => !o.before.entities.some(b => b.id === e.id))
 const learnedAdded = (o: Outcome) => Object.values(o.after.kinds).filter(k => k.learned && !o.before.kinds[k.kind])
 const has = (o: Outcome, name: string) => o.ops.some(op => op.op === name)
@@ -206,7 +208,9 @@ const CASES: Case[] = [
     const l = o.after.entities.filter(e => e.kind === 'lamp')
     return expect(l.length === 6 && l.every(e => (e.props.glow ?? 1) > 1), `glow ${l.map(e => e.props.glow ?? 'default').join(' ')}`)
   } },
-  { name: 'set: clear everything', text: 'clear everything', scene: 'grove', check: o => expect(o.after.entities.length === 0, `${o.after.entities.length} left`) },
+  { name: 'reset: clear everything', text: 'clear everything', scene: 'grove', check: o => blank(o) },
+  { name: 'reset: start over', text: 'start over', scene: 'night', check: o => blank(o) },
+  { name: 'reset: wipe it all, blank slate', text: 'wipe it all, give me a blank slate', scene: 'castle', check: o => blank(o) },
 
   // unknown kinds
   { name: 'define: grandfather clock', text: 'put a grandfather clock here', scene: 'empty', check: o => newThing(o, /clock/) },

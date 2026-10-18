@@ -350,3 +350,40 @@ test('oversized numbers clamp to their bound instead of dropping the op (a Direc
   // Non-numbers still fail.
   assert.equal(parseOps([{ op: 'spawn', kind: 'floor', set: { length: 'huge' } }]).ops.length, 0)
 })
+
+test('reset starts over: no entities, learned kinds, log, weather, time or player scale, and is never logged', () => {
+  let s = createWorld()
+  s = run(s, [{ op: 'spawn', kind: 'pine', count: 5, at: { anchor: 'gaze' } }, { op: 'spawn', kind: 'person', set: { role: 'villager' } }], ctx(), 'trees and a villager').state
+  s = run(s, [{ op: 'define', kind: 'gizmo', tags: ['toy'], parts: [{ shape: 'box', size: [1, 1, 1], at: [0, 0.5, 0], color: '#c0453a' }] }, { op: 'spawn', kind: 'gizmo', at: { anchor: 'gaze' } }]).state
+  s = run(s, [{ op: 'spawn', kind: 'hill', at: { anchor: 'player', dist: 55 } }]).state
+  s = run(s, [{ op: 'atmosphere', time: 'night', weather: 'storm', playerScale: 0.2 }], ctx(), 'a stormy night').state
+  s = { ...s, place: 'pool hall' }
+  const res = run(s, [{ op: 'reset' }, { op: 'say', text: 'A blank slate.' }], ctx(), 'start over')
+  const fresh = createWorld()
+  assert.equal(res.effects.reset, true)
+  assert.equal(res.state.entities.length, 0)
+  assert.equal(res.effects.removed.length, s.entities.length)
+  assert.deepEqual(res.state.atmosphere, fresh.atmosphere)
+  assert.equal(res.state.place, 'void')
+  assert.equal(res.state.log.length, 0)
+  assert.equal(res.state.kinds.gizmo, undefined)
+  assert.deepEqual(res.effects.say, ['A blank slate.'])
+  // An undo on the fresh world has nothing to undo (the client restores the pre-reset world itself).
+  assert.equal(run(res.state, [{ op: 'undo' }]).state.entities.length, 0)
+  // Saved and reloaded, it is still the starting world.
+  assert.deepEqual(importWorld(JSON.parse(JSON.stringify(exportWorld(res.state)))).entities, [])
+})
+
+test('reset then build in one sentence: only what follows the reset stands, logged as the first batch', () => {
+  let s = run(createWorld(), [{ op: 'spawn', kind: 'house', at: { anchor: 'gaze' } }]).state
+  s = run(s, [{ op: 'atmosphere', weather: 'rain' }]).state
+  const res = run(s, [{ op: 'spawn', kind: 'rock' }, { op: 'reset' }, { op: 'spawn', kind: 'pine', count: 3, at: { anchor: 'gaze' } }], ctx(), 'start over with some pines')
+  assert.deepEqual(res.state.entities.map(e => e.kind), ['pine', 'pine', 'pine'])
+  assert.equal(res.state.atmosphere.weather, undefined)
+  assert.equal(res.state.log.length, 1)
+  assert.equal(res.effects.reset, true)
+  // A reset of the starting world claims nothing.
+  const idle = run(createWorld(), [{ op: 'reset' }, { op: 'say', text: 'All is swept away.' }])
+  assert.equal(idle.state.log.length, 0)
+  assert.deepEqual(idle.effects.say, ['Already a blank slate.'])
+})

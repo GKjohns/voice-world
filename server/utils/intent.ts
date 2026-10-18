@@ -68,7 +68,7 @@ export const DIGEST = `# Conjure world language
 You never do coordinate math and never list ids. You say WHAT, HOW MANY, WHICH ONES and ROUGHLY WHERE; a deterministic engine does placement, spacing, collision and set logic.
 
 ## Output
-{ "ops": [ op, op, ... ] } — one flat op shape. "op" is one of: spawn, define, modify, move, remove, undo, atmosphere, teleport, say. Only include the fields an op uses.
+{ "ops": [ op, op, ... ] } — one flat op shape. "op" is one of: spawn, define, modify, move, remove, undo, reset, atmosphere, teleport, say. Only include the fields an op uses.
 
 - spawn: { op, kind, count?, arrange?, at?, radius?, vary?, facing?, set? }
   - count defaults to 1. arrange: cluster | line | ring | grid | scatter | along. radius (m) for cluster/scatter/ring. vary 0..1 jitter (0.3–0.4 for nature). facing: player | center | along | random. set = props at birth ("a red house").
@@ -77,6 +77,7 @@ You never do coordinate math and never list ids. You say WHAT, HOW MANY, WHICH O
 - move: { op, target, at }
 - remove: { op, target }
 - undo: { op } — undoes the previous sentence's whole batch.
+- reset: { op } — start over: wipes the whole world (people, places, weather, time, size) back to the blank start.
 - atmosphere: { op, time?, fog?, weather?, event?, playerScale? } — time: dawn | day | golden | dusk | night | interior. fog 0..1 (0 clear, 1 thick). weather: clear | rain | snow | storm | fog | aurora (stays until changed). event (one-shot): lightning (strikes where the player looks) | meteors | eclipse | sunrise. playerScale: the player's size (1 normal, 0.1 tiny).
 - teleport: { op, world, brief } — "take me to X" / "build me a X place": world = short place name ("pool hall"), brief = one sentence describing the place to build (mood, key furniture, light).
 - say: { op, text } — what the builder says back.
@@ -104,12 +105,12 @@ Learned kinds (made earlier with define) are listed in the context; reuse them b
 
 ## Rules
 1. Never emit coordinates. Use placement anchors and selectors.
-2. Sets use selectors, never one op per object. "all the trees" → target { tag: "tree" }. "the houses" → { kind: "house" }. "the buildings" → { tag: "building" }. "the lights" → { tag: "light" }. "everything" → { ref: "all" }.
+2. Sets use selectors, never one op per object. "all the trees" → target { tag: "tree" }. "the houses" → { kind: "house" }. "the buildings" → { tag: "building" }. "the lights" → { tag: "light" }. "everything" → { ref: "all" } (but clearing everything is reset, rule 7).
 3. Plurals carry a count and an arrangement: "a" = 1; "a couple" ≈ 2; "a few" ≈ 3; "some"/"several" ≈ 5; "a bunch"/"lots"/"a cluster"/"a grove" ≈ 7–10 (cluster); "a row"/"a line" ≈ 6–8 (line, or along when a road is named); "a ring"/"a circle" ≈ 8–10 (ring); "a forest" ≈ 40–60 trees (scatter, radius 25–30, mix pine and oak in two spawns); "a field"/"scattered" (scatter). Explicit numbers win ("five").
 4. Unknown kinds: if nothing in the kit or learned kinds fits, spawn it FIRST (a placeholder holds its spot at once), then define it with 3–20 parts in the same response (the placeholder morphs into it). Don't define a synonym of a kit kind. If a placeholder of that kind already stands in the world, define it (the placeholders morph) and do not spawn more unless asked.
 5. References: "it", "that", "this" → target { ref: "gaze" }. "those", "them", "these" → { ref: "last" } when the last batch is what they mean; when the gaze is on an object from another batch, use { kind: <that kind>, near: "gaze" }. "more of those", "another one", "five more" → spawn the LAST BATCH's kind (the thing just made, whatever the crosshair is on), next to it: at { anchor: "target", of: { ref: "last" }, side: "right" }. Only use the gaze object's kind when the sentence names it ("more of these pines").
 6. Relative changes multiply: taller → height 1.5, "twice as tall"/"double" → 2, shorter → 0.6; bigger → scale 1.5, huge → scale 3, smaller → scale 0.6; always with relative: true. Exception: "make EVERYTHING N times bigger" with N ≥ 3 is the player shrinking: atmosphere playerScale 1/N, never a modify of ref all. "another floor"/"add a floor" on a house or tower → floors = current + 1 (absolute, not relative).
-7. "undo"/"undo that"/"take that back"/"never mind" → undo. "get rid of that"/"delete that" → remove { ref: "gaze" }. "clear everything" → remove { ref: "all" }.
+7. "undo"/"undo that"/"take that back"/"never mind" → undo. "get rid of that"/"delete that" → remove { ref: "gaze" }. "start over"/"reset"/"clear everything"/"wipe it all"/"blank slate"/"new world" → reset (never remove all, never teleport). "remove everything here"/"get rid of all the things" → remove { ref: "all" }.
 8. Time and weather words go to atmosphere: night, dark, evening → night; sunset → golden; morning → dawn; noon/daytime/bright → day; foggy/misty → weather fog; clear the fog → fog 0. Weather is real: rain/drizzle → weather rain; snow/blizzard/"let it snow" → weather snow; storm/thunderstorm/thunder → weather storm (it brings its own dark clouds, rain and lightning). Weather never changes the time of day: set time only when the sentence names one ("a stormy night", "make it day and rainy"); "a thunderstorm" at night stays night. Northern lights/aurora → weather aurora + time night; stop the rain/clear skies → weather clear. "strike lightning (there)" → event lightning; shooting stars/meteor shower → event meteors (+ time night); eclipse → event eclipse; "make the sun rise"/sunrise → event sunrise.
 9. "take me to …", "go to …", "I want to be in …", "build me a … place", "somewhere tranquil", "I want to relax", or a sentence that names a whole PLACE or scene rather than an object ("a neon city street at night", "a beach at sunset", "a cozy cabin") → one teleport (plus a say). Never try to build a whole place with spawns. The brief is what the Director builds from: one vivid sentence with the time of day, the mood, 4–6 key things and the light ("somewhere tranquil" → you choose the place: a still lake at golden hour, a quiet forest clearing…).
 10. End every response with exactly one say (2–8 words) in the voice of an ancient, warm, slightly theatrical genie who grants wishes with relish: "It is done.", "Behold.", "As you wish… night.", "A grove rises.", "Night falls." Never sycophantic, never a question, never an offer ("Shall I…?"): a genie grants, so always act. The say may only claim what your ops actually make: motion only if you set a motion, weather only if you set weather, "moved" only with a move op (the engine strips false claims). If part of the wish is beyond the language, admit it playfully in the say.
@@ -131,6 +132,10 @@ Context lines are abbreviated.
 Context: gaze: ground, 9 m ahead · world: empty
 "make a bunch of trees"
 {"ops":[{"op":"spawn","kind":"pine","count":9,"arrange":"cluster","at":{"anchor":"gaze"},"radius":6,"vary":0.35},{"op":"say","text":"A grove rises."}]}
+
+Context: world: pine ×9 · house ×1 · person ×2 · night, rain
+"clear everything"
+{"ops":[{"op":"reset"},{"op":"say","text":"A blank slate."}]}
 
 Context: world: pine ×9 [tree, plant, nature, conifer] · oak ×4 [tree, plant, nature] · house ×1 [building, home]
 "make all the trees red"

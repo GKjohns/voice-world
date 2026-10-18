@@ -209,6 +209,7 @@ async function build(request: string, ctx: OpContext, source: 'text' | 'voice' =
     // Loop 2 (sky): what really happened in the air and the weather, so the genie's reply can only claim that.
     for (const f of fx.facts ?? []) if (!other.includes(f)) other.push(f)
     if (out.ops.some(o => o.op === 'undo')) other.push('undid the last change')
+    if (fx.reset) other.push('started over: the world is blank')
     notes.push(...fx.notes)
     says.push(...fx.say)
     applied.push(...out.ops)
@@ -218,6 +219,7 @@ async function build(request: string, ctx: OpContext, source: 'text' | 'voice' =
     const entry = world.history.value[world.history.value.length - 1]
     if (entry) entries.push(entry.n)
     if (out.batch) target = { id: out.batch.id, at: out.batch.at }
+    else if (out.effects.reset) target = null
     absorb(out)
   }
   const apply = (op: Op) => {
@@ -231,8 +233,8 @@ async function build(request: string, ctx: OpContext, source: 'text' | 'voice' =
       held.push(op)
       return
     }
-    // Undo and teleport never join a batch (extendLastBatch drops them): they always run on their own.
-    const out = target && op.op !== 'undo' && op.op !== 'teleport' ? world.extend(target.id, target.at, [op]) : null
+    // Undo, reset and teleport never join a batch (extendLastBatch drops them): they always run on their own.
+    const out = target && op.op !== 'undo' && op.op !== 'reset' && op.op !== 'teleport' ? world.extend(target.id, target.at, [op]) : null
     if (out) {
       absorb(out)
     } else if (op.op === 'say') {

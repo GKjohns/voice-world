@@ -90,6 +90,7 @@ export function effectLine(ops: Op[], state: WorldState): string {
     } else if (o.op === 'move') bits.push('Moved.')
     else if (o.op === 'remove') bits.push('Gone.')
     else if (o.op === 'undo') bits.push('Unmade.')
+    else if (o.op === 'reset') bits.push('A blank slate.')
     else if (o.op === 'teleport') bits.push('Come.')
   }
   const line = [...new Set(bits)].slice(0, 2).join(' ')
@@ -104,5 +105,6 @@ export function noOpLine(ops: Op[]): string {
   if (o.op === 'remove') return 'Nothing here to remove.'
   if (o.op === 'modify') return 'Nothing here to change, yet.'
   if (o.op === 'undo') return 'Nothing to undo.'
+  if (o.op === 'reset') return 'Already a blank slate.'
   return 'Alas, nothing here answers to that.'
 }

@@ -57,7 +57,7 @@ async function onFile(e: Event) {
 const menu = [[
   { label: 'Export world JSON', icon: 'i-lucide-download', onSelect: () => world.exportFile() },
   { label: 'Import world JSON', icon: 'i-lucide-upload', onSelect: () => file.value?.click() },
-  { label: 'New empty world', icon: 'i-lucide-eraser', color: 'error' as const, onSelect: () => world.clear() }
+  { label: 'Reset world (start over)', icon: 'i-lucide-rotate-ccw', color: 'error' as const, onSelect: () => world.reset() }
 ]]
 </script>
 

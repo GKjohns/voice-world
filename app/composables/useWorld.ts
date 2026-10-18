@@ -5,14 +5,22 @@
  */
 import { shallowRef } from 'vue'
 import { applyBatch, createWorld, diffStates, exportWorld, extendLastBatch, importWorld, upgradeKind as upgradeKernel } from '#shared/world/state'
+import { parseOps } from '#shared/world/ops'
 import type { DroppedOp, Op, Part } from '#shared/world/ops'
 import type { Quality } from '#shared/world/forge'
+import type { BatchResult, SavedWorld } from '#shared/world/state'
 import type { Effects, OpContext, WorldState } from '#shared/world/types'
 import type { GazeInfo, WorldRenderer } from '~/world/renderer'
 import { setGazeOverride } from '~/world/look'
 import { useDirector } from './useDirector'
+import { useForge } from './useForge'
+import { useNpc } from './useNpc'
 
 const STORAGE_KEY = 'conjure:world:v1'
+/** The saved view (WorldScene saves it on pagehide); a reset forgets it so a reload starts at the start. */
+export const VIEW_KEY = 'conjure.view'
+/** Where you stand when the world starts (the renderer's own default). */
+const START_VIEW = { yaw: 0, pitch: -0.12, pos: [0, 0] as [number, number] }
 
 export interface HistoryEntry {
   n: number
@@ -48,6 +56,8 @@ const gaze = shallowRef<GazeInfo>({ kind: 'ground', dist: 0 })
 const caption = shallowRef<{ text: string, at: number } | null>(null)
 let renderer: WorldRenderer | null = null
 let counter = 0
+/** The world as it was just before the last reset, so an undo on the fresh world can bring it back. */
+let beforeReset: SavedWorld | null = null
 
 function save() {
   try {
@@ -73,11 +83,48 @@ function commit(next: WorldState, effects: Effects) {
   save()
 }
 
+/**
+ * The client half of "start over" (the kernel already rebuilt the starting world): stop the Director and
+ * the forge, wipe every mind, forget the saved view and walk the player back to the start.
+ */
+function afterReset(prev: WorldState) {
+  beforeReset = prev.entities.length || prev.log.length ? exportWorld(prev) : beforeReset
+  useDirector().abort()
+  useForge().cancelAll()
+  useNpc().wipe()
+  try {
+    localStorage.removeItem(VIEW_KEY)
+  } catch {
+    // storage blocked: nothing to forget
+  }
+  renderer?.look(START_VIEW.yaw, START_VIEW.pitch, START_VIEW.pos)
+}
+
+/** An undo on the fresh world right after a reset: the world from before comes back. */
+function undoReset(raw: unknown, label: string, meta: RunMeta): BatchResult | null {
+  const saved = beforeReset
+  if (!saved || state.value.log.length) return null
+  const { ops } = parseOps(raw)
+  if (!ops.length || ops.some(o => o.op !== 'undo' && o.op !== 'say')) return null
+  beforeReset = null
+  load(saved, 'before the reset')
+  history.value = [...history.value, { n: ++counter, label, ops, dropped: [], notes: ['restored the world from before the reset'], say: [], spawned: state.value.entities.length, modified: 0, removed: 0, undone: false, source: meta.source, model: meta.model, ms: meta.ms }]
+  caption.value = { text: 'Unmade. It returns.', at: Date.now() }
+  return { state: state.value, effects: { ...diffStates(createWorld(), state.value), say: ['Unmade. It returns.'] }, ops, dropped: [] }
+}
+
 /** Apply one batch (one sentence's worth of ops). Accepts `{ ops }`, an array or a single op. */
 function run(raw: unknown, label = 'ops', ctx: OpContext = snapshot(), meta: RunMeta = {}) {
+  const restored = undoReset(raw, label, meta)
+  if (restored) return restored
   if (renderer && ctx.gaze.point) renderer.showGhost(ctx.gaze.point)
   const before = state.value
   const res = applyBatch(before, raw, ctx, label)
+  if (res.effects.reset) {
+    // The old log is gone: its history entries go too, so the log reads from the fresh start.
+    history.value = []
+    afterReset(before)
+  }
   const undos = res.ops.filter(o => o.op === 'undo').length
   let list = history.value
   // Mark undone entries so the log reads honestly; batch ids are reused after an undo, so match newest first.
@@ -145,13 +192,13 @@ function undo() {
   return run([{ op: 'undo' }], 'undo')
 }
 
+/** "Start over" without a word: the HUD's Reset world (and `__conjure.clear`). Same path as the op. */
+function reset() {
+  return run([{ op: 'reset' }, { op: 'say', text: 'A blank slate.' }], 'reset world', snapshot(), { source: 'console' })
+}
+
 function clear() {
-  useDirector().abort()
-  const next = createWorld()
-  const fx = diffStates(state.value, next)
-  fx.atmosphere = true
-  history.value = []
-  commit(next, fx)
+  return reset()
 }
 
 function load(saved: unknown, label = 'loaded world') {
@@ -208,5 +255,5 @@ function findLastIndex<T>(list: T[], fn: (x: T) => boolean): number {
 
 export function useWorld() {
   // setGazeOverride(ndc | null): cast the gaze (and so snapshot()/capture()) through a screen point, e.g. a pointed finger.
-  return { state, history, gaze, caption, run, extend, upgradeKind, undo, clear, load, restore, exportFile, importFile, attach, detach, snapshot, setGazeOverride, renderer: () => renderer }
+  return { state, history, gaze, caption, run, extend, upgradeKind, undo, reset, clear, load, restore, exportFile, importFile, attach, detach, snapshot, setGazeOverride, renderer: () => renderer }
 }

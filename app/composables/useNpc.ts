@@ -953,6 +953,37 @@ function detach() {
   people = null
 }
 
+/**
+ * "Start over": every mind, conversation, bubble and voice goes, and the saved minds with them (the people
+ * are gone, and a new person reusing an old id must not inherit a stranger's memories).
+ */
+function wipe() {
+  stopBanter()
+  voiceQ?.stop()
+  voiceQ = null
+  abortTalk?.abort()
+  abortTalk = null
+  clearTimeout(bubbleTimer)
+  clearTimeout(saveTimer)
+  conversation.value = null
+  busy.value = null
+  speakingId.value = null
+  bubble.value = null
+  playerLine.value = null
+  timings.value = []
+  banterLog.value = []
+  lastRoute.value = null
+  lastSpoken = null
+  minds.clear()
+  casts.clear()
+  lastHistoryN = useWorld().history.value[useWorld().history.value.length - 1]?.n ?? 0
+  try {
+    localStorage.removeItem(STORE_KEY)
+  } catch {
+    // storage blocked: nothing was saved anyway
+  }
+}
+
 function expose() {
   const w = window as unknown as Record<string, unknown>
   w.__conjureNpc = {
@@ -979,7 +1010,7 @@ function expose() {
 export function useNpc() {
   return {
     conversation, speakingId, bubble, sideBubble, playerLine, timings, lastRoute, busy,
-    attach, detach, talk, say, route, focus, isEcho: (heard: string) => !!lastSpoken && performance.now() - lastSpoken.at < 9000 && isEcho(heard, lastSpoken.text),
+    attach, detach, wipe, talk, say, route, focus, isEcho: (heard: string) => !!lastSpoken && performance.now() - lastSpoken.at < 9000 && isEcho(heard, lastSpoken.text),
     posOf: (id: string) => people?.posOf(id), headOf: (id: string) => people?.headOf(id), people: () => people
   }
 }

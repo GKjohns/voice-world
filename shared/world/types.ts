@@ -86,6 +86,8 @@ export interface Effects {
   atmosphere: boolean
   say: string[]
   teleport?: { world: string, brief?: string }
+  /** The batch started over from the starting world ("start over"): the client also clears minds, view and saves. */
+  reset?: boolean
   notes: string[] // why an op did nothing ("no entities match {tag:'tree'}"), for the op log
   /** One-shot sky events to play (lightning at a point, a meteor shower…). Never replayed on load. */
   events?: { kind: SkyEvent, at?: Vec3 }[]

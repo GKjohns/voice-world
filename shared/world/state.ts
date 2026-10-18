@@ -189,6 +189,10 @@ function step(state: WorldState, op0: Op, ctx: OpContext): StepResult {
       return { state: replayLog(state.log.slice(0, -1), state.upgrades), notes: [`undid ${undone.id}${undone.label ? ` (“${undone.label}”)` : ''}`] }
     }
 
+    case 'reset':
+      // commitOps handles a reset before the batch runs (it is never logged); stepping one alone starts over too.
+      return { state: createWorld(), notes: [] }
+
     case 'atmosphere': {
       const a = state.atmosphere
       const weather = op.weather === undefined ? a.weather : op.weather === 'clear' ? undefined : op.weather
@@ -432,7 +436,13 @@ function commitOps(state: WorldState, ops: Op[], dropped: DroppedOp[], ctx: OpCo
     }
     return s
   }
-  const afterUndo = run(state, ops.filter(o => o.op === 'undo'))
+  // "Start over": everything before the last reset is moot, and the rest builds on the starting world.
+  // The reset itself is never logged, so the new world's log (and so undo and replay) starts empty.
+  const cut = ops.findLastIndex(o => o.op === 'reset')
+  const reset = cut >= 0
+  if (reset) ops = [...ops.slice(cut + 1), ...ops.slice(0, cut).filter(o => o.op === 'say')]
+  const start = reset ? createWorld() : state
+  const afterUndo = run(start, ops.filter(o => o.op === 'undo'))
   const worldOps = ops.filter(o => o.op !== 'undo' && o.op !== 'say')
   let s = run(afterUndo, ops.filter(o => o.op !== 'undo'))
 
@@ -445,22 +455,27 @@ function commitOps(state: WorldState, ops: Op[], dropped: DroppedOp[], ctx: OpCo
     s = { ...s, log: [...s.log, batch], nextGroup: s.nextGroup + 1 }
   }
   // The genie only claims what this batch actually did.
-  const say = extras.say.map(t => honestSay(t, worldOps, s, !!changed || !!extras.events!.length))
+  const wiped = reset && (state.entities.length > 0 || state.log.length > 0 || diffStates(state, start).atmosphere)
+  const say = extras.say.map(t => honestSay(t, reset ? [{ op: 'reset' }, ...worldOps] : worldOps, s, !!changed || !!extras.events!.length || wiped))
   const effects: Effects = { ...diffStates(state, s), say, notes: extras.notes, teleport: extras.teleport, events: extras.events, facts: extras.facts }
-  return { state: s, effects, ops, dropped, batch }
+  if (reset) {
+    effects.reset = true
+    effects.atmosphere = true
+  }
+  return { state: s, effects, ops: reset ? [{ op: 'reset' }, ...ops] : ops, dropped, batch }
 }
 
 /**
  * Stream more ops into the LAST batch (the Director filling a teleport). They run with that batch's
  * context and group, exactly as `replayLog` will run them, so the live build and a reload match. Undo,
- * teleport and say never join (say comes back in effects). No-op if the log is empty.
+ * reset, teleport and say never join (say comes back in effects). No-op if the log is empty.
  */
 export function extendLastBatch(state: WorldState, raw: unknown): BatchResult {
   const { ops, dropped } = parseOps(raw)
   const b = state.log[state.log.length - 1]
   if (!b) return { state, effects: { ...emptyEffects(), notes: ['nothing to extend'] }, ops: [], dropped }
   const extras = emptyEffects()
-  const keep = b.ops.some(o => o.op === 'teleport') ? ops.filter(o => o.op !== 'undo' && o.op !== 'teleport' && o.op !== 'say') : keepTime(ops.filter(o => o.op !== 'undo' && o.op !== 'teleport' && o.op !== 'say'), b.label?.replace(/ \(cont\.\)$/, ''))
+  const keep = b.ops.some(o => o.op === 'teleport') ? ops.filter(o => o.op !== 'undo' && o.op !== 'reset' && o.op !== 'teleport' && o.op !== 'say') : keepTime(ops.filter(o => o.op !== 'undo' && o.op !== 'reset' && o.op !== 'teleport' && o.op !== 'say'), b.label?.replace(/ \(cont\.\)$/, ''))
   // Step with the batch's own group number (nextGroup was bumped when it was committed).
   let s: WorldState = { ...state, nextGroup: state.nextGroup - 1 }
   for (const op of keep) {

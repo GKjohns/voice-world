@@ -278,6 +278,18 @@ async function polish(job: Job, text: string, current: Part[], code: string | un
   }
 }
 
+/** "Start over": every in-flight refine stops (the library on the server keeps what it already forged). */
+function cancelAll() {
+  const r = useWorld().renderer()
+  for (const job of [...jobs.values()]) {
+    job.ctrl.abort()
+    jobs.delete(job.kind)
+    r?.endRefine(job.kind, false)
+    job.rec.outcome = 'aborted (world reset)'
+    publish(job.rec)
+  }
+}
+
 export function useForge() {
-  return { session, spent, disabled, log, consider, busy: () => jobs.size }
+  return { session, spent, disabled, log, consider, cancelAll, busy: () => jobs.size }
 }
