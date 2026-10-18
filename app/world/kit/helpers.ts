@@ -4,6 +4,8 @@
  */
 import * as THREE from 'three'
 import type { Slot } from '#shared/world/ops'
+import { stylize } from '#shared/world/palette'
+import type { PaletteRole } from '#shared/world/palette'
 
 /** Props a builder may read. Most read nothing (colour is applied afterwards through the slots). */
 export interface BuildProps {
@@ -19,12 +21,23 @@ export interface BuildProps {
 }
 export type Build = (props: BuildProps) => THREE.Group
 
-export function mat(color: THREE.ColorRepresentation, opts: THREE.MeshStandardMaterialParameters = {}): THREE.MeshStandardMaterial {
-  return new THREE.MeshStandardMaterial({ color, roughness: 0.8, ...opts })
+/**
+ * Every colour a builder, a model or a forged part picks is snapped onto the curated palette here
+ * (shared/world/palette.ts, art direction §3.2): the material boundary, so kit, learned kinds and forge
+ * output all share one palette. The shading itself is global (style/toon.ts).
+ */
+export function snapColor(color: THREE.ColorRepresentation, role: PaletteRole = 'surface'): THREE.Color {
+  const c = new THREE.Color(color)
+  return c.set(stylize('#' + c.getHexString(), role))
+}
+
+export function mat(color: THREE.ColorRepresentation, opts: THREE.MeshStandardMaterialParameters = {}, role: PaletteRole = 'surface'): THREE.MeshStandardMaterial {
+  return new THREE.MeshStandardMaterial({ color: snapColor(color, role), roughness: 0.8, ...opts })
 }
 
 export function glowMat(color: THREE.ColorRepresentation, intensity = 1.6): THREE.MeshStandardMaterial {
-  return new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: intensity, roughness: 0.5 })
+  const c = snapColor(color, 'glow')
+  return new THREE.MeshStandardMaterial({ color: c, emissive: c, emissiveIntensity: intensity, roughness: 0.5 })
 }
 
 /** A shadow-casting mesh in a slot. Slot-less meshes keep their own colour forever (door, windows). */

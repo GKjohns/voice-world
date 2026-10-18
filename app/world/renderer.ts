@@ -12,7 +12,7 @@ import { kindOf } from '#shared/world/select'
 import { groundHeight } from '#shared/world/terrain'
 import { ceilingOver } from '#shared/world/layout'
 import type { Effects, Entity, GazeSnapshot, Player, WorldState } from '#shared/world/types'
-import { ATMOSPHERES } from './atmosphere'
+import { ATMOSPHERES, lerpPreset } from './atmosphere'
 import type { AtmospherePreset } from './atmosphere'
 import { BUILD_READS_COLOR, KIT_BUILDERS, blob } from './kit'
 import { applyMaterialProps, gazeNdc, lookTargets } from './look'
@@ -32,7 +32,13 @@ import type { Drive, MotionStyle } from './fx/motion'
 import { WeatherFx } from './fx/weather'
 import { softDot } from './fx/common'
 import { LightPool } from './perf/lights'
-import { precompile, warmKit } from './perf/precompile'
+import { precompile, setCompileTarget, warmKit } from './perf/precompile'
+import { STYLE_UNIFORMS } from './style/toon'
+import { Post } from './style/post'
+import { skyDome, skyUniforms } from './style/sky'
+import type { SkyUniforms } from './style/sky'
+import { GROUND_UNIFORMS, groundMaterial } from './style/ground'
+import { Grass, grassCircles, nearMasks } from './style/grass'
 
 const EYE = 1.6
 const WALK = 6
@@ -155,7 +161,14 @@ export class WorldRenderer {
   private grid: THREE.Mesh
   private gridUniforms: { color: { value: THREE.Color }, opacity: { value: number }, fadeDist: { value: number } }
   private sky: THREE.Mesh
-  private skyUniforms: { top: { value: THREE.Color }, horizon: { value: THREE.Color }, fogColor: { value: THREE.Color }, veil: { value: number } }
+  private skyUniforms: SkyUniforms
+  // Painted Toy World: the one post pass (MSAA target, Neutral tone map, grade, depth edges, vignette).
+  private post = new Post()
+  private studioTarget: THREE.WebGLRenderTarget | null = null
+  private gridShown = 0
+  private grass = new Grass()
+  private grassMasks: [number, number, number][] = []
+  private grassMaskAt = 0
   private reticle: THREE.Mesh
   private highlight: THREE.Mesh
   private ghost: THREE.Mesh
@@ -218,13 +231,17 @@ export class WorldRenderer {
     const w = host.clientWidth || window.innerWidth
     const h = host.clientHeight || window.innerHeight
 
-    // Renderer setup mirrors workspace-3d: ACES, sRGB out, soft shadows, a dim room environment for speculars.
-    this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' })
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+    // Painted Toy World (style/*): the scene renders into the post pass's MSAA target (so no canvas AA), and
+    // Neutral tone mapping runs there, keeping palette colours on-model. Pixel ratio capped at 1.5 with post on.
+    this.renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' })
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5))
     this.renderer.setSize(w, h)
     this.renderer.shadowMap.enabled = true
     this.renderer.shadowMap.type = THREE.PCFShadowMap
-    this.renderer.toneMapping = THREE.ACESFilmicToneMapping
+    this.renderer.toneMapping = THREE.NeutralToneMapping
+    const db = this.renderer.getDrawingBufferSize(new THREE.Vector2())
+    this.post.setSize(db.x, db.y)
+    setCompileTarget(this.post.target)
     this.renderer.outputColorSpace = THREE.SRGBColorSpace
     this.renderer.domElement.classList.add('world-canvas')
     host.appendChild(this.renderer.domElement)
@@ -245,11 +262,12 @@ export class WorldRenderer {
     Object.assign(this.sun.shadow.camera, { left: -45, right: 45, top: 45, bottom: -45, near: 1, far: 220 })
     this.scene.add(this.hemi, this.sun, this.sun.target)
 
-    this.ground = new THREE.Mesh(new THREE.PlaneGeometry(6000, 6000), new THREE.MeshStandardMaterial({ color: 0x2c3340, roughness: 1 }))
+    this.ground = new THREE.Mesh(new THREE.PlaneGeometry(6000, 6000), groundMaterial())
     this.ground.rotation.x = -Math.PI / 2
     this.ground.receiveShadow = true
     this.ground.name = 'ground'
     this.scene.add(this.ground)
+    this.scene.add(this.grass.mesh)
 
     // An analytic grid (anti-aliased with fwidth, fading with distance) instead of GridHelper, whose far
     // lines alias into scanlines at a standing eye height.
@@ -268,22 +286,9 @@ export class WorldRenderer {
     this.grid.renderOrder = 1
     this.scene.add(this.grid)
 
-    // Gradient sky dome; it follows the camera so you never reach its edge.
-    this.skyUniforms = { top: { value: new THREE.Color() }, horizon: { value: new THREE.Color() }, fogColor: { value: new THREE.Color() }, veil: { value: 0 } }
-    this.sky = new THREE.Mesh(
-      new THREE.SphereGeometry(500, 32, 16),
-      new THREE.ShaderMaterial({
-        side: THREE.BackSide,
-        depthWrite: false,
-        fog: false,
-        uniforms: this.skyUniforms,
-        vertexShader: 'varying vec3 vDir; void main() { vDir = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
-        // The bottom of the dome blends into the fog colour so the ground's far edge meets the sky with no seam.
-        // `veil` drowns the whole dome in fog colour while a teleport is summoning the next place.
-        fragmentShader: 'uniform vec3 top; uniform vec3 horizon; uniform vec3 fogColor; uniform float veil; varying vec3 vDir; void main() { float h = vDir.y; vec3 c = mix(horizon, top, pow(clamp(h, 0.0, 1.0), 0.55)); c = mix(fogColor, c, smoothstep(-0.02, 0.16, h)); c = mix(c, fogColor, veil); gl_FragColor = vec4(c, 1.0);\n#include <tonemapping_fragment>\n#include <colorspace_fragment>\n}'
-      })
-    )
-    this.sky.renderOrder = -1
+    // The painted sky dome (style/sky.ts): gradient, horizon band, sun disc, clouds. Follows the camera.
+    this.skyUniforms = skyUniforms()
+    this.sky = skyDome(this.skyUniforms)
     this.scene.add(this.sky)
 
     // Night sky: stars, a moon; by day a soft sun halo. All ride on the dome so they never get closer.
@@ -327,7 +332,7 @@ export class WorldRenderer {
     this.renderer.setAnimationLoop(now => this.frame(now))
     // Compile every kit kind's shaders in the background, so the first pool hall doesn't (perf/precompile.ts).
     // The scene's own hidden fx (the vortex, the floor patch, weather) too: they first show mid-teleport.
-    void this.renderer.compileAsync(this.scene, this.camera)
+    void this.post.bindForCompile(this.renderer, () => this.renderer.compileAsync(this.scene, this.camera))
     void warmKit(this.renderer, this.camera, this.scene, KIT_BUILDERS, () => this.warmExtras())
   }
 
@@ -336,6 +341,11 @@ export class WorldRenderer {
   sync(state: WorldState, effects?: Effects): void {
     const prev = this.state
     this.state = state
+    this.grassMasks = grassCircles(state.entities, (e) => {
+      const d = kindOf(state, e.kind)
+      return { length: d.defaults.length ?? d.length, width: d.defaults.width ?? d.width, footprint: d.footprint }
+    })
+    this.grassMaskAt = 0
     const now = performance.now()
     const fx = effects
     const wanted = new Map(state.entities.map(e => [e.id, e]))
@@ -1339,11 +1349,19 @@ export class WorldRenderer {
     const alpha = r3.getClearAlpha()
     let url: string | null = null
     try {
+      // Rendered like the main frame (same target type, so the same programs), then graded into a corner.
+      this.studioTarget ??= new THREE.WebGLRenderTarget(STUDIO_W, STUDIO_H, { type: THREE.HalfFloatType, samples: 4, depthTexture: new THREE.DepthTexture(STUDIO_W, STUDIO_H, THREE.UnsignedIntType) })
+      r3.setClearColor(0x9fb7cf, 1)
+      const bg = this.scene.background
+      this.scene.background = null
+      r3.setRenderTarget(this.studioTarget)
+      r3.render(this.scene, cam)
+      r3.setRenderTarget(null)
+      this.scene.background = bg
       r3.setViewport(0, 0, STUDIO_W / pr, STUDIO_H / pr)
       r3.setScissor(0, 0, STUDIO_W / pr, STUDIO_H / pr)
       r3.setScissorTest(true)
-      r3.setClearColor(0x9fb7cf, 1)
-      r3.render(this.scene, cam)
+      this.post.composite(r3, this.studioTarget, cam)
       const gl = r3.getContext()
       gl.readPixels(0, 0, STUDIO_W, STUDIO_H, gl.RGBA, gl.UNSIGNED_BYTE, this.studioPixels)
       url = encodeJpeg(this.studioPixels, STUDIO_W, STUDIO_H)
@@ -1563,13 +1581,35 @@ export class WorldRenderer {
     this.skyUniforms.top.value.set(a.skyTop)
     this.skyUniforms.horizon.value.set(a.skyHorizon)
     this.skyUniforms.fogColor.value.set(a.fog)
+    const sd = skyDir(a.sunPos)
+    this.skyUniforms.sunDir.value.copy(sd)
+    this.skyUniforms.sunColor.value.set(a.sun)
+    this.skyUniforms.sunDisc.value = a.sunDisc * Math.min(1, Math.max(0, (sd.y + 0.02) * 12))
+    this.skyUniforms.sunGlow.value = a.sunGlow
+    this.skyUniforms.glowColor.value.set(a.glowColor)
+    this.skyUniforms.cloudLit.value.set(a.cloudLit)
+    this.skyUniforms.cloudShade.value.set(a.cloudShade)
+    this.skyUniforms.cloudCover.value = a.cloudCover
+    STYLE_UNIFORMS.uCjToon.value = a.toon
+    STYLE_UNIFORMS.uCjRim.value = a.rim
+    STYLE_UNIFORMS.uCjRimColor.value.set(a.skyHorizon)
+    STYLE_UNIFORMS.uCjFogWarm.value.set(a.fogWarm)
+    STYLE_UNIFORMS.uCjFogHeight.value = a.fogHeight
+    GROUND_UNIFORMS.uGroundAlt.value.set(a.groundAlt)
+    GROUND_UNIFORMS.uGroundPatch.value = a.groundPatch
+    this.grass.setColor(a.ground)
+    // Grass on meadows only: not indoors, not on snow (the weather whitens the ground).
+    const gc = new THREE.Color(a.ground)
+    this.grass.setWanted(this.state?.atmosphere.time !== 'interior' && this.weather.snowCover() < 0.15 && gc.g >= gc.r * 0.9)
+    this.post.setGrade({ shadow: a.gradeShadow, highlight: a.gradeHighlight, sat: a.gradeSat })
     const fog = this.scene.fog as THREE.Fog
     fog.color.set(a.fog)
     this.applyFogDistances()
     this.stars.visible = a.stars > 0.01
     this.moon.visible = a.moon > 0.01
     this.moon.position.copy(skyDir(a.sunPos).multiplyScalar(420))
-    this.sunGlow.visible = a.sunGlow > 0.01
+    // The sun's disc and horizon band are painted by the sky shader now; the old halo sprite stays dark.
+    this.sunGlow.visible = false
     this.sunGlow.material.color.set(a.glowColor)
     this.sunGlow.position.copy(skyDir([a.sunPos[0], Math.max(4, a.sunPos[1] * 0.6), a.sunPos[2]]).multiplyScalar(430))
     this.scene.background = new THREE.Color(a.fog)
@@ -1579,8 +1619,9 @@ export class WorldRenderer {
     this.hemi.groundColor.set(a.hemiGround)
     this.hemi.intensity = a.hemiIntensity
     ;(this.ground.material as THREE.MeshStandardMaterial).color.set(a.ground)
-    this.gridUniforms.opacity.value = a.grid
-    this.grid.visible = a.grid > 0.01
+    // The grid is only the faint "dream canvas" of the empty first-run world (faded in frame()).
+    this.gridUniforms.opacity.value = a.grid * this.gridShown
+    this.grid.visible = a.grid * this.gridShown > 0.005
     this.scene.environmentIntensity = a.env
     this.renderer.toneMappingExposure = a.exposure
   }
@@ -1598,7 +1639,7 @@ export class WorldRenderer {
     const clear = 1 - this.veil
     ;(this.stars.material as THREE.PointsMaterial).opacity = this.atmos.stars * clear
     this.moon.material.opacity = this.atmos.moon * clear
-    this.sunGlow.material.opacity = this.atmos.sunGlow * clear
+    this.sunGlow.material.opacity = 0
   }
 
   // ---------- people (NPC): what the People runtime needs from the scene ----------
@@ -1847,11 +1888,24 @@ export class WorldRenderer {
     }
 
     this.lightPool.update(this.camera, now)
+    STYLE_UNIFORMS.uCjTime.value = now / 1000
+    this.grass.tick(dt, this.camera.position)
+    if (now - this.grassMaskAt > 400) {
+      this.grassMaskAt = now
+      this.grass.setMasks(nearMasks(this.grassMasks, this.camera.position.x, this.camera.position.z))
+    }
+    this.skyUniforms.time.value = now / 1000
+    const gridTo = this.items.size === 0 ? 1 : 0
+    if (gridTo !== this.gridShown) {
+      this.gridShown = Math.max(0, Math.min(1, this.gridShown + (gridTo - this.gridShown > 0 ? dt * 0.8 : -dt * 3)))
+      this.gridUniforms.opacity.value = this.atmos.grid * this.gridShown
+      this.grid.visible = this.atmos.grid * this.gridShown > 0.005
+    }
     // One studio shot per frame (the forge's render of a draft), drawn into a corner just before the frame
     // itself paints over it: same renderer, same programs, no second GL context.
     const shot = this.studioQueue.shift()
     if (shot) this.shoot(shot)
-    this.renderer.render(this.scene, this.camera)
+    this.post.render(this.renderer, this.scene, this.camera, dt * 1000, now)
     const w = window as unknown as { __sceneReady?: boolean }
     if (!w.__sceneReady) w.__sceneReady = true
   }
@@ -2092,6 +2146,8 @@ export class WorldRenderer {
     this.camera.aspect = w / h
     this.camera.updateProjectionMatrix()
     this.renderer.setSize(w, h)
+    const db = this.renderer.getDrawingBufferSize(new THREE.Vector2())
+    this.post.setSize(db.x, db.y)
   }
 
   dispose(): void {
@@ -2106,6 +2162,9 @@ export class WorldRenderer {
     for (const fn of this.cleanup) fn()
     disposeObject(this.scene)
     this.pmrem.dispose()
+    this.post.dispose()
+    this.grass.dispose()
+    this.studioTarget?.dispose()
     this.renderer.dispose()
     this.renderer.domElement.remove()
   }
@@ -2172,19 +2231,6 @@ function hashParts(desc: KindDescriptor): number {
   let h = 0
   for (const ch of JSON.stringify(desc.parts)) h = (h * 31 + ch.charCodeAt(0)) | 0
   return h
-}
-
-function lerpPreset(a: AtmospherePreset, b: AtmospherePreset, k: number): AtmospherePreset {
-  const c = (x: string, y: string) => '#' + new THREE.Color(x).lerp(new THREE.Color(y), k).getHexString()
-  const n = (x: number, y: number) => x + (y - x) * k
-  return {
-    skyTop: c(a.skyTop, b.skyTop), skyHorizon: c(a.skyHorizon, b.skyHorizon), fog: c(a.fog, b.fog),
-    fogNear: n(a.fogNear, b.fogNear), fogFar: n(a.fogFar, b.fogFar), sun: c(a.sun, b.sun), sunIntensity: n(a.sunIntensity, b.sunIntensity),
-    sunPos: [n(a.sunPos[0], b.sunPos[0]), n(a.sunPos[1], b.sunPos[1]), n(a.sunPos[2], b.sunPos[2])],
-    hemiSky: c(a.hemiSky, b.hemiSky), hemiGround: c(a.hemiGround, b.hemiGround), hemiIntensity: n(a.hemiIntensity, b.hemiIntensity),
-    ground: c(a.ground, b.ground), grid: n(a.grid, b.grid), env: n(a.env, b.env), exposure: n(a.exposure, b.exposure),
-    stars: n(a.stars, b.stars), moon: n(a.moon, b.moon), sunGlow: n(a.sunGlow, b.sunGlow), glowColor: c(a.glowColor, b.glowColor)
-  }
 }
 
 function wrapAngle(a: number): number {

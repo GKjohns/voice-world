@@ -412,6 +412,11 @@ export class WeatherFx {
     return changing
   }
 
+  /** How much snow lies (0..1): the renderer folds the meadow grass away under it. */
+  snowCover(): number {
+    return this.blend.snow.cur
+  }
+
   /** Fold the weather into a time-of-day preset. */
   grade(a: AtmospherePreset): AtmospherePreset {
     const storm = this.blend.storm.cur
@@ -437,6 +442,14 @@ export class WeatherFx {
     out.grid *= 1 - wet
     out.moon *= 1 - 0.9 * wet
     out.sunGlow *= 1 - wet
+    // Painted Toy World: a storm closes the clouds in and greys them, mutes the rim, the grade and the warm haze.
+    out.sunDisc *= 1 - wet
+    out.cloudCover = Math.min(0.95, out.cloudCover + 0.55 * wet)
+    out.cloudLit = grey(out.cloudLit, wet * 0.8, 0.8)
+    out.cloudShade = grey(out.cloudShade, wet * 0.8, 0.55)
+    out.fogWarm = grey(out.fogWarm, wet * 0.85, 0.75)
+    out.rim *= 1 - 0.5 * wet
+    out.gradeSat *= 1 - 0.15 * wet
     // Wet ground: darker and a touch more reflective.
     out.ground = grey(out.ground, wet * 0.3, 0.7)
     out.env += 0.15 * wet
@@ -447,6 +460,9 @@ export class WeatherFx {
       out.ground = '#' + new THREE.Color(out.ground).lerp(new THREE.Color(night ? '#8d98ad' : '#e9eef5'), snow * 0.75).getHexString()
       out.fogFar *= 1 - 0.35 * snow
       out.sunIntensity *= 1 - 0.35 * snow
+      out.fogWarm = '#' + new THREE.Color(out.fogWarm).lerp(night ? new THREE.Color(out.fog) : pale, snow * 0.6).getHexString()
+      out.cloudCover = Math.min(0.95, out.cloudCover + 0.35 * snow)
+      out.sunDisc *= 1 - 0.6 * snow
       // Snow light: a night under fresh snow is never pitch dark (a soft fill off the white ground).
       out.hemiIntensity *= 1 + (night ? 0.6 : 0.15) * snow
       out.stars *= 1 - snow

@@ -4,12 +4,15 @@
  */
 import * as THREE from 'three'
 import type { Material, Props } from '#shared/world/ops'
+import { stylize } from '#shared/world/palette'
 
+// Stylised for the toon shading (style/toon.ts): metal keeps some body colour (a toy's painted tin, not a
+// black mirror), glass is a pale tinted shell the rim light outlines.
 const PRESETS: Record<Material, Partial<THREE.MeshStandardMaterial>> = {
   matte: { roughness: 0.9, metalness: 0, transparent: false, opacity: 1 },
-  wood: { roughness: 0.75, metalness: 0, transparent: false, opacity: 1 },
-  metal: { roughness: 0.3, metalness: 0.85, transparent: false, opacity: 1 },
-  glass: { roughness: 0.08, metalness: 0.2, transparent: true, opacity: 0.55 },
+  wood: { roughness: 0.8, metalness: 0, transparent: false, opacity: 1 },
+  metal: { roughness: 0.35, metalness: 0.55, transparent: false, opacity: 1 },
+  glass: { roughness: 0.1, metalness: 0.1, transparent: true, opacity: 0.45 },
   stone: { roughness: 1, metalness: 0, transparent: false, opacity: 1 }
 }
 
@@ -32,14 +35,16 @@ export function lookTargets(root: THREE.Object3D, props: Props, hue = 0): LookTa
     let hex = m.userData.baseColor as string
     if (slot === 'primary' && props.color) hex = props.color
     if (slot === 'trim' && props.trim) hex = props.trim
+    // Snapped onto the palette (a model's "#ff0000" becomes the palette's red), then jittered.
     const color = safeColor(hex, m.userData.baseColor as string)
-    // Hue jitter only touches the primary slot: a cluster of pines varies its needles, not its trunks.
+    color.set(stylize('#' + color.getHexString(), slot === 'glow' ? 'glow' : 'surface'))
+    // Jitter only touches the primary slot (a cluster of pines varies its needles, not its trunks), and
+    // mostly in lightness, so a cluster varies without leaving the palette.
     if (hue && slot === 'primary') {
-      // A colour someone asked for ("make them red") keeps most of its hue; only lightness varies much.
-      const h = props.color ? hue * 0.25 : hue
+      const h = props.color ? hue * 0.1 : hue * 0.35
       const hsl = { h: 0, s: 0, l: 0 }
       color.getHSL(hsl)
-      color.setHSL((hsl.h + h + 1) % 1, hsl.s, Math.min(1, Math.max(0, hsl.l + hue * 0.6)))
+      color.setHSL((hsl.h + h + 1) % 1, hsl.s, Math.min(0.92, Math.max(0.08, hsl.l + hue * 0.6)))
     }
     out.push({ color, mesh: m })
   })

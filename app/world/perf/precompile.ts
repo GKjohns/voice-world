@@ -10,17 +10,35 @@
  *   learned kinds, glass looks and anything the warm-up missed compile while they wait for their cue.
  *
  * Both rely on a constant light count (perf/lights.ts): the light count is part of every program's key.
+ * And on compiling for the render target the scene really draws into (style/post.ts: no tone mapping,
+ * linear output, both in the key): `setCompileTarget` names it, and every compile binds it first.
  */
 import type * as THREE from 'three'
 import type { Build } from '../kit/helpers'
 import { SOURCE_LAYER } from './lights'
 
 const pinned: THREE.Material[] = []
+let compileTarget: THREE.WebGLRenderTarget | null = null
+
+/** The target scene programs are compiled for (the post pass's scene target). */
+export function setCompileTarget(rt: THREE.WebGLRenderTarget | null): void {
+  compileTarget = rt
+}
+
+function compileIn(renderer: THREE.WebGLRenderer, o: THREE.Object3D, camera: THREE.Camera, scene: THREE.Scene): Promise<unknown> {
+  const prev = renderer.getRenderTarget()
+  renderer.setRenderTarget(compileTarget)
+  try {
+    return renderer.compileAsync(o, camera, scene)
+  } finally {
+    renderer.setRenderTarget(prev)
+  }
+}
 
 export function precompile(renderer: THREE.WebGLRenderer, objs: THREE.Object3D[], camera: THREE.Camera, scene: THREE.Scene): void {
   for (const o of objs) {
     try {
-      void renderer.compileAsync(o, camera, scene)
+      void compileIn(renderer, o, camera, scene)
     } catch {
       // A compile failure shows up again (and is reported) when the object is drawn.
     }
@@ -53,7 +71,7 @@ export async function warmKit(renderer: THREE.WebGLRenderer, camera: THREE.Camer
           if (l.isLight) l.layers.set(SOURCE_LAYER)
         })
         try {
-          waits.push(renderer.compileAsync(root, camera, scene))
+          waits.push(compileIn(renderer, root, camera, scene))
         } catch {
           continue
         }

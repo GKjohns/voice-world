@@ -190,7 +190,7 @@ export const person: Build = (props) => {
   const G = geo()
   const r = seeded(`${props.seed ?? 'person'}:skin`)
   const skinHex = SKIN[Math.floor(r() * SKIN.length) % SKIN.length]!
-  const skin = mat(skinHex, { flatShading: true, roughness: 0.75 })
+  const skin = mat(skinHex, { flatShading: true, roughness: 0.75 }, 'skin')
   const hair = mat(d.hairColor, { flatShading: true, roughness: 0.9 })
   const shirt = mat(d.shirt, { flatShading: true, roughness: 0.85 })
   const pants = mat(d.pants, { flatShading: true, roughness: 0.9 })

@@ -17,13 +17,15 @@ import type { Part, Shape, Slot } from '#shared/world/ops'
 import { hashParts } from '#shared/world/forge'
 import { glowMat, group, mat, mesh } from './kit/helpers'
 import { materialLook } from './look'
+import { bevelBox } from './style/bevel'
 
 // Unit geometries are shared across every learned instance; meshes scale them.
 const GEOMETRY: Record<Shape, () => THREE.BufferGeometry> = {
-  box: () => new THREE.BoxGeometry(1, 1, 1),
-  cylinder: () => new THREE.CylinderGeometry(0.5, 0.5, 1, 20),
-  cone: () => new THREE.ConeGeometry(0.5, 1, 20),
-  sphere: () => new THREE.SphereGeometry(0.5, 20, 14),
+  // Painted Toy World: boxes get a normal bevel (rounded toon edges); the ramp hides facets, so fewer segments.
+  box: () => bevelBox(),
+  cylinder: () => new THREE.CylinderGeometry(0.5, 0.5, 1, 16),
+  cone: () => new THREE.ConeGeometry(0.5, 1, 16),
+  sphere: () => new THREE.SphereGeometry(0.5, 16, 12),
   torus: () => new THREE.TorusGeometry(0.375, 0.125, 12, 28),
   capsule: () => new THREE.CapsuleGeometry(0.5, 1, 6, 16).scale(1, 0.5, 1)
 }

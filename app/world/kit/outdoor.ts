@@ -1,12 +1,13 @@
 // Outdoor set (Sprint 4): water, shore, dock, boat, campfire, tent, reeds. Water and shore are ovals of
 // props.length × props.width; the dock runs props.length metres out of its back (-z).
 import * as THREE from 'three'
-import { glowMat, group, mat, mesh, seeded } from './helpers'
+import { glowMat, group, mat, mesh, seeded, snapColor } from './helpers'
+import { waterMaterial } from '../style/water'
 import type { Build } from './helpers'
 import { flicker } from './interior'
 
 export const water: Build = ({ length = 60, width = 60 }) => {
-  const m = mesh(new THREE.CircleGeometry(0.5, 72).rotateX(-Math.PI / 2), mat('#3f6f8f', { roughness: 0.06, metalness: 0.55, envMapIntensity: 1.6 }), 'primary', 0, 0.05, 0)
+  const m = mesh(new THREE.CircleGeometry(0.5, 72).rotateX(-Math.PI / 2), waterMaterial(snapColor('#3f7f9a')), 'primary', 0, 0.05, 0)
   m.scale.set(length, 1, width)
   m.castShadow = false
   // A faint second sheet that drifts, so the surface isn't dead still.

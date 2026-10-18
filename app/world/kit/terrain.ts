@@ -7,7 +7,9 @@ import { KIT } from '#shared/world/kinds'
 import type { Slot } from '#shared/world/ops'
 import { fbm, surfaceHeight } from '#shared/world/terrain'
 import type { Surface } from '#shared/world/terrain'
-import { group, mesh, seeded } from './helpers'
+import { group, mesh, seeded, snapColor } from './helpers'
+import { styleShader } from '../style/toon'
+import { waterMaterial, waterPatch } from '../style/water'
 import type { Build } from './helpers'
 
 // ---------- aerial perspective ----------
@@ -29,6 +31,7 @@ const AERIAL = `#ifdef USE_FOG
 
 function aerial<T extends THREE.Material>(m: T): T {
   m.onBeforeCompile = (sh) => {
+    styleShader(sh) // the shared toon/fog uniforms (style/toon.ts): this hook replaces the global one
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', '#include <common>\nvarying float vTerrainY;')
       .replace('#include <project_vertex>', '#include <project_vertex>\nvTerrainY = (modelMatrix * vec4(transformed, 1.0)).y;')
@@ -40,8 +43,20 @@ function aerial<T extends THREE.Material>(m: T): T {
   return m
 }
 
+/** The island's sea: stylised water that also keeps the terrain's long aerial fade to the horizon. */
+function aerialWater(color: THREE.Color): THREE.MeshStandardMaterial {
+  const m = aerial(new THREE.MeshStandardMaterial({ color, roughness: 0.3, metalness: 0 }))
+  const fogPatch = m.onBeforeCompile
+  m.onBeforeCompile = (sh, r) => {
+    fogPatch.call(m, sh, r)
+    waterPatch(sh)
+  }
+  m.customProgramCacheKey = () => 'conjure-aerial-water'
+  return m
+}
+
 function tmat(color: THREE.ColorRepresentation, opts: THREE.MeshStandardMaterialParameters = {}): THREE.MeshStandardMaterial {
-  return aerial(new THREE.MeshStandardMaterial({ color, roughness: 0.95, flatShading: true, vertexColors: true, ...opts }))
+  return aerial(new THREE.MeshStandardMaterial({ color: snapColor(color, 'terrain'), roughness: 0.95, flatShading: true, vertexColors: true, ...opts }))
 }
 
 function land(geo: THREE.BufferGeometry, material: THREE.Material, slot: Slot | null): THREE.Mesh {
@@ -176,7 +191,7 @@ export const island: Build = () => {
   const g = landform('island', 'island', {}, [-R, R, -R, R], [28, 28], t => t.cy < 1.6 ? 'trim' : 'primary', {
     primary: tmat('#5f8a46'), trim: tmat('#d8c38f')
   })
-  const sea = mesh(new THREE.CircleGeometry(R * 2.5, 64).rotateX(-Math.PI / 2), aerial(new THREE.MeshStandardMaterial({ color: '#3f6f8f', roughness: 0.08, metalness: 0.5 })), null, 0, 0.3, 0)
+  const sea = mesh(new THREE.CircleGeometry(R * 2.5, 64).rotateX(-Math.PI / 2), aerialWater(snapColor('#3f7f9a')), null, 0, 0.3, 0)
   sea.castShadow = false
   g.add(sea)
   // A few windswept trees on the crown.
@@ -374,7 +389,7 @@ export const waterfall: Build = () => {
   const fallMesh = mesh(sheet, water, 'primary')
   fallMesh.castShadow = false
   g.add(fallMesh)
-  const pool = mesh(new THREE.CircleGeometry(10, 40).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ color: '#3f6f8f', roughness: 0.08, metalness: 0.5 }), null, 0, 0.08, 0)
+  const pool = mesh(new THREE.CircleGeometry(10, 40).rotateX(-Math.PI / 2), waterMaterial(snapColor('#3f7f9a')), null, 0, 0.08, 0)
   pool.castShadow = false
   const foam = mesh(new THREE.RingGeometry(1.5, 6, 32).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.4, depthWrite: false }), null, 0, 0.12, -1)
   foam.castShadow = false
@@ -418,7 +433,7 @@ function ribbon(length: number, width: number, y: number, segs: number): THREE.B
 
 export const river: Build = ({ length = 240, width = 14 }) => {
   const segs = Math.min(200, Math.round(length / 2))
-  const water = mesh(ribbon(length, width, 0.07, segs), new THREE.MeshStandardMaterial({ color: '#3f7396', roughness: 0.08, metalness: 0.5, side: THREE.DoubleSide }), 'primary')
+  const water = mesh(ribbon(length, width, 0.07, segs), waterMaterial(snapColor('#3f7f9a'), { side: THREE.DoubleSide }), 'primary')
   const banks = mesh(ribbon(length, width + 7, 0.035, segs), new THREE.MeshStandardMaterial({ color: '#b9a27a', roughness: 1, side: THREE.DoubleSide }), 'trim')
   const tex = streakTexture().clone()
   tex.needsUpdate = true

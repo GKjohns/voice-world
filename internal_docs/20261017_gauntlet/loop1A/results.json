@@ -1,0 +1,892 @@
+{
+ "url": "http://localhost:3091/",
+ "startedAt": "2026-10-18T03:15:16.209Z",
+ "minutes": 3,
+ "spend": 0.164781,
+ "spendBy": {
+  "/api/intent (est)": 0.011000000000000003,
+  "/api/npc/cast": 0.0007834000000000001,
+  "/api/npc/persona": 0.005593100000000001,
+  "/api/director": 0.11570449999999999,
+  "/api/forge": 0.0317
+ },
+ "forgeStatus": {
+  "total": 1.0071,
+  "session": 0.0317,
+  "calls": 38,
+  "cap": 12,
+  "sessionCap": 1.5
+ },
+ "results": [
+  {
+   "id": "create_robot",
+   "group": "create",
+   "steps": [
+    {
+     "step": 1,
+     "text": "put a giant friendly robot over there",
+     "thought": true,
+     "idleMs": 1054,
+     "intent": {
+      "model": "haiku",
+      "ms": 4180,
+      "firstOpMs": 1037,
+      "count": 3
+     },
+     "entry": {
+      "ops": [
+       "spawn robot×1"
+      ],
+      "dropped": 0,
+      "notes": [
+       "unknown kind \"robot\": holding its spot with a placeholder until it's defined"
+      ],
+      "say": [],
+      "spawned": 1,
+      "modified": 0,
+      "removed": 0
+     },
+     "director": null,
+     "forge": [
+      {
+       "kind": "robot",
+       "tier": "good",
+       "outcome": "library hit",
+       "draftMs": 3986,
+       "refinedMs": 4889,
+       "parts": 24,
+       "usd": 0,
+       "library": true
+      }
+     ],
+     "fps": {
+      "avg": 60,
+      "min1": 60,
+      "gap": 17
+     },
+     "before": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "after": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": 0.3
+     },
+     "census": {
+      "entities": 1,
+      "kinds": 1,
+      "top": [
+       "robot×1"
+      ],
+      "time": "dusk"
+     },
+     "hud": "A gentle giant, arriving.",
+     "shot": "001_create_robot_s1_put_a_giant_friendly_robot_o.jpg"
+    }
+   ],
+   "fps": {
+    "avg": 60,
+    "min1": 60,
+    "gap": 17
+   },
+   "usd": 0.001,
+   "errors": [],
+   "errorCount": 0
+  },
+  {
+   "id": "god_giant",
+   "group": "god",
+   "steps": [
+    {
+     "step": 1,
+     "text": "a little village",
+     "thought": true,
+     "idleMs": 1202,
+     "intent": {
+      "model": "haiku",
+      "ms": 1628,
+      "firstOpMs": 1182,
+      "count": 4
+     },
+     "entry": {
+      "ops": [
+       "spawn house×4"
+      ],
+      "dropped": 0,
+      "notes": [],
+      "say": [],
+      "spawned": 4,
+      "modified": 0,
+      "removed": 0
+     },
+     "director": null,
+     "forge": [],
+     "fps": {
+      "avg": 60,
+      "min1": 60,
+      "gap": 17
+     },
+     "before": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "after": {
+      "pos": [
+       0.11,
+       1.6,
+       1.5
+      ],
+      "yaw": 0.15,
+      "pitch": 0.1
+     },
+     "census": {
+      "entities": 13,
+      "kinds": 3,
+      "top": [
+       "pine×6",
+       "house×4",
+       "person×3"
+      ],
+      "time": "dusk"
+     },
+     "hud": "A village wakes.",
+     "shot": "002_god_giant_s1_a_little_village.jpg"
+    },
+    {
+     "step": 2,
+     "text": "make me a giant",
+     "thought": true,
+     "idleMs": 896,
+     "intent": {
+      "model": "haiku",
+      "ms": 1161,
+      "firstOpMs": 880,
+      "count": 2
+     },
+     "entry": {
+      "ops": [
+       "atmosphere "
+      ],
+      "dropped": 0,
+      "notes": [],
+      "say": [],
+      "spawned": 0,
+      "modified": 0,
+      "removed": 0
+     },
+     "director": null,
+     "forge": [],
+     "fps": {
+      "avg": 60,
+      "min1": 60,
+      "gap": 17
+     },
+     "before": {
+      "pos": [
+       0.11,
+       1.6,
+       1.5
+      ],
+      "yaw": 0.15,
+      "pitch": 0.1
+     },
+     "after": {
+      "pos": [
+       0.11,
+       9.6,
+       1.5
+      ],
+      "yaw": 0.15,
+      "pitch": 0.1
+     },
+     "census": {
+      "entities": 13,
+      "kinds": 3,
+      "top": [
+       "pine×6",
+       "house×4",
+       "person×3"
+      ],
+      "time": "dusk"
+     },
+     "hud": "Now the village is yours to step over.",
+     "shot": "003_god_giant_s2_make_me_a_giant.jpg"
+    }
+   ],
+   "fps": {
+    "avg": 60,
+    "min1": 60,
+    "gap": 17
+   },
+   "usd": 0.0032,
+   "errors": [],
+   "errorCount": 0
+  },
+  {
+   "id": "land_islands",
+   "group": "land",
+   "steps": [
+    {
+     "step": 1,
+     "text": "turn all of this into an ocean with little islands",
+     "thought": true,
+     "idleMs": 1135,
+     "intent": {
+      "model": "haiku",
+      "ms": 1447,
+      "firstOpMs": 1117,
+      "count": 3
+     },
+     "entry": {
+      "ops": [
+       "spawn water×1"
+      ],
+      "dropped": 0,
+      "notes": [],
+      "say": [],
+      "spawned": 1,
+      "modified": 0,
+      "removed": 0
+     },
+     "director": null,
+     "forge": [],
+     "fps": {
+      "avg": 59,
+      "min1": 53,
+      "gap": 133
+     },
+     "before": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": 0.2
+     },
+     "after": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0.47,
+      "pitch": 0.27
+     },
+     "census": {
+      "entities": 6,
+      "kinds": 2,
+      "top": [
+       "island×5",
+       "water×1"
+      ],
+      "time": "dusk"
+     },
+     "hud": "The sea rolls out. Islands rise.",
+     "shot": "004_land_islands_s1_turn_all_of_this_into_an_oce.jpg"
+    }
+   ],
+   "fps": {
+    "avg": 59,
+    "min1": 53,
+    "gap": 133
+   },
+   "usd": 0.001,
+   "errors": [],
+   "errorCount": 0
+  },
+  {
+   "id": "tp_spaceship",
+   "group": "teleport",
+   "steps": [
+    {
+     "step": 1,
+     "text": "take me to the bridge of a spaceship",
+     "thought": true,
+     "idleMs": 1886,
+     "intent": {
+      "model": "haiku",
+      "ms": 2036,
+      "firstOpMs": 1873,
+      "count": 2
+     },
+     "entry": {
+      "ops": [
+       "teleport spaceship bridge"
+      ],
+      "dropped": 0,
+      "notes": [],
+      "say": [],
+      "spawned": 0,
+      "modified": 0,
+      "removed": 0
+     },
+     "director": {
+      "world": "spaceship bridge",
+      "status": "done",
+      "ops": 37,
+      "dropped": 0,
+      "firstOpMs": 3290,
+      "doneMs": 18618,
+      "usd": 0.0325695,
+      "error": null
+     },
+     "forge": [
+      {
+       "kind": "captains_chair",
+       "tier": "good",
+       "outcome": "refined",
+       "refinedMs": 10046,
+       "parts": 24,
+       "usd": 0.0317,
+       "library": false
+      }
+     ],
+     "fps": {
+      "avg": 60,
+      "min1": 57,
+      "gap": 67
+     },
+     "before": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "after": {
+      "pos": [
+       0,
+       1.7,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "census": {
+      "entities": 32,
+      "kinds": 13,
+      "top": [
+       "panel_wall×8",
+       "wall×5",
+       "hanging_lamp×4",
+       "console×3",
+       "person×3",
+       "chair×2",
+       "floor×1",
+       "rug×1",
+       "viewport×1",
+       "ceiling×1",
+       "captains_chair×1",
+       "potted_plant×1"
+      ],
+      "time": "interior"
+     },
+     "hud": "",
+     "shot": "005_tp_spaceship_s1_take_me_to_the_bridge_of_a_s.jpg"
+    }
+   ],
+   "fps": {
+    "avg": 60,
+    "min1": 57,
+    "gap": 67
+   },
+   "usd": 0.0663,
+   "errors": [],
+   "errorCount": 0
+  },
+  {
+   "id": "tp_underwater",
+   "group": "teleport",
+   "steps": [
+    {
+     "step": 1,
+     "text": "take me to the bottom of the ocean",
+     "thought": true,
+     "idleMs": 1393,
+     "intent": {
+      "model": "haiku",
+      "ms": 1514,
+      "firstOpMs": 1386,
+      "count": 2
+     },
+     "entry": {
+      "ops": [
+       "teleport ocean depths"
+      ],
+      "dropped": 0,
+      "notes": [],
+      "say": [],
+      "spawned": 0,
+      "modified": 0,
+      "removed": 0
+     },
+     "director": {
+      "world": "ocean depths",
+      "status": "done",
+      "ops": 25,
+      "dropped": 0,
+      "firstOpMs": 2646,
+      "doneMs": 18837,
+      "usd": 0.0321155,
+      "error": null
+     },
+     "forge": [
+      {
+       "kind": "glow_coral",
+       "tier": "good",
+       "outcome": "library hit",
+       "refinedMs": 17,
+       "parts": 18,
+       "usd": 0,
+       "library": true
+      }
+     ],
+     "fps": {
+      "avg": 60,
+      "min1": 56,
+      "gap": 83
+     },
+     "before": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "after": {
+      "pos": [
+       0,
+       1.7,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "census": {
+      "entities": 79,
+      "kinds": 10,
+      "top": [
+       "rock×19",
+       "glow_coral×17",
+       "jellyfish×17",
+       "fan_coral×12",
+       "anemone×8",
+       "fish_school×2",
+       "floor×1",
+       "shipwreck×1",
+       "fireflies×1",
+       "whale×1"
+      ],
+      "time": "night"
+     },
+     "hud": "",
+     "shot": "006_tp_underwater_s1_take_me_to_the_bottom_of_the.jpg"
+    }
+   ],
+   "fps": {
+    "avg": 60,
+    "min1": 56,
+    "gap": 83
+   },
+   "usd": 0.0331,
+   "errors": [],
+   "errorCount": 0
+  },
+  {
+   "id": "tp_castle",
+   "group": "teleport",
+   "steps": [
+    {
+     "step": 1,
+     "text": "take me to a medieval castle courtyard",
+     "thought": true,
+     "idleMs": 1441,
+     "intent": {
+      "model": "haiku",
+      "ms": 1552,
+      "firstOpMs": 1434,
+      "count": 2
+     },
+     "entry": {
+      "ops": [
+       "teleport castle courtyard"
+      ],
+      "dropped": 0,
+      "notes": [],
+      "say": [],
+      "spawned": 0,
+      "modified": 0,
+      "removed": 0
+     },
+     "director": {
+      "world": "castle courtyard",
+      "status": "done",
+      "ops": 51,
+      "dropped": 0,
+      "firstOpMs": 2710,
+      "doneMs": 27894,
+      "usd": 0.0510195,
+      "error": null
+     },
+     "forge": [
+      {
+       "kind": "stone_well",
+       "tier": "good",
+       "outcome": "library hit",
+       "refinedMs": 52,
+       "parts": 26,
+       "usd": 0,
+       "library": true
+      }
+     ],
+     "fps": {
+      "avg": 60,
+      "min1": 60,
+      "gap": 17
+     },
+     "before": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "after": {
+      "pos": [
+       0,
+       1.7,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "census": {
+      "entities": 54,
+      "kinds": 17,
+      "top": [
+       "wall_torch×10",
+       "person×6",
+       "bird×6",
+       "wall×4",
+       "round_tower×4",
+       "banner_pole×4",
+       "brazier×4",
+       "embers×4",
+       "barrel×3",
+       "bench×2",
+       "floor×1",
+       "rug×1"
+      ],
+      "time": "dusk"
+     },
+     "hud": "",
+     "shot": "007_tp_castle_s1_take_me_to_a_medieval_castle.jpg"
+    }
+   ],
+   "fps": {
+    "avg": 60,
+    "min1": 60,
+    "gap": 17
+   },
+   "usd": 0.0541,
+   "errors": [],
+   "errorCount": 0
+  },
+  {
+   "id": "sky_aurora",
+   "group": "sky",
+   "steps": [
+    {
+     "step": 1,
+     "text": "make it night with the northern lights",
+     "thought": true,
+     "idleMs": 1205,
+     "intent": {
+      "model": "haiku",
+      "ms": 1289,
+      "firstOpMs": 1189,
+      "count": 2
+     },
+     "entry": {
+      "ops": [
+       "atmosphere night/aurora"
+      ],
+      "dropped": 0,
+      "notes": [],
+      "say": [],
+      "spawned": 0,
+      "modified": 0,
+      "removed": 0
+     },
+     "director": null,
+     "forge": [],
+     "fps": {
+      "avg": 60,
+      "min1": 60,
+      "gap": 17
+     },
+     "before": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "after": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": 0.5
+     },
+     "census": {
+      "entities": 0,
+      "kinds": 0,
+      "top": [],
+      "time": "night",
+      "weather": "aurora"
+     },
+     "hud": "Night falls. The sky shimmers green.",
+     "shot": "008_sky_aurora_s1_make_it_night_with_the_north.jpg"
+    }
+   ],
+   "fps": {
+    "avg": 60,
+    "min1": 60,
+    "gap": 17
+   },
+   "usd": 0.001,
+   "errors": [],
+   "errorCount": 0
+  },
+  {
+   "id": "sky_blizzard",
+   "group": "sky",
+   "steps": [
+    {
+     "step": 1,
+     "text": "some pine trees",
+     "thought": true,
+     "idleMs": 1295,
+     "intent": {
+      "model": "haiku",
+      "ms": 1308,
+      "firstOpMs": 1282,
+      "count": 2
+     },
+     "entry": {
+      "ops": [
+       "spawn pine×5"
+      ],
+      "dropped": 0,
+      "notes": [],
+      "say": [],
+      "spawned": 5,
+      "modified": 0,
+      "removed": 0
+     },
+     "director": null,
+     "forge": [],
+     "fps": {
+      "avg": 60,
+      "min1": 60,
+      "gap": 17
+     },
+     "before": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "after": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "census": {
+      "entities": 5,
+      "kinds": 1,
+      "top": [
+       "pine×5"
+      ],
+      "time": "dusk"
+     },
+     "hud": "A small grove rises.",
+     "shot": "009_sky_blizzard_s1_some_pine_trees.jpg"
+    },
+    {
+     "step": 2,
+     "text": "now a blizzard",
+     "thought": true,
+     "idleMs": 1201,
+     "intent": {
+      "model": "haiku",
+      "ms": 1243,
+      "firstOpMs": 1189,
+      "count": 2
+     },
+     "entry": {
+      "ops": [
+       "atmosphere snow"
+      ],
+      "dropped": 0,
+      "notes": [],
+      "say": [],
+      "spawned": 0,
+      "modified": 0,
+      "removed": 0
+     },
+     "director": null,
+     "forge": [],
+     "fps": {
+      "avg": 60,
+      "min1": 60,
+      "gap": 17
+     },
+     "before": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "after": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "census": {
+      "entities": 5,
+      "kinds": 1,
+      "top": [
+       "pine×5"
+      ],
+      "time": "dusk",
+      "weather": "snow"
+     },
+     "hud": "The white wind comes.",
+     "shot": "010_sky_blizzard_s2_now_a_blizzard.jpg"
+    }
+   ],
+   "fps": {
+    "avg": 60,
+    "min1": 60,
+    "gap": 17
+   },
+   "usd": 0.002,
+   "errors": [],
+   "errorCount": 0
+  },
+  {
+   "id": "people_dance",
+   "group": "people",
+   "steps": [
+    {
+     "step": 1,
+     "text": "a crowd of people dancing",
+     "thought": true,
+     "idleMs": 1194,
+     "intent": {
+      "model": "haiku",
+      "ms": 1320,
+      "firstOpMs": 1176,
+      "count": 2
+     },
+     "entry": {
+      "ops": [
+       "spawn person×14"
+      ],
+      "dropped": 0,
+      "notes": [],
+      "say": [],
+      "spawned": 14,
+      "modified": 0,
+      "removed": 0
+     },
+     "director": null,
+     "forge": [],
+     "fps": {
+      "avg": 60,
+      "min1": 60,
+      "gap": 17
+     },
+     "before": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "after": {
+      "pos": [
+       0,
+       1.6,
+       0
+      ],
+      "yaw": 0,
+      "pitch": -0.12
+     },
+     "census": {
+      "entities": 14,
+      "kinds": 1,
+      "top": [
+       "person×14"
+      ],
+      "time": "dusk"
+     },
+     "hud": "Music! A crowd, dancing.",
+     "shot": "011_people_dance_s1_a_crowd_of_people_dancing.jpg"
+    }
+   ],
+   "fps": {
+    "avg": 60,
+    "min1": 60,
+    "gap": 17
+   },
+   "usd": 0.0016,
+   "errors": [],
+   "errorCount": 0
+  }
+ ]
+}

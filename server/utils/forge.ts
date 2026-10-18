@@ -16,6 +16,7 @@ import { generateText, streamText } from 'ai'
 import { boundsOf, fitToDraft, isBudgetError, islands, libKey, partsToProgram } from '../../shared/world/forge.ts'
 import type { Tier } from '../../shared/world/forge.ts'
 import type { Part } from '../../shared/world/ops.ts'
+import { STYLE_IMAGE, STYLE_WITH_PALETTE } from '../../shared/world/style.ts'
 import { FORGE_MODELS, REF_IMAGE_USD, costUsd } from './aiModels.ts'
 import { FORGE_ESTIMATE, forgeCanSpend, forgeRecord } from './forgeLedger.ts'
 import { programToParts, streamRunner, stripProgram } from './forgeRun.ts'
@@ -23,7 +24,8 @@ import { programToParts, streamRunner, stripProgram } from './forgeRun.ts'
 const FRAME = `Units are metres. Origin = the object's centre on the ground; y is up; +z is the object's FRONT (it faces the viewer); +x is to the viewer's right. Long things (animals, vehicles, boats) run along z with the head or front at +z.
 Real-world scale: a person 1.8 m, a chair seat 0.45 m, a door 2 m, a car 4.5 m long, a horse 2.4 m long, a house 5 m tall.
 Every part must touch or overlap another part; the whole thing rests on the ground (lowest point y≈0) unless it flies or hovers.
-Colours are "#hex". Use 3–6 harmonious colours, not one flat colour for everything.`
+Colours are "#hex".
+${STYLE_WITH_PALETTE}`
 
 const API = `Write the BODY of a JS function. Available functions (each adds one part; o = optional {rot:[x,y,z], mirror:true, slot, material}):
   box(size,at,color,o) sphere(size,at,color,o) cylinder(size,at,color,o) cone(size,at,color,o) capsule(size,at,color,o) torus(size,at,color,o)
@@ -33,18 +35,18 @@ const API = `Write the BODY of a JS function. Available functions (each adds one
   extrude(outline, depth, at, color, o) — 2D [[x,y],...] outline with thickness along z. Wings, sails, fins, ears, signs. o.rot [0,1.571,0] = side panel, [-1.571,0,0] = lying flat.
   PI, Math, loops and variables are available. mirror:true adds the x → −x copy: describe the +x side only (legs, wings, eyes, wheels).
 Slots: o.slot:'primary' on the main body masses (when the player says "make it red", those parts turn red), 'trim' on accents and secondary colour, 'glow' on things that emit light (lamps, flames, windows, eyes, crystals). o.material: 'wood' | 'metal' | 'glass' | 'stone' | 'matte'.
-Use consts for key anchor points so parts line up and joints are shared; loops for repeats (windows, spokes, planks, ribs). At most 200 parts after mirroring.
+Use consts for key anchor points so parts line up and joints are shared; loops for repeats (windows, spokes, planks, ribs). Aim for 30–90 parts (a showpiece 90–180); at most 200 after mirroring. More parts are not better: chunky readable masses beat fine detail.
 Silhouette over detail: exaggerate what makes it recognisable from 20 m.
 Order statements biggest to smallest: main masses first, then limbs and structure, small details last — the player watches each line appear. One statement per line.
 Output ONLY the JavaScript body. First line: // name: <snake_case>. No JSON, no code fences, no prose.`
 
-const LIVE = `You are a low-poly 3D sculptor who writes tiny JavaScript programs that build charming, instantly recognisable objects for a world that is built by talking.\n${FRAME}\n${API}`
+const LIVE = `You are a toy-diorama 3D sculptor who writes tiny JavaScript programs that build charming, instantly recognisable objects for a world that is built by talking.\n${FRAME}\n${API}`
 const REFINE = `${LIVE}\nYou are REFINING a first draft. Look at its render, find the most important problems (floating or disconnected parts, wrong proportions, missing signature features, flat single colour) and rewrite the whole program much better. Keep what works: the same kind of thing, its colours and its overall size.`
 const REF_NOTE = 'A rough reference concept image of the target is attached. Match its silhouette, proportions, pose, signature features and colours with your shapes (ignore its background and fine texture). It is the goal; do not invent a different design.'
 const SPEED = 'SPEED MATTERS: the player watches each line appear, so the line right after the name line must already create the main body mass. Declare at most 2–3 key numbers, all on ONE line, then build immediately (use literal numbers where you can; no palette object, no long block of consts). Order: main masses first, then limbs and structure, small details last. No comments other than the name line.'
 
 const REF_DIR = resolve(process.cwd(), '.data/forge/ref')
-const refPrompt = (w: string) => `Low-poly 3D game asset of ${w}, built from simple chunky geometric shapes, flat colours, three-quarter view from the front-right, whole object visible, on plain green ground, plain light blue background, no text.`
+const refPrompt = (w: string) => `${STYLE_IMAGE}: ${w}, three-quarter view from the front-right, whole object visible, on plain green ground, plain light blue background, no text.`
 
 export type ForgeEvent
   = | { t: 'stage', stage: 'ref' | 'refine', ms: number }
@@ -311,7 +313,7 @@ export async function forgeJudge(req: { text: string, current: string, polish: s
       maxRetries: 1,
       abortSignal: AbortSignal.timeout(30_000),
       providerOptions: { gateway: { only: ['anthropic'] } },
-      instructions: 'You judge low-poly 3D objects built from simple shapes for a world built by talking. Be decisive.',
+      instructions: 'You judge chunky toy-diorama 3D objects built from simple shapes for a world built by talking. Prefer chunky, readable silhouettes and a cohesive muted palette over detail count. Be decisive.',
       messages: [{
         role: 'user',
         content: [
