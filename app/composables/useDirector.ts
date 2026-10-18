@@ -115,7 +115,7 @@ async function start(tp: NonNullable<Effects['teleport']>, batch: Batch) {
     res = await fetch('/api/director', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ world: tp.world, brief: tp.brief, player: batch.ctx.player }),
+      body: JSON.stringify({ world: tp.world, brief: tp.brief, player: batch.ctx.player, ...(batch.ctx.fresh ? { fresh: true } : {}) }),
       signal: mine.signal
     })
   } catch (err) {

@@ -37,6 +37,10 @@ voice / text ──► intent (Haiku) ──► flat ops ──► kernel (pure,
 - **Forge.** `server/utils/forge.ts`, `forgeRun.ts`, `forgeLedger.ts` and `server/api/forge/*` run progressive
   generation, spend caps and the library under `.data/forge/`. Client: `app/composables/useForge.ts`; the studio
   shots the judge compares come from `app/world/studio.ts`.
+- **Fresh mode.** `shared/world/fresh.ts` (which kit kinds stay as scenery, the prompt addenda, the rename for a
+  repeated wish), `app/composables/useFresh.ts` (`?fresh=1`, localStorage `voice-world.fresh`). It rides on the
+  sentence's `ctx.fresh`, so intent, the kernel's conjuring, the Director and the forge (no library, no
+  reference-image cache) all see it, and a replayed log stays the same.
 - **People.** `shared/npc/*` covers personas, routines, routing and replies; `server/utils/npc.ts` and
   `server/api/npc/*` handle minds, memory summaries and TTS; `app/composables/useNpc.ts` runs minds and
   conversations on the client, `app/world/npc/people.ts` renders them and `app/world/npc/voice.ts` speaks for them.

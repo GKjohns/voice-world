@@ -15,6 +15,7 @@ import { setGazeOverride } from '~/world/look'
 import { useDirector } from './useDirector'
 import { useForge } from './useForge'
 import { useNpc } from './useNpc'
+import { useFresh } from './useFresh'
 
 const STORAGE_KEY = 'voice-world:world:v1'
 /** The saved view (WorldScene saves it on pagehide); a reset forgets it so a reload starts at the start. */
@@ -72,7 +73,9 @@ function snapshot(): OpContext {
   return {
     gaze: g ? { point: g.point, entity: g.entity, dist: g.dist } : { point: [0, 0, -10] },
     player: renderer?.player() ?? { pos: [0, 1.6, 0], yaw: 0 },
-    seed: Math.floor(Math.random() * 2 ** 31)
+    seed: Math.floor(Math.random() * 2 ** 31),
+    // Fresh mode rides on the sentence's own context, so a replay of the log keeps what it did.
+    ...(useFresh().fresh.value ? { fresh: true } : {})
   }
 }
 

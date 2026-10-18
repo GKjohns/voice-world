@@ -6,6 +6,7 @@
 import { buildContext, sceneToState } from '../../shared/world/context.ts'
 import type { Scene } from '../../shared/world/context.ts'
 import { KIT } from '../../shared/world/kinds.ts'
+import { FRESH_INTENT, freshRenamer } from '../../shared/world/fresh.ts'
 import { STYLE_WITH_PALETTE } from '../../shared/world/style.ts'
 import { parseOps } from '../../shared/world/ops.ts'
 import type { DroppedOp, Op } from '../../shared/world/ops.ts'
@@ -434,7 +435,10 @@ Context: people: Mara (fisherman) 5 m ahead · Tomas (villager) 8 m left
 
 /** The per-call part: the context block plus the sentence. */
 export function intentPrompt(text: string, scene: Partial<Scene> | undefined, ctx: OpContext): string {
-  return `## Context (at speech start)\n${buildContext(sceneToState(scene), ctx)}\n\n## Sentence\n"${text.trim().slice(0, 500)}"`
+  // Fresh mode rides in the per-call part, so the cached digest stays byte-identical.
+  const taken = (scene?.learned ?? []).map(k => k.kind).slice(0, 40)
+  const fresh = ctx.fresh ? `${FRESH_INTENT}${taken.length ? `\nKind names already taken (a new design never reuses one): ${taken.join(', ')}.` : ''}\n\n` : ''
+  return `${fresh}## Context (at speech start)\n${buildContext(sceneToState(scene), ctx)}\n\n## Sentence\n"${text.trim().slice(0, 500)}"`
 }
 
 /**
@@ -446,7 +450,11 @@ export async function* streamIntent(req: IntentRequest): AsyncGenerator<IntentEv
   const { alias, id } = resolveModel(req.model)
   let firstOpMs: number | undefined
   let index = 0
+  /** Ops the model has closed so far (held ones included): the stall watchdog's measure of progress. */
+  let seen = 0
   const t0 = Date.now()
+  // Fresh mode: a repeated wish that re-defines a learned kind gets a new kind name (see freshRenamer).
+  const fresh = req.ctx.fresh ? freshRenamer<Op>((req.scene?.learned ?? []).map(k => k.kind)) : null
   // Gauntlet loop 1: a stalled call (no first op after FIRST_OP_MS; one took 8.9 s) is dropped and retried once.
   for (let attempt = 0; attempt < 2; attempt++) {
     const ctrl = new AbortController()
@@ -456,7 +464,7 @@ export async function* streamIntent(req: IntentRequest): AsyncGenerator<IntentEv
     let stalled = false
     const watchdog = attempt === 0
       ? setTimeout(() => {
-          if (index === 0) {
+          if (seen === 0) {
             stalled = true
             ctrl.abort(new Error(`no first op in ${FIRST_OP_MS} ms`))
           }
@@ -477,14 +485,18 @@ export async function* streamIntent(req: IntentRequest): AsyncGenerator<IntentEv
         const ms = Date.now() - t0
         if (ev.t === 'op') {
           const parsed = parseOps([ev.op])
-          for (const op of parsed.ops) {
-            firstOpMs ??= ms
-            yield { t: 'op', op, ms, i: index++ }
+          for (const op0 of parsed.ops) {
+            seen++
+            for (const op of fresh ? fresh.push(op0) : [op0]) {
+              firstOpMs ??= ms
+              yield { t: 'op', op, ms, i: index++ }
+            }
           }
           for (const d of parsed.dropped) yield { t: 'drop', dropped: { ...d, index: ev.i } }
-        } else if (stalled && index === 0 && attempt === 0 && !req.signal?.aborted) {
+        } else if (stalled && seen === 0 && attempt === 0 && !req.signal?.aborted) {
           console.warn(`[intent] "${req.text.slice(0, 60)}": no first op in ${FIRST_OP_MS} ms; retrying once`)
         } else {
+          for (const op of fresh?.end() ?? []) yield { t: 'op', op, ms, i: index++ }
           yield { t: 'done', ms, model: alias, count: index, firstOpMs, error: ev.error, usage: ev.usage, costUsd: ev.costUsd, recovered: ev.recovered, provider: ev.provider }
           return
         }

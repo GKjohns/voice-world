@@ -10,6 +10,9 @@
  * The draft never waits on any of this, failures quietly keep the draft, a budget refusal stops forging
  * for the session, and an undo / remove / redefine of the kind aborts its job (upgradeKind checks the
  * basis too). Model code never reaches the client: only parts.
+ *
+ * Fresh mode (useFresh, shared/world/fresh.ts) skips the library (no read, no save) and asks the server not
+ * to use or keep its reference-image cache, so every forged thing is generated from scratch.
  */
 import { shallowRef, watch } from 'vue'
 import { HERO_WORDS, UPGRADE_WORDS, chooseTier, islands } from '#shared/world/forge'
@@ -22,6 +25,8 @@ export interface ForgeRecord {
   kind: string
   tier: Tier
   text: string
+  /** Generated in Fresh mode (no library, no cached reference image). */
+  fresh?: boolean
   /** ms since the sentence started (performance.now based). */
   t0: number
   proxyMs?: number
@@ -42,10 +47,14 @@ interface Job {
   ctrl: AbortController
   basis: string
   rec: ForgeRecord
+  /** Fresh mode when the job started: no library, no cached reference; `id` scopes its one reference image. */
+  fresh: boolean
+  id: string
 }
 
 const session = `s${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`
 const jobs = new Map<string, Job>()
+let jobCount = 0
 const spent = shallowRef(0)
 const disabled = shallowRef(false)
 const log = shallowRef<ForgeRecord[]>([])
@@ -125,8 +134,9 @@ async function start(kind: string, text: string, tier: Tier, marks: { t0: number
   const desc = world.state.value.kinds[kind]
   if (!desc?.parts || !desc.basis) return
   const basis = desc.basis
-  const rec: ForgeRecord = { kind, tier, text, t0: marks.t0, proxyMs: marks.proxyMs, draftMs: draftAt !== undefined ? Math.round(draftAt - marks.t0) : undefined, usd: 0 }
-  const job: Job = { kind, tier, ctrl: new AbortController(), basis, rec }
+  const fresh = useFresh().fresh.value
+  const rec: ForgeRecord = { kind, tier, text, t0: marks.t0, proxyMs: marks.proxyMs, draftMs: draftAt !== undefined ? Math.round(draftAt - marks.t0) : undefined, usd: 0, ...(fresh ? { fresh } : {}) }
+  const job: Job = { kind, tier, ctrl: new AbortController(), basis, rec, fresh, id: `${session}-${++jobCount}` }
   jobs.set(kind, job)
   publish(rec)
   const since = () => Math.round(performance.now() - marks.t0)
@@ -137,7 +147,8 @@ async function start(kind: string, text: string, tier: Tier, marks: { t0: number
   }
   try {
     // 1. The library: a forged version of this kind (or this wish) from any earlier session, for $0.
-    const lib = await fetch(`/api/forge/lib?kind=${encodeURIComponent(kind)}&text=${encodeURIComponent(text)}&tier=${tier}`, { signal: job.ctrl.signal }).then(r => r.json()).catch(() => null) as { hit?: boolean, parts?: Part[], quality?: Tier, code?: string } | null
+    //    Fresh mode never looks.
+    const lib = fresh ? null : await fetch(`/api/forge/lib?kind=${encodeURIComponent(kind)}&text=${encodeURIComponent(text)}&tier=${tier}`, { signal: job.ctrl.signal }).then(r => r.json()).catch(() => null) as { hit?: boolean, parts?: Part[], quality?: Tier, code?: string } | null
     if (job.ctrl.signal.aborted) return
     if (lib?.hit && lib.parts?.length) {
       // Let the draft's own arrival finish first, so the upgrade reads as an upgrade.
@@ -168,7 +179,7 @@ async function start(kind: string, text: string, tier: Tier, marks: { t0: number
     const res = await fetch('/api/forge', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ kind, text, tier, draft, image, session }),
+      body: JSON.stringify({ kind, text, tier, draft, image, session, fresh, job: job.id }),
       signal: job.ctrl.signal
     })
     if (!res.ok || !res.body) throw new Error(`forge HTTP ${res.status}`)
@@ -196,7 +207,7 @@ async function start(kind: string, text: string, tier: Tier, marks: { t0: number
     rec.refinedMs = since()
     rec.parts = d.parts.length
     if (!ok) return finish('refined, but the kind changed')
-    void fetch('/api/forge/lib', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ kind, text, quality: tier, parts: d.parts, code: d.code, usd: d.usd }) }).catch(() => {})
+    if (!fresh) void fetch('/api/forge/lib', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ kind, text, quality: tier, parts: d.parts, code: d.code, usd: d.usd }) }).catch(() => {})
     if (tier !== 'hero') return finish('refined')
     rec.outcome = 'refined; polishing'
     publish(rec)
@@ -220,7 +231,7 @@ async function polish(job: Job, text: string, current: Part[], code: string | un
   const p = await fetch('/api/forge/polish', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ kind, text, parts: current, code, image, session }),
+    body: JSON.stringify({ kind, text, parts: current, code, image, session, fresh: job.fresh, job: job.id }),
     signal: job.ctrl.signal
   }).then(res => res.json()).catch(() => null) as { ok?: boolean, parts?: Part[], usd?: number, reason?: string, budget?: boolean } | null
   if (job.ctrl.signal.aborted) return
@@ -236,7 +247,7 @@ async function polish(job: Job, text: string, current: Part[], code: string | un
   await sleep(200) // its programs compile in the background meanwhile
   const [a, b] = [await r.studioShot(focus2), await r.studioShot(focus2, candidate)]
   if (!a || !b) return finish('refined; polish not judged (no renders)')
-  const j = await fetch('/api/forge/judge', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text, current: a, polish: b, session }) })
+  const j = await fetch('/api/forge/judge', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text, current: a, polish: b, session, fresh: job.fresh, job: job.id }) })
     .then(res => res.json()).catch(() => null) as { polishWins?: boolean, why?: string, usd?: number } | null
   rec.usd += j?.usd ?? 0
   spent.value += j?.usd ?? 0
@@ -244,7 +255,7 @@ async function polish(job: Job, text: string, current: Part[], code: string | un
   if (job.ctrl.signal.aborted) return
   if (!j?.polishWins) return finish(`refined; polish lost the judge (${j?.why ?? '?'})`)
   const ok = world.upgradeKind(kind, p.parts, { basis, quality: 'hero' })
-  if (ok) void fetch('/api/forge/lib', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ kind, text, quality: 'hero', parts: p.parts, usd: rec.usd }) }).catch(() => {})
+  if (ok && !job.fresh) void fetch('/api/forge/lib', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ kind, text, quality: 'hero', parts: p.parts, usd: rec.usd }) }).catch(() => {})
   rec.parts = p.parts.length
   return finish(ok ? `polished (${j.why})` : 'polished, but the kind changed')
 

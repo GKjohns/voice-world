@@ -1,5 +1,5 @@
 /**
- * POST /api/director { world, brief, player } → NDJSON, one event per line as the recipe streams:
+ * POST /api/director { world, brief, player, fresh? } → NDJSON, one event per line as the recipe streams:
  *   {"t":"op","op":{...},"ms":1720,"i":0}   a Director op (loose; the client runs directorToOp + parseOps)
  *   {"t":"done","ms":7180,"count":28,...}    usage and cost
  *   {"t":"error","ms":...,"error":"..."}
@@ -14,6 +14,7 @@ interface Body {
   world?: string
   brief?: string
   player?: Partial<Player>
+  fresh?: boolean
 }
 
 export default defineEventHandler(async (event) => {
@@ -32,9 +33,9 @@ export default defineEventHandler(async (event) => {
   return new ReadableStream<Uint8Array>({
     async start(controller) {
       let first = 0
-      for await (const ev of directScene({ world, brief, model: typeof model === 'string' ? model : undefined, signal: ctrl.signal })) {
+      for await (const ev of directScene({ world, brief, model: typeof model === 'string' ? model : undefined, signal: ctrl.signal, fresh: body.fresh === true })) {
         if (ev.t === 'op' && !first) first = ev.ms
-        if (ev.t === 'done') console.info(`[director] ${ev.model} “${world}” first op ${first} ms · done ${ev.ms} ms · ${ev.count} ops · $${ev.costUsd.toFixed(4)} · cache read ${ev.usage.cacheRead}`)
+        if (ev.t === 'done') console.info(`[director]${body.fresh === true ? ' fresh' : ''} ${ev.model} “${world}” first op ${first} ms · done ${ev.ms} ms · ${ev.count} ops · $${ev.costUsd.toFixed(4)} · cache read ${ev.usage.cacheRead}`)
         if (ev.t === 'error') console.warn(`[director] “${world}” failed after ${ev.ms} ms: ${ev.error}`)
         if (ctrl.signal.aborted) break
         try {

@@ -39,6 +39,8 @@ export interface OpContext {
   gaze: GazeSnapshot
   player: Player
   seed: number
+  /** Fresh mode was on for this sentence: the engine never conjures a kit showpiece (shared/world/fresh.ts). */
+  fresh?: boolean
 }
 
 export interface Atmosphere {

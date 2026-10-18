@@ -10,6 +10,7 @@
  * imports, no Nitro globals) so scripts can run it directly.
  */
 import { KIT } from '../../shared/world/kinds.ts'
+import { FRESH_DIRECTOR } from '../../shared/world/fresh.ts'
 import { STYLE_WITH_PALETTE } from '../../shared/world/style.ts'
 import { resolveModel } from './aiModels.ts'
 import type { Usage } from './aiModels.ts'
@@ -185,6 +186,8 @@ export interface DirectorRequest {
   /** Hard deadline, 45 s by default. */
   timeoutMs?: number
   maxOutputTokens?: number
+  /** Fresh mode (shared/world/fresh.ts): what the place names is designed, not taken from the catalog. */
+  fresh?: boolean
 }
 
 export type DirectorEvent
@@ -195,7 +198,7 @@ export type DirectorEvent
 
 export function directorPrompt(req: DirectorRequest): string {
   const brief = (req.brief ?? '').trim().slice(0, 400)
-  return `## Place\n${req.world.trim().slice(0, 80)}\n\n## Brief\n${brief || `(none: decide what "${req.world}" should feel like)`}`
+  return `${req.fresh ? `${FRESH_DIRECTOR}\n\n` : ''}## Place\n${req.world.trim().slice(0, 80)}\n\n## Brief\n${brief || `(none: decide what "${req.world}" should feel like)`}`
 }
 
 /** Stream a scene recipe. Never throws: failures come back as an `error` event. */

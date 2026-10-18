@@ -5,7 +5,7 @@
  *   {"t":"done","ms":998,"model":"haiku","count":2,"firstOpMs":805,"error"?:"..."}
  * `state` is the trimmed scene from `trimScene` (entities' kind/tags/pos/props/group plus learned kinds, no
  * log); `ctx` is the gaze snapshot taken when the player started typing or speaking. `?model=sonnet` swaps
- * the model. Closing the request aborts the model call.
+ * the model. `ctx.fresh` turns on Fresh mode (shared/world/fresh.ts). Closing the request aborts the model call.
  */
 import type { Scene } from '#shared/world/context'
 import type { OpContext } from '#shared/world/types'
@@ -28,7 +28,8 @@ export default defineEventHandler(async (event) => {
   const ctx: OpContext = {
     gaze: c.gaze?.point ? c.gaze : { point: [0, 0, -10] },
     player: c.player?.pos ? c.player : { pos: [0, 1.6, 0], yaw: 0 },
-    seed: typeof c.seed === 'number' ? c.seed : 1
+    seed: typeof c.seed === 'number' ? c.seed : 1,
+    ...(c.fresh === true ? { fresh: true } : {})
   }
   const model = getQuery(event).model
   const ctrl = new AbortController()
@@ -41,7 +42,7 @@ export default defineEventHandler(async (event) => {
       let dropped = 0
       for await (const ev of streamIntent({ text, scene: body.state, ctx, model: typeof model === 'string' ? model : undefined, signal: ctrl.signal })) {
         if (ev.t === 'drop') dropped++
-        if (ev.t === 'done') console.info(`[intent] ${ev.model}${ev.provider && ev.provider !== 'anthropic' ? `@${ev.provider}` : ''} first op ${ev.firstOpMs ?? '-'} ms · done ${ev.ms} ms · ops=${ev.count} dropped=${dropped}${ev.recovered ? ' (recovered)' : ''}${ev.error ? ` error=${ev.error}` : ''} “${text.slice(0, 80)}”`)
+        if (ev.t === 'done') console.info(`[intent]${ctx.fresh ? ' fresh' : ''} ${ev.model}${ev.provider && ev.provider !== 'anthropic' ? `@${ev.provider}` : ''} first op ${ev.firstOpMs ?? '-'} ms · done ${ev.ms} ms · ops=${ev.count} dropped=${dropped}${ev.recovered ? ' (recovered)' : ''}${ev.error ? ` error=${ev.error}` : ''} “${text.slice(0, 80)}”`)
         if (ctrl.signal.aborted) break
         try {
           const line = ev.t === 'done'

@@ -5,7 +5,8 @@
  * - refine: Opus (reasoning none, pinned to Anthropic) looks at a render of the Haiku draft (plus, on the
  *   hero tier, a reference concept image) and streams a better program; each closed line is run in the
  *   sandbox (forgeRun.ts) and only the new plain parts are emitted.
- * - ref: Gemini image model draws an invisible reference concept, cached on disk by the wish's key.
+ * - ref: Gemini image model draws an invisible reference concept, cached on disk by the wish's key (Fresh
+ *   mode: never read from or written to disk, drawn once per forge job and kept in memory for that job).
  * - polish (hero only, background): Sol (reasoning low) rebuilds the current object toward the reference.
  * - judge: Haiku compares two renders against the reference, in both A/B orders.
  * Every call is checked against the ledger before it starts and recorded after. Nothing here throws.
@@ -62,6 +63,15 @@ export interface ForgeRequest {
   image?: string
   session: string
   signal?: AbortSignal
+  /** Fresh mode: see `RefScope`. */
+  fresh?: boolean
+  job?: string
+}
+
+/** Fresh mode skips the disk cache; its one reference per forge job (refine, polish and judge share it) lives in memory. */
+export interface RefScope {
+  fresh?: boolean
+  job?: string
 }
 
 type ImagePart = { type: 'file', data: Uint8Array, mediaType: string }
@@ -82,13 +92,29 @@ const envelope = (parts: Part[]) => {
 // ---------- the reference image (hero) ----------
 
 const refInflight = new Map<string, Promise<{ data: Uint8Array, mediaType: string } | null>>()
+/** Fresh jobs' references (key `fresh:<job>`), forgotten after 15 minutes. */
+const FRESH_REF_MS = 15 * 60_000
+const freshRefs = new Map<string, { at: number, job: Promise<{ data: Uint8Array, mediaType: string } | null> }>()
 
-/** The invisible reference concept for a wish: from the disk cache, or drawn once (in-flight de-duped). */
-export async function referenceImage(text: string, session: string): Promise<{ data: Uint8Array, mediaType: string, ms: number, cached: boolean } | null> {
-  const slug = libKey(text)
-  const file = resolve(REF_DIR, `${slug}.img`)
-  const meta = resolve(REF_DIR, `${slug}.json`)
-  if (existsSync(file) && existsSync(meta)) {
+/**
+ * The invisible reference concept for a wish: from the disk cache, or drawn once (in-flight de-duped).
+ * Fresh mode: never from or to disk; drawn once per forge job and shared by that job's refine, polish and judge.
+ */
+export async function referenceImage(text: string, session: string, scope: RefScope = {}): Promise<{ data: Uint8Array, mediaType: string, ms: number, cached: boolean } | null> {
+  const fresh = !!scope.fresh
+  const slug = fresh ? `fresh:${scope.job || `${session}:${Date.now()}:${Math.random()}`}` : libKey(text)
+  const file = resolve(REF_DIR, `${libKey(text)}.img`)
+  const meta = resolve(REF_DIR, `${libKey(text)}.json`)
+  if (fresh) {
+    const now = Date.now()
+    for (const [k, v] of freshRefs) if (now - v.at > FRESH_REF_MS) freshRefs.delete(k)
+  }
+  const held = fresh ? freshRefs.get(slug) : undefined
+  if (held) {
+    const img = await held.job
+    return img ? { ...img, ms: 0, cached: false } : null
+  }
+  if (!fresh && existsSync(file) && existsSync(meta)) {
     try {
       return { data: readFileSync(file), mediaType: (JSON.parse(readFileSync(meta, 'utf8')) as { mediaType: string }).mediaType, ms: 0, cached: true }
     } catch {
@@ -113,6 +139,7 @@ export async function referenceImage(text: string, session: string): Promise<{ d
         const usd = REF_IMAGE_USD + costUsd(FORGE_MODELS.ref, { input: r.usage?.inputTokens ?? 0, output: 0 })
         forgeRecord({ session, stage: 'ref', model: FORGE_MODELS.ref, usd, ms: Date.now() - t0, ok: !!img })
         if (!img) return null
+        if (fresh) return { data: img.uint8Array, mediaType: img.mediaType }
         if (!existsSync(REF_DIR)) mkdirSync(REF_DIR, { recursive: true })
         writeFileSync(file, img.uint8Array)
         writeFileSync(meta, JSON.stringify({ mediaType: img.mediaType, text }))
@@ -124,6 +151,7 @@ export async function referenceImage(text: string, session: string): Promise<{ d
       }
     })().finally(() => refInflight.delete(slug))
     refInflight.set(slug, job)
+    if (fresh) freshRefs.set(slug, { at: Date.now(), job })
   }
   const img = await job
   return img ? { ...img, ms: Date.now() - t0, cached: false } : null
@@ -149,7 +177,7 @@ export async function* forgeRefine(req: ForgeRequest): AsyncGenerator<ForgeEvent
   let ref: Awaited<ReturnType<typeof referenceImage>> = null
   if (req.tier === 'hero') {
     yield { t: 'stage', stage: 'ref', ms: ms() }
-    ref = await referenceImage(req.text, req.session)
+    ref = await referenceImage(req.text, req.session, req)
     refMs = ms()
     if (req.signal?.aborted) {
       yield { t: 'done', ok: false, ms: ms(), usd, reason: 'aborted', refMs }
@@ -249,6 +277,8 @@ export interface PolishRequest {
   image?: string
   session: string
   signal?: AbortSignal
+  fresh?: boolean
+  job?: string
 }
 
 /** Sol rebuilds the current object toward the reference ("the same thing getting better"). Non-streaming. */
@@ -256,7 +286,7 @@ export async function forgePolish(req: PolishRequest): Promise<{ ok: boolean, pa
   const t0 = Date.now()
   const gate = forgeCanSpend(req.session, FORGE_ESTIMATE.polish)
   if (!gate.ok) return { ok: false, usd: 0, ms: 0, reason: gate.why, budget: true }
-  const ref = await referenceImage(req.text, req.session)
+  const ref = await referenceImage(req.text, req.session, req)
   const render = dataUrlPart(req.image)
   const program = req.code && req.code.length < 30_000 ? req.code : partsToProgram(req.parts)
   try {
@@ -296,14 +326,14 @@ export async function forgePolish(req: PolishRequest): Promise<{ ok: boolean, pa
  * Does the polish beat the current build? Haiku compares the two renders against the reference twice,
  * with A/B swapped; the polish wins only if it wins both orders (progressive's rule: one order is noise).
  */
-export async function forgeJudge(req: { text: string, current: string, polish: string, session: string }): Promise<{ polishWins: boolean, why: string, usd: number, ms: number, error?: string }> {
+export async function forgeJudge(req: { text: string, current: string, polish: string, session: string, fresh?: boolean, job?: string }): Promise<{ polishWins: boolean, why: string, usd: number, ms: number, error?: string }> {
   const t0 = Date.now()
   const gate = forgeCanSpend(req.session, FORGE_ESTIMATE.judge * 2)
   if (!gate.ok) return { polishWins: false, why: gate.why, usd: 0, ms: 0, error: 'budget' }
   const cur = dataUrlPart(req.current)
   const pol = dataUrlPart(req.polish)
   if (!cur || !pol) return { polishWins: false, why: 'missing renders', usd: 0, ms: 0, error: 'missing renders' }
-  const ref = await referenceImage(req.text, req.session)
+  const ref = await referenceImage(req.text, req.session, req)
   const ask = async (polishIsA: boolean) => {
     const [a, b] = polishIsA ? [pol, cur] : [cur, pol]
     const r = await generateText({

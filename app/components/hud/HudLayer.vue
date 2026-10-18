@@ -5,12 +5,15 @@
  * text bar with its pill, model toggle and raw-op console, the camera panel). The choice persists.
  *
  * The voice and the browser mic live here, not in the dev bar, so switching views never hangs up.
+ * The corner also holds the Fresh switch (useFresh): everything you name is generated live, nothing from
+ * the kit or the forge library. `?fresh=1` in the URL turns it on for a recording.
  */
 const hud = useHud()
 const intent = useIntent()
 const voice = useRealtimeVoice()
 const world = useWorld()
 const confirmReset = ref(false)
+const { fresh, setFresh } = useFresh()
 
 /** Start over (the same path as saying "start over"); undo right after brings the old world back. */
 function resetWorld() {
@@ -40,6 +43,24 @@ onBeforeUnmount(() => {
   </template>
   <HudCamera :minimal="!hud.devMode.value" />
   <div class="absolute right-3 bottom-3 flex items-center gap-1">
+    <UTooltip :content="{ side: 'top' }">
+      <template #content>
+        <span>{{ fresh ? 'Fresh on: everything you name is generated live' : 'Fresh off: kit things and remembered forgings appear instantly' }}</span>
+      </template>
+      <UButton
+        icon="i-lucide-flame"
+        color="neutral"
+        :variant="fresh ? 'soft' : 'ghost'"
+        size="xs"
+        class="rounded-full"
+        :class="fresh ? 'text-white/70' : 'text-white/30 hover:text-white/70'"
+        :aria-label="fresh ? 'Turn Fresh mode off' : 'Turn Fresh mode on'"
+        :aria-pressed="fresh"
+        data-fresh-toggle
+        :data-fresh="fresh ? 'on' : 'off'"
+        @click="setFresh(!fresh)"
+      />
+    </UTooltip>
     <UPopover
       v-model:open="confirmReset"
       :content="{ side: 'top', align: 'end' }"

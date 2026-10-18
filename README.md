@@ -80,6 +80,11 @@ All captured headless at 1600×900 from the current build. Each caption is the s
 - Face a person and talk to them; start with "Genie, ..." to talk to the genie instead.
 - **Backtick (`)** toggles the developer HUD: status, op log, model toggle and raw-op console.
 - The **reset** button (corner icon) starts the world over; undo right after brings it back.
+- The **flame** button (corner icon) turns on **Fresh** mode, or open `http://localhost:3091/?fresh=1` (`?fresh=0`
+  forces it off; the URL wins over the remembered choice). With Fresh on, anything you name is designed live:
+  no built-in kit creature or prop, no forged object from the library, and nothing is saved to the library.
+  "A whale" gets a draft in a few seconds and its detailed version about 10 s later instead of the kit whale.
+  Scenery stays on the kit (terrain, floors and walls, water, trees, rocks, people). Off by default.
 
 The world saves to localStorage, and the developer console can export and import it as JSON.
 

@@ -4,6 +4,7 @@
  * save and load all work. No three.js here, so tests and the server context builder can use it.
  */
 import { KIT, isKitKind, learnedKind } from './kinds.ts'
+import { isFreshShowpiece } from './fresh.ts'
 import type { KindDescriptor } from './kinds.ts'
 import { altitudeY, capAltitude, deOverlap, forward, hashSeed, layout, resolveAnchor, rng, supportAt } from './layout.ts'
 import { honestSay } from './honesty.ts'
@@ -115,7 +116,7 @@ function step(state: WorldState, op0: Op, ctx: OpContext): StepResult {
       const targets = select(state, op.target, ctx)
       if (!targets.length) {
         // A genie grants: "make the dragon fly around me" with no dragon conjures one, already flying.
-        const spawn = conjure(state, op.target, conjureSet(op.set, op.relative ?? false))
+        const spawn = conjure(state, op.target, conjureSet(op.set, op.relative ?? false), undefined, ctx.fresh)
         if (!spawn) return { state, notes: [`modify: nothing matches ${JSON.stringify(op.target)}`] }
         const res = step(state, spawn, ctx)
         return { ...res, notes: [`no ${spawn.kind} here: conjured ${spawn.count === 1 ? 'one' : spawn.count}`, ...res.notes] }
@@ -156,7 +157,7 @@ function step(state: WorldState, op0: Op, ctx: OpContext): StepResult {
       const targets = select(state, op.target, ctx)
       if (!targets.length) {
         // "Move the boat over there" with no boat: conjure one where it was meant to go.
-        const spawn = conjure(state, op.target, undefined, op.at)
+        const spawn = conjure(state, op.target, undefined, op.at, ctx.fresh)
         if (!spawn) return { state, notes: [`move: nothing matches ${JSON.stringify(op.target)}`] }
         const res = step(state, spawn, ctx)
         return { ...res, notes: [`no ${spawn.kind} here: conjured ${spawn.count === 1 ? 'one' : spawn.count}`, ...res.notes] }
@@ -250,7 +251,7 @@ function step(state: WorldState, op0: Op, ctx: OpContext): StepResult {
  * kind (the genie conjures what you asked about instead of refusing). Only a named kind the world knows
  * (kit or learned) qualifies; refs (it, those, everything) and loose tags never conjure.
  */
-function conjure(state: WorldState, sel: Selector, set?: Props, at?: Placement): Extract<Op, { op: 'spawn' }> | undefined {
+function conjure(state: WorldState, sel: Selector, set?: Props, at?: Placement, fresh = false): Extract<Op, { op: 'spawn' }> | undefined {
   if (sel.ref) return undefined
   const word = (sel.kind ?? sel.tag ?? '').toLowerCase().trim()
   if (!word) return undefined
@@ -262,6 +263,8 @@ function conjure(state: WorldState, sel: Selector, set?: Props, at?: Placement):
   }
   const kind = [word, word.replace(/ies$/, 'y'), word.replace(/es$/, ''), word.replace(/s$/, '')].find(w => state.kinds[w] && !state.kinds[w]!.tags.includes('placeholder'))
   if (!kind) return undefined
+  // Fresh mode: a kit showpiece is never conjured from the kit (the model designs it instead).
+  if (fresh && isFreshShowpiece(kind)) return undefined
   // Only when the world truly has none: a "lamp" selector over hanging lamps, or "those houses" with the
   // gaze elsewhere, is a missed match, not a missing subject.
   const forms = new Set([word, kind, word.replace(/es$/, ''), word.replace(/s$/, '')])

@@ -18,6 +18,7 @@ const hud = useHud()
 const voiceOn = computed(() => voice.status.value === 'live' || voice.status.value === 'connecting')
 const text = ref('')
 const consoleOpen = ref(false)
+const { fresh, setFresh } = useFresh()
 const input = useTemplateRef<{ inputRef?: HTMLInputElement }>('input')
 const captionShown = ref(false)
 let captionTimer: ReturnType<typeof setTimeout> | undefined
@@ -223,6 +224,15 @@ onBeforeUnmount(() => {
             icon="i-lucide-cpu"
             data-model
             @click="intent.model.value = intent.model.value === 'haiku' ? 'sonnet' : 'haiku'"
+          />
+          <UButton
+            size="xs"
+            :color="fresh ? 'primary' : 'neutral'"
+            :variant="fresh ? 'soft' : 'ghost'"
+            icon="i-lucide-flame"
+            :label="fresh ? 'fresh' : 'cached ok'"
+            data-fresh-dev
+            @click="setFresh(!fresh)"
           />
           <UButton
             size="xs"
