@@ -1,43 +1,110 @@
 # Conjure
 
-Speak a world into existence. A first-person, low-poly 3D world (Nuxt 4 + three.js) that you change in
-plain English: type into the bar at the bottom (or press the mic), and a fast model (Haiku 5.5 through
-the AI Gateway) turns the sentence into tiny JSON ops that a deterministic engine places and animates.
-The raw-op dev console is still there behind the `{}` toggle.
+Speak, and a genie builds a world around you. Conjure is a first-person 3D world in the browser that you
+change by talking. Say "put a castle on that hill", "make it a stormy night" or "take me to a pool hall",
+and it happens around you in a painted, chunky toy-world style.
 
-## Run
+What it can do:
+
+- **Objects and sets.** Spawn things one at a time or by the dozen ("a bunch of pine trees over there"),
+  then change, move, recolour or remove them as a group ("make all the houses red").
+- **Teleport.** "Take me to a tranquil lake" replaces the world with a newly built place.
+- **Sky and weather.** Time of day, fog, rain, snow, storms, lightning, aurora, meteors, eclipses.
+- **Creatures.** Dragons, sky whales, birds and horses that fly, circle, gallop or follow you.
+- **People.** Each one has a persona, a routine, memory of what you told them, and their own voice.
+  Face someone and talk to them; they remember you after a reload.
+- **The forge.** Anything not in the built-in kit is drafted in about a second. Then, in the background, it is
+  rebuilt as a more detailed version that replaces the draft (draft, reference image, Opus refine,
+  Sol polish, judge). Results go into a local library, so the second dragon costs nothing.
+
+## Bring your own key
+
+Conjure needs a **Vercel AI Gateway** key. Every model call goes through the gateway on that one key.
+
+| Role | Model | Where |
+|---|---|---|
+| Realtime voice (genie's ears and mouth) | `openai/gpt-realtime-mini`, transcriber `whisper-1` | `shared/voice.ts` |
+| Intent (sentence to ops) | `anthropic/claude-haiku-5.5` | `server/utils/aiModels.ts` |
+| Director (builds a new place on teleport) | `anthropic/claude-sonnet-5.5` | `server/utils/director.ts` |
+| Forge refine / polish / judge | `anthropic/claude-opus-5.5`, `openai/gpt-6.1-sol`, `anthropic/claude-haiku-5.5` | `FORGE_MODELS` in `server/utils/aiModels.ts` |
+| Forge reference image | `google/gemini-3.1-flash-lite-image` (~$0.034 per image) | same |
+| People (minds) | `anthropic/claude-haiku-5.5` | `server/utils/npc.ts` |
+| People (voices, TTS) | `spacexai/grok-tts`, falls back to `openai/tts-1` | `server/utils/npc.ts` |
+
+Rough costs: a plain edit on Haiku costs a fraction of a cent. A forged novel object costs about 6¢ (a
+detailed "hero" object about 13¢), and anything already in the library is free. The forge enforces spend caps
+in `server/utils/forgeLedger.ts`: `FORGE_CAP = $12` total across sessions and `SESSION_CAP = $1.50`
+per session, tracked in `.data/forge/ledger.jsonl`. Realtime voice is billed per minute while the mic is
+open. Set a budget on the key in the Vercel dashboard as well.
+
+## Setup
 
 ```bash
-nvm use 22
-npm install            # npm 10 hits an arborist bug here; add packages with `npx npm@11 install <pkg>`
-npm run dev            # http://localhost:3091
-npm test               # node --test over the pure world kernel
-npm run typecheck && npm run lint
-npm run shoot          # Playwright screenshots of the canned examples (dev server must be running)
-node scripts/shoot.mjs sprint2   # the same, typing real sentences through the model
-npm run bench:intent   # ~34 utterances × small scenes through haiku and sonnet: pass rate, latency, cost
+nvm use 22                 # Node 22+
+npm install                # if npm 10 crashes (arborist bug), use: npx npm@11 install
+cp .env.example .env       # then paste your AI_GATEWAY_API_KEY
+npm run dev                # http://localhost:3091
 ```
 
-`.env` needs `AI_GATEWAY_API_KEY`. `POST /api/intent?model=haiku|sonnet` takes `{ text, state, ctx }`
-(the trimmed scene from `trimScene` and the gaze snapshot) and streams NDJSON: one `{t:'op'}` line per op the moment its JSON object closes in the model's text, then `{t:'done'}`.
+Use desktop Chrome. Allow the microphone when asked; you can also type (press Enter or `/`). A webcam is
+optional: turn on head tracking to look and point hands-free.
 
-Drag to look, WASD to walk (shift runs), double-click to lock the mouse, Enter to type. Where you
-were looking when you started typing (or started speaking) is what "there" and "that" mean. The
-world saves to localStorage; export/import JSON from the console's ⋯ menu (loading replays the op log).
+## Things to say
 
-## The op language
+- "Put a bunch of trees over there." / "Make them all red." / "Undo that."
+- "Make it night and let lanterns rise into the sky."
+- "A dragon circling the mountain." / "A whale swimming through the sky."
+- "Take me somewhere tranquil." / "Take me to a neon city street."
+- "Make it storm." / "Make me tiny." / "Let me fly."
+- "A fisherman on the dock who knows everything about this lake." Then walk up and ask him about it.
+- "Start over."
 
-Models never do coordinate math or set logic. They emit one flat op shape:
-`spawn | define | modify | move | remove | undo | atmosphere | teleport | say`, with selectors for
-sets (`{ tag: 'tree' }`, `{ tag: 'house', near: 'gaze', within: 15 }`), counts and arrangements for
-spawns (`count: 9, arrange: 'cluster'`) and `define` + primitive parts for anything not in the kit.
+## Controls
 
-- Spec and worked examples: `internal_docs/20261016_voice_world/implementation_plan.md`
-  ("Revised after the storyboard").
-- Schema and strict parser: `shared/world/ops.ts` (`OpsEnvelope`, `parseOps`).
-- Kernel: `shared/world/state.ts` (`applyOp`, `applyBatch`, `replayLog`), `select.ts`, `layout.ts`,
-  `kinds.ts`. All pure, no three.js.
-- Renderer and kit: `app/world/` (`renderer.ts`, `kit/*`, `parts.ts`).
-- The op brain: `shared/world/context.ts` (the per-sentence context block), `server/utils/intent.ts`
-  (the cached digest: language, catalog, rules, worked examples), `server/api/intent.post.ts`, and
-  `app/composables/useIntent.ts` (`build(request, ctx)`: the one client entry point for text and voice).
+- **WASD / arrows** walk, **Shift** runs, **drag** to look (double-click locks the mouse).
+- **Flying** (once you've asked to fly): **Space** / PageUp rises, **Shift+Space** / PageDown sinks.
+- **Enter** or **/** opens the text field, **Esc** closes it, **Cmd/Ctrl+Z** undoes.
+- **Backtick (`)** toggles the developer HUD: status, op log, model toggle and raw-op console.
+- The **reset** button (corner icon) starts the world over; undo right after brings it back.
+
+The world saves to localStorage, and the console's menu can export and import it as JSON.
+
+## Architecture
+
+- **Op language.** Models never do coordinate math. They emit flat ops (`spawn | define | modify | move |
+  remove | undo | atmosphere | teleport | say`) with set selectors and arrangements; a pure, deterministic
+  kernel applies them. `shared/world/ops.ts` (schema, strict parser), `shared/world/state.ts`, `select.ts`, `layout.ts`.
+- **Intent.** `server/utils/intent.ts` (cached digest: language, catalog, rules, examples) and
+  `server/api/intent.post.ts`, which streams ops as NDJSON as each one closes. The client entry point is `app/composables/useIntent.ts`.
+- **Voice.** `app/composables/useRealtimeVoice.ts` plus `server/api/realtime/token.post.ts`. The genie has two
+  tools, `build` and `teleport` (`shared/voice.ts`).
+- **Director.** `server/utils/director.ts` turns "take me to X" into a whole scene, streamed in as it is written.
+- **Forge.** `server/utils/forge.ts`, `forgeRun.ts`, `forgeLedger.ts` and `server/api/forge/*` run progressive
+  generation, spend caps and the library under `.data/forge/`. The client side is `app/composables/useForge.ts`.
+- **People.** `shared/npc/*` covers personas, routines, routing and replies; `server/utils/npc.ts` and
+  `server/api/npc/*` handle minds, memory summaries and TTS; `app/world/npc/people.ts` renders them.
+- **Renderer and style.** three.js in `app/world/renderer.ts`, the object kit in `app/world/kit/`, effects
+  in `app/world/fx/`, and the toon look (banded lighting, bevels, grass, water, sky, post) in `app/world/style/`.
+- **Head tracking.** MediaPipe in `app/composables/useHeadTracking.ts`.
+
+## Scripts, tests, bench
+
+```bash
+npm test                    # node --test over the pure kernel, NPC, forge, physics, sky
+npm run typecheck && npm run lint
+npm run shoot               # Playwright screenshots of the canned examples (dev server running)
+node scripts/gauntlet.mjs --list   # scripted "what people try" scenarios against the dev server
+npm run bench:intent        # utterances through haiku and sonnet: pass rate, latency, cost (spends real money)
+node --env-file=.env bench/realtime_check.ts   # live realtime voice check using bench/fixtures/*.wav
+```
+
+The `bench/fixtures/*.wav` files are synthetic speech made with macOS `say`.
+
+## Status
+
+Experimental. This is a personal research project, built quickly with lots of AI help. Expect rough edges, and
+check your gateway spend. `internal_docs/` holds the working plans and evaluation notes from the build.
+
+## License
+
+MIT. See `LICENSE`.

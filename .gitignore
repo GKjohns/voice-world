@@ -3,5 +3,8 @@ node_modules
 .output
 .data
 .env
+.env.*
+!.env.example
 .playwright-mcp
 *.log
+.DS_Store
