@@ -80,9 +80,11 @@ The world saves to localStorage, and the console's menu can export and import it
   tools, `build` and `teleport` (`shared/voice.ts`).
 - **Director.** `server/utils/director.ts` turns "take me to X" into a whole scene, streamed in as it is written.
 - **Forge.** `server/utils/forge.ts`, `forgeRun.ts`, `forgeLedger.ts` and `server/api/forge/*` run progressive
-  generation, spend caps and the library under `.data/forge/`. The client side is `app/composables/useForge.ts`.
+  generation, spend caps and the library under `.data/forge/`. The client side is `app/composables/useForge.ts`,
+  and the studio shots the judge compares come from `app/world/studio.ts`.
 - **People.** `shared/npc/*` covers personas, routines, routing and replies; `server/utils/npc.ts` and
-  `server/api/npc/*` handle minds, memory summaries and TTS; `app/world/npc/people.ts` renders them.
+  `server/api/npc/*` handle minds, memory summaries and TTS; `app/composables/useNpc.ts` runs minds and
+  conversations on the client, `app/world/npc/people.ts` renders them and `app/world/npc/voice.ts` speaks for them.
 - **Renderer and style.** three.js in `app/world/renderer.ts`, the object kit in `app/world/kit/`, effects
   in `app/world/fx/`, and the toon look (banded lighting, bevels, grass, water, sky, post) in `app/world/style/`.
 - **Head tracking.** MediaPipe in `app/composables/useHeadTracking.ts`.
