@@ -126,10 +126,6 @@ export function setGazeOverride(ndc: [number, number] | null): void {
   gazeOverride = ndc ? [Math.max(-1, Math.min(1, ndc[0])), Math.max(-1, Math.min(1, ndc[1]))] : null
 }
 
-export function getGazeOverride(): [number, number] | null {
-  return gazeOverride
-}
-
 /** The gaze ray's screen point for Raycaster.setFromCamera: the override, or the centre. */
 export function gazeNdc(): THREE.Vector2 {
   return gazeOverride ? new THREE.Vector2(gazeOverride[0], gazeOverride[1]) : new THREE.Vector2(0, 0)

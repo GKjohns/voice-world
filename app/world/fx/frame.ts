@@ -97,12 +97,6 @@ function worst(pts: THREE.Vector3[]): number {
   return w
 }
 
-/** How well a view frames the boxes: ≤ MARGIN means everything is comfortably in shot. */
-export function frameScore(cam: THREE.PerspectiveCamera, view: View, boxes: FrameBox[], eye: number): number {
-  place(cam, view, eye)
-  return worst(samples(boxes))
-}
-
 /** Aim from (x, z, lift) at the middle of the angular spread of the points. */
 function aim(pts: THREE.Vector3[], x: number, z: number, y: number, centerYaw: number): { yaw: number, pitch: number } {
   let yMin = Infinity
