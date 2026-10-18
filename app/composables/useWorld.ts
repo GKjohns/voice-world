@@ -4,8 +4,9 @@
  * (useIntent) share one path: snapshot the gaze → applyBatch → renderer.sync → save.
  */
 import { shallowRef } from 'vue'
-import { applyBatch, createWorld, diffStates, exportWorld, extendLastBatch, importWorld } from '#shared/world/state'
-import type { DroppedOp, Op } from '#shared/world/ops'
+import { applyBatch, createWorld, diffStates, exportWorld, extendLastBatch, importWorld, upgradeKind as upgradeKernel } from '#shared/world/state'
+import type { DroppedOp, Op, Part } from '#shared/world/ops'
+import type { Quality } from '#shared/world/forge'
 import type { Effects, OpContext, WorldState } from '#shared/world/types'
 import type { GazeInfo, WorldRenderer } from '~/world/renderer'
 import { setGazeOverride } from '~/world/look'
@@ -128,6 +129,18 @@ function extend(batchId: string, at: number, raw: unknown) {
   return res
 }
 
+/**
+ * A forged (high-quality) version of a learned kind: replaces its parts OUTSIDE the undo history (the
+ * sentence that made it still undoes it), and every instance sweeps into the new look. A no-op (false)
+ * when the kind is gone or was redefined since the forge began (`basis` no longer matches).
+ */
+function upgradeKind(kind: string, parts: Part[], opts: { basis: string, quality: Exclude<Quality, 'draft'> }): boolean {
+  const res = upgradeKernel(state.value, kind, parts, opts)
+  if (!res) return false
+  commit(res.state, res.effects)
+  return true
+}
+
 function undo() {
   return run([{ op: 'undo' }], 'undo')
 }
@@ -195,5 +208,5 @@ function findLastIndex<T>(list: T[], fn: (x: T) => boolean): number {
 
 export function useWorld() {
   // setGazeOverride(ndc | null): cast the gaze (and so snapshot()/capture()) through a screen point, e.g. a pointed finger.
-  return { state, history, gaze, caption, run, extend, undo, clear, load, restore, exportFile, importFile, attach, detach, snapshot, setGazeOverride, renderer: () => renderer }
+  return { state, history, gaze, caption, run, extend, upgradeKind, undo, clear, load, restore, exportFile, importFile, attach, detach, snapshot, setGazeOverride, renderer: () => renderer }
 }

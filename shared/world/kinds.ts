@@ -4,6 +4,8 @@
  * server context builder never import three.
  */
 import type { Part, Props } from './ops.ts'
+import { partBounds } from './forge.ts'
+import type { Quality } from './forge.ts'
 import type { Surface } from './terrain.ts'
 
 export type Fall = 'drop' | 'grow' | 'rise' | 'flicker'
@@ -27,6 +29,10 @@ export interface KindDescriptor {
   label?: string
   learned?: boolean
   parts?: Part[]
+  /** Learned kinds: how good the parts are (a Haiku draft, or forged at the good / hero tier). */
+  quality?: Quality
+  /** Learned kinds: the hash of the `define`'s own (draft) parts, which a forged upgrade must match. */
+  basis?: string
   /** One line for the model catalogs: what it is, its size, the props that matter. */
   note?: string
   /** Gets a soft contact-shadow blob on the floor (furniture indoors, where the sun casts nothing). */
@@ -135,9 +141,11 @@ export function isKitKind(kind: string): boolean {
 export function learnedKind(kind: string, tags: string[], parts: Part[]): KindDescriptor {
   let top = 0
   let reach = 0
+  // Bounds per part (rotations, tubes, lathes and extrudes included), so footprint and height are honest.
   for (const p of parts) {
-    top = Math.max(top, p.at[1] + p.size[1] / 2)
-    reach = Math.max(reach, Math.hypot(Math.abs(p.at[0]) + p.size[0] / 2, Math.abs(p.at[2]) + p.size[2] / 2))
+    const b = partBounds(p)
+    top = Math.max(top, b.max[1])
+    reach = Math.max(reach, Math.hypot(Math.max(Math.abs(b.min[0]), Math.abs(b.max[0])), Math.max(Math.abs(b.min[2]), Math.abs(b.max[2]))))
   }
   return {
     kind,

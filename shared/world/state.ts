@@ -9,9 +9,10 @@ import { altitudeY, capAltitude, deOverlap, hashSeed, layout, resolveAnchor, rng
 import { honestSay } from './honesty.ts'
 import type { Placed } from './layout.ts'
 import { parseOps } from './ops.ts'
-import type { DroppedOp, Op, Placement, Props, Selector, SkyEvent, Vec3 } from './ops.ts'
+import type { DroppedOp, Op, Part, Placement, Props, Selector, SkyEvent, Vec3 } from './ops.ts'
 import { entityHeight, entityRadius, kindOf, select } from './select.ts'
-import type { Batch, Effects, Entity, OpContext, WorldState } from './types.ts'
+import type { Batch, Effects, Entity, KindUpgrade, OpContext, WorldState } from './types.ts'
+import { QUALITY_RANK, cleanParts, hashParts } from './forge.ts'
 import { genderOfWords, personName, personTags, personWord } from '../npc/people.ts'
 
 export const WORLD_VERSION = 1
@@ -94,7 +95,13 @@ function step(state: WorldState, op0: Op, ctx: OpContext): StepResult {
 
     case 'define': {
       if (isKitKind(op.kind)) return { state, notes: [`"${op.kind}" is a kit kind; define ignored`] }
-      const desc = learnedKind(op.kind, op.tags, op.parts)
+      // A forged upgrade of exactly this draft (same parts hash) builds instead of the draft: undo, replay
+      // and reload all keep the high-quality version, and a NEW define of the kind (different parts) drops it.
+      const basis = hashParts(op.parts)
+      const up = state.upgrades?.[op.kind]
+      const desc = up && up.basis === basis
+        ? { ...learnedKind(op.kind, op.tags, up.parts), basis, quality: up.quality }
+        : { ...learnedKind(op.kind, op.tags, op.parts), basis, quality: 'draft' as const }
       // Placeholders already standing in for this kind pick up its tags (and the renderer morphs them).
       const entities = state.entities.map(e => e.kind === op.kind ? { ...e, tags: [...desc.tags] } : e)
       return { state: { ...state, kinds: { ...state.kinds, [op.kind]: desc }, entities }, notes: [] }
@@ -179,7 +186,7 @@ function step(state: WorldState, op0: Op, ctx: OpContext): StepResult {
     case 'undo': {
       if (!state.log.length) return { state, notes: ['nothing to undo'] }
       const undone = state.log[state.log.length - 1]!
-      return { state: replayLog(state.log.slice(0, -1)), notes: [`undid ${undone.id}${undone.label ? ` (“${undone.label}”)` : ''}`] }
+      return { state: replayLog(state.log.slice(0, -1), state.upgrades), notes: [`undid ${undone.id}${undone.label ? ` (“${undone.label}”)` : ''}`] }
     }
 
     case 'atmosphere': {
@@ -470,9 +477,10 @@ export function extendLastBatch(state: WorldState, raw: unknown): BatchResult {
   return { state: s, effects: { ...diffStates(state, s), say: extras.say, notes: extras.notes, events: extras.events, facts: extras.facts }, ops: keep, dropped, batch }
 }
 
-/** Rebuild a world from its op log. Ops in a log are already strict, so they're applied as-is. */
-export function replayLog(log: Batch[]): WorldState {
+/** Rebuild a world from its op log (and its forged upgrades). Ops in a log are already strict, so they're applied as-is. */
+export function replayLog(log: Batch[], upgrades?: WorldState['upgrades']): WorldState {
   let s = createWorld()
+  if (upgrades && Object.keys(upgrades).length) s = { ...s, upgrades }
   for (const b of log) {
     for (const op of b.ops) s = step(s, op, b.ctx).state
     s = { ...s, log: [...s.log, { ...b, id: `g${s.nextGroup}` }], nextGroup: s.nextGroup + 1 }
@@ -536,22 +544,45 @@ export function summarizeKinds(state: WorldState): KindSummary[] {
 export interface SavedWorld {
   version: number
   log: Batch[]
+  upgrades?: Record<string, KindUpgrade>
 }
 
 export function exportWorld(state: WorldState): SavedWorld {
-  return { version: WORLD_VERSION, log: state.log }
+  // Only upgrades of kinds the world still knows are worth keeping (an undone define's upgrade is dead weight).
+  const ups = Object.entries(state.upgrades ?? {}).filter(([k, u]) => state.kinds[k]?.basis === u.basis)
+  return { version: WORLD_VERSION, log: state.log, ...(ups.length ? { upgrades: Object.fromEntries(ups) } : {}) }
+}
+
+/**
+ * Swap a learned kind's parts for a forged version, outside the op log (so the sentence's undo still
+ * removes the kind). Null when the kind is gone, isn't learned, or was redefined since the forge began
+ * (its basis no longer matches), or when the upgrade would be a downgrade. Every instance then rebuilds
+ * (effects.redefined), since they all share the kind.
+ */
+export function upgradeKind(state: WorldState, kind: string, parts: Part[], opts: { basis: string, quality: KindUpgrade['quality'] }): { state: WorldState, effects: Effects } | null {
+  const desc = state.kinds[kind]
+  if (!desc?.learned || desc.basis !== opts.basis || !parts.length) return null
+  if (QUALITY_RANK[desc.quality ?? 'draft'] > QUALITY_RANK[opts.quality]) return null
+  const next: KindDescriptor = { ...learnedKind(kind, desc.tags, parts), basis: opts.basis, quality: opts.quality }
+  const s: WorldState = { ...state, kinds: { ...state.kinds, [kind]: next }, upgrades: { ...state.upgrades, [kind]: { basis: opts.basis, parts, quality: opts.quality } } }
+  return { state: s, effects: diffStates(state, s) }
 }
 
 /** Load a saved world by replaying its log. Every batch's ops are re-validated, since files can be hand-edited. */
 export function importWorld(saved: unknown): WorldState {
   const log = (saved as Partial<SavedWorld> | null)?.log
   if (!Array.isArray(log)) throw new Error('not a Conjure world: expected { version, log: [...] }')
+  const ups: Record<string, KindUpgrade> = {}
+  for (const [k, u] of Object.entries((saved as Partial<SavedWorld>).upgrades ?? {})) {
+    const parts = cleanParts(u?.parts)
+    if (parts.length && typeof u?.basis === 'string' && (u.quality === 'good' || u.quality === 'hero')) ups[k] = { basis: u.basis, parts, quality: u.quality }
+  }
   const clean: Batch[] = log.flatMap((b: Batch) => {
     const { ops } = parseOps(b?.ops ?? [])
     if (!ops.length || !b.ctx) return []
     return [{ ...b, ops, dropped: b.dropped ?? [] }]
   })
-  return replayLog(clean)
+  return replayLog(clean, ups)
 }
 
 function round3(v: number): number {

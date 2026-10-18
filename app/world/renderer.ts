@@ -7,7 +7,7 @@ import * as THREE from 'three'
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js'
 import { isTerrain, kindHeight } from '#shared/world/kinds'
 import type { Fall, KindDescriptor } from '#shared/world/kinds'
-import type { Vec3 } from '#shared/world/ops'
+import type { Vec3, Part } from '#shared/world/ops'
 import { kindOf } from '#shared/world/select'
 import { groundHeight } from '#shared/world/terrain'
 import { ceilingOver } from '#shared/world/layout'
@@ -16,7 +16,9 @@ import { ATMOSPHERES } from './atmosphere'
 import type { AtmospherePreset } from './atmosphere'
 import { BUILD_READS_COLOR, KIT_BUILDERS, blob } from './kit'
 import { applyMaterialProps, gazeNdc, lookTargets } from './look'
-import { buildFromParts } from './parts'
+import { buildFromParts, buildFromPartsMerged, partMesh } from './parts'
+import { boundsOf } from '#shared/world/forge'
+import { ghost, meshesOf, popIn, sweep, unghost } from './fx/refine'
 import { Ambience } from './sound'
 import { Gathering } from './fx/anticipate'
 import { Placeholder } from './fx/placeholder'
@@ -49,6 +51,32 @@ const BIG = 8 // metres tall: arrivals this big get the beam from the sky, the t
 const MID = 3
 const GLOW_TINT = new THREE.Color('#ffe2a8')
 const PARTICLE_BUDGET = 1600 // dissolve sparks per sync (a teleport dissolves the whole old world)
+// The forge (progressive generation): refined parts stream in at most this many new meshes per frame,
+// studio shots render on their own layer (lights join it, nothing else does), and the swap sweep's length.
+const PARTS_PER_FRAME = 4
+const STUDIO_LAYER = 30
+const STUDIO_W = 640
+const STUDIO_H = 480
+const SWEEP_MS = 1800
+const GHOST_LEVEL = 0.55
+
+/** A kind being refined: the instance nearest the camera grows the new parts in an overlay; every instance ghosts. */
+interface RefineJob {
+  kind: string
+  focusId: string
+  overlay: THREE.Group
+  queue: Part[]
+  streamed: Part[]
+  added: number
+  draftCount: number
+  level: number
+}
+
+interface StudioReq {
+  id: string
+  body?: THREE.Group
+  resolve: (url: string | null) => void
+}
 
 interface Item {
   entity: Entity
@@ -178,6 +206,12 @@ export class WorldRenderer {
   // Loop 3 (perf): a constant set of real lights fed by the kit's lamps, and bodies built this sync to precompile.
   private lightPool = new LightPool()
   private fresh: THREE.Object3D[] = []
+  // The forge: kinds being refined, a gentle swirl round the focused one, and queued studio shots.
+  private refining = new Map<string, RefineJob>()
+  private refineMotes = new Placeholder()
+  private studioQueue: StudioReq[] = []
+  private studioCam = new THREE.PerspectiveCamera(40, STUDIO_W / STUDIO_H, 0.05, 2000)
+  private studioPixels = new Uint8Array(STUDIO_W * STUDIO_H * 4)
 
   constructor(host: HTMLElement) {
     this.host = host
@@ -272,7 +306,8 @@ export class WorldRenderer {
     this.highlight = ring(0.94, 1, 0xffffff, 0.45) // unit ring scaled to the hovered entity's footprint
     this.ghost = ring(1.5, 1.8, 0x7dd3a8, 0)
     this.scene.add(this.reticle, this.highlight, this.ghost)
-    this.scene.add(this.vortex.obj, this.gathering.obj, this.forming.obj)
+    this.scene.add(this.vortex.obj, this.gathering.obj, this.forming.obj, this.refineMotes.obj)
+    this.studioCam.layers.set(STUDIO_LAYER)
     this.scene.add(this.weather.obj, this.lightPool.obj)
     this.weather.onThunder = (d, ms) => {
       this.sound.sfxThunder(d, ms)
@@ -310,10 +345,14 @@ export class WorldRenderer {
     // Anything landing answers the wish, so the "world listens" glow lets go.
     if (fx && (fx.spawned.length || fx.modified.length || fx.removed.length || fx.teleport)) this.gathering.set(null)
     // The forming silhouette collapses into what arrived (or just fades if the wish changed something else).
+    // Spawn before define: a labelled blob holding a not-yet-designed kind's spot keeps the motes swirling
+    // round it; they collapse when its define lands (the blob morphs) or anything real arrives.
     if (fx && this.forming.active) {
-      const first = fx.spawned.map(id => wanted.get(id)).find(e => !!e)
-      if (first) this.forming.resolve(new THREE.Vector3(first.pos[0], 0, first.pos[2]))
-      else if (fx.modified.length || fx.removed.length || fx.teleport) this.forming.set(null)
+      const first = fx.spawned.map(id => wanted.get(id)).find(e => !!e && !!state.kinds[e.kind])
+      const drafted = fx.redefined.length ? state.entities.find(e => fx.redefined.includes(e.kind) && (state.kinds[e.kind]?.quality ?? 'draft') === 'draft') : undefined
+      const landed = first ?? drafted
+      if (landed) this.forming.resolve(new THREE.Vector3(landed.pos[0], 0, landed.pos[2]))
+      else if (!fx.spawned.length && (fx.modified.length || fx.removed.length || fx.teleport)) this.forming.set(null)
     }
 
     // Removals first (dissolve into sparks), including anything the effects missed.
@@ -330,9 +369,22 @@ export class WorldRenderer {
     }
     if (dissolved && prev && !fx?.teleport) this.sound.sfxDissolve()
 
-    // Learned kinds that changed (or placeholders that just got defined) morph in place.
+    // Learned kinds that changed (or placeholders that just got defined) morph in place. A forged upgrade
+    // (quality good / hero) instead sweeps in: every instance, nearest first, 60 ms apart.
     for (const kind of fx?.redefined ?? []) {
-      for (const item of this.items.values()) if (item.entity.kind === kind) this.rebuild(item, wanted.get(item.entity.id) ?? item.entity, now, true)
+      const forged = (state.kinds[kind]?.quality ?? 'draft') !== 'draft'
+      const list = [...this.items.values()].filter(i => i.entity.kind === kind && !i.leaving)
+      list.sort((a, b) => a.holder.position.distanceTo(this.camera.position) - b.holder.position.distanceTo(this.camera.position))
+      list.forEach((item, i) => {
+        const e = wanted.get(item.entity.id) ?? item.entity
+        if (forged) this.refineSwap(item, e, now + i * 60)
+        else this.rebuild(item, e, now, true)
+      })
+      // Camera restraint: only re-frame when what it became is much taller than what you saw (the labelled
+      // blob a spawn-before-define held the spot with, or the draft before its forged upgrade).
+      const beforeH = prev?.kinds[kind]?.baseHeight ?? 2.2
+      const after = state.kinds[kind]
+      if (list[0] && after && after.baseHeight > beforeH * 1.3 && prev && !this.reveal && !this.userActive()) this.frameWish([wanted.get(list[0].entity.id) ?? list[0].entity])
     }
 
     // Spawns, staggered tk-tk-tk. Big batches tick faster so a forest still lands in about two seconds.
@@ -751,7 +803,7 @@ export class WorldRenderer {
     const kit = KIT_BUILDERS[e.kind]
     let body: THREE.Group
     if (kit) body = kit({ floors: e.props.floors ?? desc.defaults.floors, text: e.props.text ?? desc.defaults.text, length: e.props.length ?? desc.defaults.length, width: e.props.width ?? desc.defaults.width, color: e.props.color ?? desc.defaults.color, role: e.props.role, seed: e.id, name: e.props.name })
-    else if (desc.learned && desc.parts) body = buildFromParts(desc.parts)
+    else if (desc.learned && desc.parts) body = (desc.quality ?? 'draft') === 'draft' ? buildFromParts(desc.parts) : buildFromPartsMerged(desc.parts)
     else body = blob({ text: (e.props.text ?? desc.label ?? e.kind).replace(/_/g, ' ') })
     return { body, key: this.buildKeyOnly(e) }
   }
@@ -1066,6 +1118,256 @@ export class WorldRenderer {
     }
   }
 
+  // ---------- the forge: progressive replace ----------
+
+  /** The instance of `kind` nearest the camera (the one the refined version grows on), or null. */
+  focusOf(kind: string): string | null {
+    let best: Item | null = null
+    let bd = Infinity
+    for (const it of this.items.values()) {
+      if (it.entity.kind !== kind || it.leaving) continue
+      const d = it.holder.position.distanceTo(this.camera.position)
+      if (d < bd) {
+        bd = d
+        best = it
+      }
+    }
+    return best?.entity.id ?? null
+  }
+
+  /**
+   * A kind starts being perfected: every instance turns into a gold ghost, the nearest one gets an overlay
+   * the refined parts will grow in, and a dim swirl of motes sized to it. Returns the focused id.
+   */
+  beginRefine(kind: string): string | null {
+    const focusId = this.focusOf(kind)
+    const focus = focusId ? this.items.get(focusId) : undefined
+    if (!focus) return null
+    this.endRefine(kind, false)
+    const overlay = new THREE.Group()
+    overlay.userData.refineOverlay = true
+    focus.stretch.add(overlay)
+    for (const it of this.items.values()) if (it.entity.kind === kind && !it.leaving) ghost(it.body, GHOST_LEVEL)
+    const desc = this.desc(focus.entity)
+    const s = focus.entity.props.scale ?? 1
+    this.refineMotes.shape(Math.max(1, kindHeight(desc, focus.entity.props)) * 1.05, Math.max(0.7, desc.footprint * s) * 1.1, 0.35)
+    this.refineMotes.set(new THREE.Vector3(focus.holder.position.x, 0, focus.holder.position.z))
+    this.refineMotes.obj.position.y = focus.entity.pos[1]
+    this.refining.set(kind, { kind, focusId: focus.entity.id, overlay, queue: [], streamed: [], added: 0, draftCount: meshesOf(focus.body).length, level: GHOST_LEVEL })
+    return focus.entity.id
+  }
+
+  /** Refined parts arrived (in the kind's own coordinates): queue them to grow in, a few per frame. */
+  refineParts(kind: string, parts: Part[]): void {
+    const job = this.refining.get(kind)
+    if (!job) return
+    job.queue.push(...parts)
+    job.streamed.push(...parts)
+  }
+
+  /**
+   * The refine is over. Accepted: the upgrade's sync already swept it in (refineSwap took the overlay), so
+   * only the swirl goes. Discarded: the half-grown parts shrink away and the draft comes back solid.
+   */
+  endRefine(kind: string, accepted: boolean): void {
+    const job = this.refining.get(kind)
+    if (!job) return
+    this.refining.delete(kind)
+    this.refineMotes.set(null)
+    if (accepted && !job.overlay.parent) return
+    const now = performance.now()
+    const overlay = job.overlay
+    const meshes = meshesOf(overlay)
+    const bases = meshes.map(m => m.scale.clone())
+    this.tween(now, 380, (t) => {
+      meshes.forEach((m, i) => m.scale.copy(bases[i]!).multiplyScalar(Math.max(0.001, 1 - ease.out(t))))
+    }, () => {
+      overlay.removeFromParent()
+      disposeObject(overlay)
+    })
+    for (const it of this.items.values()) {
+      if (it.entity.kind !== kind) continue
+      const from = job.level / GHOST_LEVEL * GHOST_LEVEL
+      this.tween(now, 520, t => unghost(it.body, t, from))
+    }
+  }
+
+  /** Per frame: grow up to PARTS_PER_FRAME queued refined parts, with a gold pop and a spark every third. */
+  private growRefined(now: number): void {
+    for (const job of this.refining.values()) {
+      const item = this.items.get(job.focusId)
+      if (!item || item.leaving) {
+        job.queue.length = 0
+        continue
+      }
+      let n = 0
+      while (job.queue.length && n < PARTS_PER_FRAME) {
+        const p = job.queue.shift()!
+        const m = partMesh(p)
+        n++
+        if (!m) continue
+        const e = item.entity
+        const slot = m.userData.slot as string | undefined
+        const hex = slot === 'primary' && e.props.color ? e.props.color : slot === 'trim' && e.props.trim ? e.props.trim : null
+        if (hex) {
+          const mat = m.material as THREE.MeshStandardMaterial
+          mat.color.set(hex)
+          if (slot === 'glow') mat.emissive.set(hex)
+        }
+        job.overlay.add(m)
+        this.tween(now, 520, popIn(m))
+        job.added++
+        if (job.added % 3 === 1) {
+          const wp = m.getWorldPosition(new THREE.Vector3())
+          this.playFx(sparkle(wp, Math.max(0.3, Math.min(1.2, Math.max(...p.size) * 0.6)), '#ffd98a', 8), now, 650)
+        }
+      }
+      if (n) {
+        // The ghost thins as the new version fills in, but never quite vanishes until the swap.
+        job.level = Math.max(0.12, GHOST_LEVEL * (1 - job.added / Math.max(10, job.draftCount * 1.6)))
+        for (const it of this.items.values()) if (it.entity.kind === job.kind && !it.leaving) ghost(it.body, job.level)
+      }
+    }
+  }
+
+  /**
+   * A forged upgrade lands on one instance: build the merged body, then sweep a band of light up through
+   * it, the old (ghosted) body fading out below the band and the new one fading in above it. On the
+   * focused instance the overlay already shows the new version, so it stays solid and is exchanged for
+   * the identical merged body at the end (or cross-faded, if the fit moved it).
+   */
+  private refineSwap(item: Item, e: Entity, at: number): void {
+    const job = this.refining.get(e.kind)
+    const desc = this.desc(e)
+    const next = buildFromPartsMerged(desc.parts!)
+    const old = item.body
+    item.stretch.add(next)
+    item.body = next
+    item.buildKey = this.buildKeyOnly(e)
+    item.entity = e
+    this.applyLook(item, e, false)
+    this.fresh.push(next)
+    let overlay: THREE.Group | null = null
+    let same = false
+    if (job && job.focusId === e.id && job.overlay.parent === item.stretch) {
+      overlay = job.overlay
+      job.queue.length = 0
+      // Did the fit to the draft move or rescale it? If not, the overlay IS the new body.
+      const a = boundsOf(job.streamed)
+      const b = boundsOf(desc.parts!)
+      if (a && b) {
+        const size = Math.max(...[0, 1, 2].map(i => b.max[i]! - b.min[i]!), 0.1)
+        same = [0, 1, 2].every(i => Math.abs(a.min[i]! - b.min[i]!) < size * 0.03 && Math.abs(a.max[i]! - b.max[i]!) < size * 0.03)
+      }
+    }
+    item.holder.updateWorldMatrix(true, true)
+    const box = new THREE.Box3().setFromObject(next)
+    if (overlay) box.union(new THREE.Box3().setFromObject(overlay))
+    const c = box.getCenter(new THREE.Vector3())
+    const radius = Math.max(0.5, Math.hypot(box.max.x - box.min.x, box.max.z - box.min.z) / 2)
+    const color = e.props.color ?? '#ffe2a8'
+    const fx = overlay && same
+      ? sweep(c, radius, box.min.y, box.max.y, color, null, [old])
+      : sweep(c, radius, box.min.y, box.max.y, color, next, overlay ? [old, overlay] : [old])
+    if (overlay && same) next.visible = false
+    this.tween(at, SWEEP_MS, t => fx.update(t, this.camera, this.dt), () => {
+      this.scene.remove(fx.obj)
+      fx.dispose()
+      next.visible = true
+      old.removeFromParent()
+      disposeObject(old)
+      if (overlay) {
+        overlay.removeFromParent()
+        disposeObject(overlay)
+      }
+    }, () => this.scene.add(fx.obj))
+    if (item.entity.id === job?.focusId || !job) this.sound.sfxWhoosh(true, at - performance.now(), false)
+  }
+
+  /**
+   * A studio render of one instance (or of `body`, a candidate built for the judge, shown at that
+   * instance's spot) from the front-right, as a JPEG data URL. Drawn with the main renderer into a corner
+   * of the canvas just before the frame paints over it.
+   */
+  studioShot(id: string, body?: THREE.Group): Promise<string | null> {
+    return new Promise((resolve) => {
+      if (!this.items.has(id)) return resolve(null)
+      if (body) this.fresh.push(body)
+      this.studioQueue.push({ id, body, resolve })
+    })
+  }
+
+  private shoot(req: StudioReq): void {
+    const item = this.items.get(req.id)
+    if (!item) return req.resolve(null)
+    const obj = req.body ?? item.body
+    if (req.body) {
+      req.body.traverse(o => o.layers.set(STUDIO_LAYER))
+      item.stretch.add(req.body)
+    }
+    // Lights join the studio layer (the light count, and so every program key, stays the same).
+    this.scene.traverse((o) => {
+      if ((o as THREE.Light).isLight && o.layers.test(this.camera.layers)) o.layers.enable(STUDIO_LAYER)
+    })
+    const meshes = meshesOf(obj)
+    for (const m of meshes) m.layers.enable(STUDIO_LAYER)
+    obj.updateWorldMatrix(true, true)
+    const box = new THREE.Box3().setFromObject(obj)
+    const c = box.getCenter(new THREE.Vector3())
+    const r = Math.max(0.3, box.getSize(new THREE.Vector3()).length() / 2)
+    const d = (r / Math.sin(0.35)) * 1.05
+    const dir = new THREE.Vector3(0.62, 0.28, 0.73).normalize().applyAxisAngle(new THREE.Vector3(0, 1, 0), item.holder.rotation.y)
+    const cam = this.studioCam
+    cam.position.copy(c).addScaledVector(dir, d)
+    cam.near = Math.max(0.05, d - r * 2)
+    cam.far = d + r * 3
+    cam.updateProjectionMatrix()
+    cam.lookAt(c)
+    cam.updateMatrixWorld()
+    const fog = this.scene.fog as THREE.Fog
+    const fogNF = [fog.near, fog.far]
+    fog.near = 1e5
+    fog.far = 2e5
+    const hemiI = this.hemi.intensity
+    const sunI = this.sun.intensity
+    this.hemi.intensity = Math.max(hemiI, 1.2)
+    this.sun.intensity = Math.max(sunI, 2.3)
+    const r3 = this.renderer
+    const pr = r3.getPixelRatio()
+    const size = r3.getSize(new THREE.Vector2())
+    const clear = r3.getClearColor(new THREE.Color())
+    const alpha = r3.getClearAlpha()
+    let url: string | null = null
+    try {
+      r3.setViewport(0, 0, STUDIO_W / pr, STUDIO_H / pr)
+      r3.setScissor(0, 0, STUDIO_W / pr, STUDIO_H / pr)
+      r3.setScissorTest(true)
+      r3.setClearColor(0x9fb7cf, 1)
+      r3.render(this.scene, cam)
+      const gl = r3.getContext()
+      gl.readPixels(0, 0, STUDIO_W, STUDIO_H, gl.RGBA, gl.UNSIGNED_BYTE, this.studioPixels)
+      url = encodeJpeg(this.studioPixels, STUDIO_W, STUDIO_H)
+    } catch (err) {
+      console.warn('[forge] studio shot failed', err)
+    } finally {
+      r3.setScissorTest(false)
+      r3.setViewport(0, 0, size.x, size.y)
+      r3.setClearColor(clear, alpha)
+      fog.near = fogNF[0]!
+      fog.far = fogNF[1]!
+      this.hemi.intensity = hemiI
+      this.sun.intensity = sunI
+      for (const m of meshes) m.layers.disable(STUDIO_LAYER)
+      if (req.body) req.body.removeFromParent()
+    }
+    req.resolve(url)
+  }
+
+  /** Build a candidate body from parts (merged), compiled ahead, for a judge's studio shot. */
+  candidate(parts: Part[]): THREE.Group {
+    return buildFromPartsMerged(parts)
+  }
+
   /** Lamps cast the colour they glow: "make the lamps blue" turns their light pools blue. */
   private lampTint(e: Entity): THREE.Color | null {
     const tags = this.desc(e).tags
@@ -1190,7 +1492,10 @@ export class WorldRenderer {
     const o = new THREE.Vector3(0, -50, 0)
     const fx = [beam(o, 1, '#ffffff'), shockwave(o, 1), sparkle(o, 1, '#ffffff', 4), shimmer(o, 1, 1, '#ffffff'), dissolve(o, 1, 1, '#ffffff', 4)]
     const dust = new THREE.Points(new THREE.BufferGeometry(), new THREE.PointsMaterial({ color: 0xd8d0c0, size: 0.3, transparent: true, opacity: 0.7, depthWrite: false, alphaMap: radialTexture() }))
-    return [...fx.map(f => f.obj), dust, blob({ text: 'warm' }), contactShadow(1)]
+    // The forge's ghost and sweep fade standard materials (transparent, no depth write): warm those variants.
+    const ghostBody = buildFromParts([{ shape: 'box', size: [1, 1, 1], at: [0, 0, 0], color: '#ffffff' }, { shape: 'sphere', size: [1, 1, 1], at: [0, 0, 0], color: '#ffffff', slot: 'glow' }])
+    ghost(ghostBody, 0.5)
+    return [...fx.map(f => f.obj), dust, blob({ text: 'warm' }), contactShadow(1), ghostBody]
   }
 
   /**
@@ -1510,6 +1815,8 @@ export class WorldRenderer {
     this.vortex.tick(dt, this.camera.position)
     this.gathering.tick(dt)
     this.forming.tick(dt)
+    this.refineMotes.tick(dt)
+    this.growRefined(now)
     if (this.weather.tick(dt, this.camera, this.atmosBase)) this.applyAtmosphere(this.atmosBase)
 
     if (this.reveal) {
@@ -1540,6 +1847,10 @@ export class WorldRenderer {
     }
 
     this.lightPool.update(this.camera, now)
+    // One studio shot per frame (the forge's render of a draft), drawn into a corner just before the frame
+    // itself paints over it: same renderer, same programs, no second GL context.
+    const shot = this.studioQueue.shift()
+    if (shot) this.shoot(shot)
     this.renderer.render(this.scene, this.camera)
     const w = window as unknown as { __sceneReady?: boolean }
     if (!w.__sceneReady) w.__sceneReady = true
@@ -1842,6 +2153,19 @@ function disposeObject(root: THREE.Object3D): void {
       mat.dispose()
     }
   })
+}
+
+/** RGBA pixels from readPixels (bottom-up) → a JPEG data URL. */
+function encodeJpeg(px: Uint8Array, w: number, h: number): string {
+  const c = document.createElement('canvas')
+  c.width = w
+  c.height = h
+  const g = c.getContext('2d')!
+  const img = g.createImageData(w, h)
+  const row = w * 4
+  for (let y = 0; y < h; y++) img.data.set(px.subarray((h - 1 - y) * row, (h - y) * row), y * row)
+  g.putImageData(img, 0, 0)
+  return c.toDataURL('image/jpeg', 0.86)
 }
 
 function hashParts(desc: KindDescriptor): number {

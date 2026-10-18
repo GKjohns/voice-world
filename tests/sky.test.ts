@@ -136,7 +136,8 @@ test('make me tiny: playerScale lives in the atmosphere, undo restores you, tele
   assert.equal(run(r.state, [{ op: 'undo' }]).state.atmosphere.playerScale, undefined)
   assert.equal(run(r.state, [{ op: 'atmosphere', playerScale: 1 }]).state.atmosphere.playerScale, undefined)
   assert.equal(run(r.state, [{ op: 'teleport', world: 'pool hall' }]).state.atmosphere.playerScale, undefined)
-  assert.equal(parseOps([{ op: 'atmosphere', playerScale: 0 }]).ops.length, 0)
+  // Out-of-range numbers clamp to the bound instead of dropping the op (0 → the smallest size).
+  assert.equal((parseOps([{ op: 'atmosphere', playerScale: 0 }]).ops[0] as { playerScale?: number }).playerScale, 0.02)
 })
 
 test('honesty: the genie never claims motion, weather or a move that did not happen', () => {

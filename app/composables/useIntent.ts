@@ -194,6 +194,9 @@ async function build(request: string, ctx: OpContext, source: 'text' | 'voice' =
   /** `say` ops that arrive before anything opened a batch (says come last, so this is rare). */
   let held: Op[] = []
   let firstAppliedMs: number | undefined
+  /** The forge's timings: something stands there (proxy), and each kind's draft define landed. */
+  let proxyMs: number | undefined
+  const draftAt: Record<string, number> = {}
 
   const absorb = (out: BatchResult) => {
     const fx = out.effects
@@ -218,8 +221,12 @@ async function build(request: string, ctx: OpContext, source: 'text' | 'voice' =
     absorb(out)
   }
   const apply = (op: Op) => {
-    if (op.op === 'define') formAt()
+    // Spawn before define: a not-yet-designed kind's spawn holds the spot (a labelled blob, motes swirling
+    // round it) and is not an arrival yet; its define is.
+    const fresh = op.op === 'spawn' && !world.state.value.kinds[op.kind]
+    if (op.op === 'define' || fresh) formAt()
     else if (op.op !== 'say') landed = true
+    if (op.op === 'spawn') proxyMs ??= Math.round(performance.now() - started)
     if (op.op === 'say' && !target && !entries.length) {
       held.push(op)
       return
@@ -239,6 +246,7 @@ async function build(request: string, ctx: OpContext, source: 'text' | 'voice' =
       open([...held, op], target || entries.length ? `${text} (cont.)` : text)
       held = []
     }
+    if (op.op === 'define') draftAt[op.kind] = performance.now()
     if (spawned.size + modified.size + removed.size || other.length) {
       firstAppliedMs ??= Math.round(performance.now() - started)
       setPhase('building')
@@ -283,11 +291,19 @@ async function build(request: string, ctx: OpContext, source: 'text' | 'voice' =
     : { ...h, model: end?.model, ms, error: failure, ...(h.n === entries[0] ? { dropped: [...dropped, ...h.dropped] } : {}) })
 
   const changed = spawned.size + modified.size + removed.size > 0 || other.length > 0
+  // The high-quality pass: never awaited, so the draft and the reply never wait on it.
+  if (changed) useForge().consider(text, applied, { t0: started, proxyMs, draftAt })
+  // A blob that held a kind's spot until its define landed is not worth mentioning.
+  const definedNow = new Set(applied.filter(o => o.op === 'define').map(o => (o as { kind: string }).kind))
+  for (let i = notes.length - 1; i >= 0; i--) {
+    const m = notes[i]!.match(/^unknown kind "([^"]+)"/)
+    if (m && definedNow.has(m[1]!)) notes.splice(i, 1)
+  }
   if (!changed && phase.value !== 'building') setPhase(recognition ? 'listening' : 'idle')
   const why = [...notes.filter(n => !n.startsWith('undid')), ...dropped.map(d => `dropped an op: ${d.reason}`)]
   return {
     ok: changed,
-    summary: summarize([...spawned], modified.size, removed.size, other) + (why.length ? ` (${why.slice(0, 2).join('; ')})` : ''),
+    summary: summarize([...spawned], [...modified].filter(id => !spawned.has(id)).length, removed.size, other) + (why.length ? ` (${why.slice(0, 2).join('; ')})` : ''),
     say: says.join(' ') || undefined,
     ops: applied,
     dropped,

@@ -20,6 +20,11 @@ export class Placeholder {
   /** 0 while forming; counts 0→1 while collapsing into the arrival. */
   private collapse = -1
   private to = new THREE.Vector3()
+  /** The forge's refine swirl: a fixed body size and a dimmer level (see `shape`). */
+  private hs = 1
+  private rs = 1
+  private cap = 1
+  private fixed = false
 
   constructor() {
     for (let i = 0; i < N; i++) {
@@ -46,6 +51,17 @@ export class Placeholder {
     } else {
       this.target = 0
     }
+  }
+
+  /**
+   * Size the swirl to an object (`height`, `radius` in m) at a fraction of full brightness, and stop it
+   * swelling: the forge uses it as a gentle "being perfected" swirl around a thing that already stands.
+   */
+  shape(height: number, radius: number, level = 0.4): void {
+    this.hs = Math.max(0.3, height / 2.4)
+    this.rs = Math.max(0.3, radius / 1.25)
+    this.cap = level
+    this.fixed = true
   }
 
   /** The thing arrived at `at`: pull every mote into it and flash. */
@@ -78,9 +94,9 @@ export class Placeholder {
     if (!this.obj.visible) return
 
     // A rough body that slowly swells: about 2.4 m tall at first, up to ~5 m after a long design.
-    const grow = 1 + Math.min(1, this.age / 8)
-    const H = 2.4 * grow
-    const R = 1.25 * grow
+    const grow = this.fixed ? 1 : 1 + Math.min(1, this.age / 8)
+    const H = 2.4 * grow * this.hs
+    const R = 1.25 * grow * this.rs
     const pull = this.collapse >= 0 ? this.collapse ** 0.7 : 0
     const p = this.motes.pos
     const s = this.seeds
@@ -97,7 +113,7 @@ export class Placeholder {
     }
     this.motes.geo.attributes.position!.needsUpdate = true
     const flicker = 0.85 + 0.15 * Math.sin(this.time * 7)
-    this.motes.mat.opacity = this.level * 0.85 * flicker
+    this.motes.mat.opacity = this.level * 0.85 * flicker * this.cap
     this.motes.mat.size = 0.16 * (1 + pull * 1.5)
 
     const c = this.core.pos
@@ -109,7 +125,7 @@ export class Placeholder {
       c[i * 3 + 2] = Math.sin(a) * 0.12 * (1 - pull)
     }
     this.core.geo.attributes.position!.needsUpdate = true
-    this.core.mat.opacity = this.level * (0.35 + 0.25 * Math.sin(this.time * 4)) + (pull > 0 ? pull * (1 - pull) * 2.4 : 0)
+    this.core.mat.opacity = this.cap * this.level * (0.35 + 0.25 * Math.sin(this.time * 4)) + (pull > 0 ? pull * (1 - pull) * 2.4 : 0)
   }
 
   dispose(): void {

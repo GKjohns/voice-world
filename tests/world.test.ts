@@ -329,3 +329,24 @@ test('a normal-size spawn at a far gaze point is not pushed', () => {
   const s = run(createWorld(), [{ op: 'spawn', kind: 'house' }], ctx({ gaze: { point: [0, 0, -30] } })).state
   assert.ok(Math.abs(s.entities[0]!.pos[2] + 30) < 0.5)
 })
+
+test('oversized numbers clamp to their bound instead of dropping the op (a Director floor of length 240)', () => {
+  const { ops, dropped } = parseOps([
+    { op: 'spawn', kind: 'floor', set: { length: 240, width: 260, scale: 50 }, radius: 999, count: 500 },
+    { op: 'spawn', kind: 'storefront', xz: [2000, -3], yaw: 900 },
+    { op: 'modify', target: { ref: 'gaze' }, set: { height: 30 }, relative: true }
+  ])
+  assert.equal(dropped.length, 0)
+  const floor = ops[0] as Extract<Op, { op: 'spawn' }>
+  assert.equal(floor.set?.length, 200)
+  assert.equal(floor.set?.width, 200)
+  assert.equal(floor.set?.scale, 20)
+  assert.equal(floor.radius, 200)
+  assert.equal(floor.count, 80)
+  const shop = ops[1] as Extract<Op, { op: 'spawn' }>
+  assert.deepEqual(shop.xz, [1500, -3])
+  assert.equal(shop.yaw, 720)
+  assert.equal((ops[2] as Extract<Op, { op: 'modify' }>).set.height, 20)
+  // Non-numbers still fail.
+  assert.equal(parseOps([{ op: 'spawn', kind: 'floor', set: { length: 'huge' } }]).ops.length, 0)
+})

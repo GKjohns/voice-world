@@ -1,0 +1,158 @@
+{
+ "results": [
+  {
+   "wish": "a steampunk airship",
+   "kind": "airship",
+   "tier": "good",
+   "outcome": "library hit",
+   "proxyMs": 1255,
+   "draftMs": 3583,
+   "refinedMs": 4490,
+   "usd": 0,
+   "parts": 39,
+   "library": true,
+   "swapFps": {
+    "avg": 60,
+    "min1": 60,
+    "gap": 17
+   },
+   "allFps": {
+    "avg": 60,
+    "min1": 60,
+    "gap": 17
+   },
+   "shots": [
+    "/Users/kylejohnson/Programming/Workspace/conjure/internal_docs/20261017_progressive_gen/shots/01_a_steampunk_airship_a_draft.png",
+    "/Users/kylejohnson/Programming/Workspace/conjure/internal_docs/20261017_progressive_gen/shots/01_a_steampunk_airship_b_refined.png"
+   ]
+  },
+  {
+   "wish": "an intricate carousel",
+   "kind": "carousel",
+   "tier": "hero",
+   "outcome": "refined; polish lost the judge (Clean roof, coherent canopy, and recognizable animal figures closer to reference)",
+   "proxyMs": 1664,
+   "draftMs": 4982,
+   "startMs": 5745,
+   "firstPartMs": 13380,
+   "refinedMs": 24644,
+   "polishMs": 135720,
+   "usd": 0.0747,
+   "parts": 115,
+   "library": false,
+   "swapFps": {
+    "avg": 60,
+    "min1": 60,
+    "gap": 17
+   },
+   "allFps": {
+    "avg": 60,
+    "min1": 60,
+    "gap": 17
+   },
+   "shots": [
+    "/Users/kylejohnson/Programming/Workspace/conjure/internal_docs/20261017_progressive_gen/shots/02_an_intricate_carousel_a_draft.png",
+    "/Users/kylejohnson/Programming/Workspace/conjure/internal_docs/20261017_progressive_gen/shots/02_an_intricate_carousel_b_refined.png"
+   ]
+  },
+  {
+   "wish": "a giant ornate fountain",
+   "kind": "fountain",
+   "tier": "hero",
+   "outcome": "polished (Tiered ornate structure with gilded accents and recognizable griffin-topped crow)",
+   "proxyMs": 1247,
+   "draftMs": 4183,
+   "startMs": 4947,
+   "firstPartMs": 11815,
+   "refinedMs": 23148,
+   "polishMs": 128911,
+   "usd": 0.076,
+   "parts": 134,
+   "library": false,
+   "swapFps": {
+    "avg": 60,
+    "min1": 60,
+    "gap": 17
+   },
+   "allFps": {
+    "avg": 60,
+    "min1": 60,
+    "gap": 17
+   },
+   "shots": [
+    "/Users/kylejohnson/Programming/Workspace/conjure/internal_docs/20261017_progressive_gen/shots/03_a_giant_ornate_fountain_a_draft.png",
+    "/Users/kylejohnson/Programming/Workspace/conjure/internal_docs/20261017_progressive_gen/shots/03_a_giant_ornate_fountain_b_refined.png",
+    "/Users/kylejohnson/Programming/Workspace/conjure/internal_docs/20261017_progressive_gen/shots/03_a_giant_ornate_fountain_c_polished.png"
+   ]
+  },
+  {
+   "wish": "a vintage motorcycle",
+   "kind": "motorcycle",
+   "tier": "good",
+   "outcome": "refined",
+   "proxyMs": 2606,
+   "draftMs": 5077,
+   "startMs": 5833,
+   "firstPartMs": 9791,
+   "refinedMs": 17922,
+   "usd": 0.0323,
+   "parts": 22,
+   "library": false,
+   "swapFps": {
+    "avg": 60,
+    "min1": 60,
+    "gap": 17
+   },
+   "allFps": {
+    "avg": 60,
+    "min1": 60,
+    "gap": 17
+   },
+   "shots": [
+    "/Users/kylejohnson/Programming/Workspace/conjure/internal_docs/20261017_progressive_gen/shots/04_a_vintage_motorcycle_a_draft.png",
+    "/Users/kylejohnson/Programming/Workspace/conjure/internal_docs/20261017_progressive_gen/shots/04_a_vintage_motorcycle_b_refined.png"
+   ]
+  },
+  {
+   "wish": "a lighthouse made of glass",
+   "kind": "lighthouse",
+   "tier": "good",
+   "outcome": "refined",
+   "proxyMs": 1245,
+   "draftMs": 2601,
+   "startMs": 3363,
+   "firstPartMs": 6859,
+   "refinedMs": 13134,
+   "usd": 0.0265,
+   "parts": 36,
+   "library": false,
+   "swapFps": {
+    "avg": 60,
+    "min1": 60,
+    "gap": 17
+   },
+   "allFps": {
+    "avg": 60,
+    "min1": 60,
+    "gap": 17
+   },
+   "shots": [
+    "/Users/kylejohnson/Programming/Workspace/conjure/internal_docs/20261017_progressive_gen/shots/05_a_lighthouse_made_of_glass_a_draft.png",
+    "/Users/kylejohnson/Programming/Workspace/conjure/internal_docs/20261017_progressive_gen/shots/05_a_lighthouse_made_of_glass_b_refined.png"
+   ]
+  },
+  {
+   "wish": "a treehouse village",
+   "forged": false,
+   "summary": "spawned 4 house, 6 oak"
+  }
+ ],
+ "status": {
+  "total": 0.3355,
+  "session": 0.2775,
+  "calls": 14,
+  "cap": 12,
+  "sessionCap": 1.5
+ },
+ "errors": []
+}

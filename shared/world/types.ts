@@ -2,7 +2,8 @@
  * Plain world data. No three.js, no Vue: the engine, the tests and the server context builder all share it.
  */
 import type { KindDescriptor } from './kinds.ts'
-import type { Ambient, DroppedOp, Op, Props, SkyEvent, TimeOfDay, Vec3, Weather } from './ops.ts'
+import type { Quality } from './forge.ts'
+import type { Part, Ambient, DroppedOp, Op, Props, SkyEvent, TimeOfDay, Vec3, Weather } from './ops.ts'
 
 export interface Entity {
   id: string // 'pine#14'
@@ -63,6 +64,17 @@ export interface WorldState {
   nextId: number
   nextGroup: number
   lastGroup: string | null
+  /**
+   * Forged (high-quality) versions of learned kinds, keyed by kind. Not ops: they live beside the log, so
+   * undo and replay stay pure. A `define` whose own parts hash equals `basis` builds from `parts` instead.
+   */
+  upgrades?: Record<string, KindUpgrade>
+}
+
+export interface KindUpgrade {
+  basis: string
+  parts: Part[]
+  quality: Quality
 }
 
 /** What the renderer should animate after an op. Ids are in creation order so batches can stagger. */

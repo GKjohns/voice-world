@@ -11,6 +11,11 @@ export type Vec3 = [number, number, number]
 
 export const MATERIALS = ['matte', 'wood', 'metal', 'glass', 'stone'] as const
 export const SHAPES = ['box', 'cylinder', 'cone', 'sphere', 'torus', 'capsule'] as const
+/**
+ * The forge's extra shapes (progressive generation): a swept tapered tube, a lathe profile and an extruded
+ * outline. Only forged (high-quality) kinds use them; Haiku's `define` keeps the six primitives above.
+ */
+export const FORGE_SHAPES = ['tube', 'lathe', 'extrude'] as const
 export const SLOTS = ['primary', 'trim', 'glow'] as const
 export const ARRANGEMENTS = ['cluster', 'line', 'ring', 'grid', 'scatter', 'along'] as const
 export const FACINGS = ['player', 'center', 'along', 'random'] as const
@@ -36,6 +41,7 @@ export const ACTS = ['wave', 'bow', 'cheer', 'dance', 'sit', 'follow', 'none'] a
 
 export type Material = typeof MATERIALS[number]
 export type Shape = typeof SHAPES[number]
+export type ForgeShape = typeof FORGE_SHAPES[number]
 export type Slot = typeof SLOTS[number]
 export type Arrangement = typeof ARRANGEMENTS[number]
 export type Facing = typeof FACINGS[number]
@@ -55,27 +61,37 @@ export const MAX_PARTS = 32
 
 // ---------- the universal property bag ----------
 
+/**
+ * A bounded number that CLAMPS instead of failing: one oversized dimension (a Director floor of length 240)
+ * becomes the bound rather than dropping the whole op. Non-numbers still fail.
+ */
+const num = (min: number, max: number, int = false) => z.preprocess(
+  v => (typeof v === 'number' && Number.isFinite(v) ? Math.min(max, Math.max(min, int ? Math.round(v) : v)) : v),
+  z.number()
+)
+const POS = 0.01
+
 const color = z.string().trim().min(1).max(32)
 
 export const PropsSchema = z.object({
-  scale: z.number().positive().max(20).optional(),
-  height: z.number().positive().max(20).optional(),
+  scale: num(POS, 20).optional(),
+  height: num(POS, 20).optional(),
   color: color.optional(),
   trim: color.optional(),
-  glow: z.number().min(0).max(10).optional(),
+  glow: num(0, 10).optional(),
   material: z.enum(MATERIALS).optional(),
-  floors: z.number().int().min(1).max(40).optional(),
+  floors: num(1, 40, true).optional(),
   text: z.string().max(40).optional(),
   // Dimensions in metres for sized kinds (floor, wall, rug, water): length along local x, width along z.
-  length: z.number().positive().max(200).optional(),
-  width: z.number().positive().max(200).optional(),
+  length: num(POS, 200).optional(),
+  width: num(POS, 200).optional(),
   // Loop 2: the sky and motion. altitude = metres above the ground, or 'sky' (a spread 15–45 m up).
-  altitude: z.union([z.number().min(0).max(150), z.literal('sky')]).optional(),
+  altitude: z.union([num(0, 150), z.literal('sky')]).optional(),
   motion: z.enum(MOTIONS).optional(),
-  speed: z.number().positive().max(5).optional(), // motion speed multiplier (1 = natural)
+  speed: num(POS, 5).optional(), // motion speed multiplier (1 = natural)
   around: z.enum(AROUNDS).optional(), // what orbit / gallop / fly circles
-  range: z.number().positive().max(150).optional(), // motion radius in metres (orbit, gallop loop, flight, wander)
-  light: z.number().min(0).max(10).optional(), // casts real light (0 = off); glow is how bright it looks
+  range: num(POS, 150).optional(), // motion radius in metres (orbit, gallop loop, flight, wander)
+  light: num(0, 10).optional(), // casts real light (0 = off); glow is how bright it looks
   // People (NPC): a role preset, a name, a persona hint the mind is grounded in, and something to do now.
   // Free text (a "baker" is fine): the rig dresses the nearest preset (shared/npc/people.ts rolePreset).
   role: z.string().trim().min(1).max(32).transform(r => r.toLowerCase()).optional(),
@@ -91,11 +107,11 @@ export type Props = z.infer<typeof PropsSchema>
 
 // Relative modifies multiply, so the strict check for `set` can't reuse the absolute caps above.
 const RelativePropsSchema = PropsSchema.extend({
-  scale: z.number().positive().max(20).optional(),
-  height: z.number().positive().max(20).optional(),
-  floors: z.number().positive().max(40).optional(),
-  length: z.number().positive().max(200).optional(),
-  width: z.number().positive().max(200).optional()
+  scale: num(POS, 20).optional(),
+  height: num(POS, 20).optional(),
+  floors: num(POS, 40).optional(),
+  length: num(POS, 200).optional(),
+  width: num(POS, 200).optional()
 })
 
 // ---------- selectors, placement, parts ----------
@@ -105,9 +121,9 @@ export const SelectorSchema = z.object({
   kind: z.string().min(1).optional(),
   tag: z.string().min(1).optional(),
   near: z.enum(['gaze', 'player']).optional(),
-  within: z.number().positive().max(500).optional(),
+  within: num(POS, 500).optional(),
   sort: z.enum(['distance', 'height']).optional(),
-  limit: z.number().int().positive().max(500).optional()
+  limit: num(1, 500, true).optional()
 })
 export type Selector = z.infer<typeof SelectorSchema>
 
@@ -117,8 +133,8 @@ export const PlacementSchema = z.object({
   // 'around' (with anchor player or horizon) spreads the spawn 360° around the player.
   dir: z.enum(['ahead', 'left', 'right', 'behind', 'around']).optional(),
   side: z.enum(['left', 'right', 'front', 'behind', 'on_top', 'around']).optional(),
-  dist: z.number().min(0).max(1500).optional(),
-  gap: z.number().min(0).max(50).optional()
+  dist: num(0, 1500).optional(),
+  gap: num(0, 50).optional()
 })
 export type Placement = z.infer<typeof PlacementSchema>
 
@@ -136,13 +152,21 @@ export const PartSchema = z.object({
   material: z.enum(MATERIALS).optional()
 })
 export interface Part {
-  shape: Shape
-  size: Vec3 // bounding box [w, h, d] of the primitive
-  at: Vec3 // centre offset from the object's ground origin
+  shape: Shape | ForgeShape
+  size: Vec3 // bounding box [w, h, d] of the primitive (for tube / lathe / extrude: their local bounds, informational)
+  at: Vec3 // centre offset from the object's ground origin (tube / lathe / extrude: their local origin)
   rot?: Vec3
   color: string
   slot?: Slot
   material?: Material
+  /** tube: the swept path, relative to `at`, and a radius per point (tapers). */
+  points?: Vec3[]
+  radii?: number[]
+  /** lathe: [radius, y] pairs bottom → top, turned around local y. */
+  profile?: [number, number][]
+  /** extrude: a 2D outline in local x–y, `depth` thick along local z. */
+  outline?: [number, number][]
+  depth?: number
 }
 
 // ---------- the loose envelope (what structured output validates) ----------
@@ -253,16 +277,16 @@ const kindName = z.string().trim().min(1).max(48).transform(normalizeKind)
 const SpawnOp = z.object({
   op: z.literal('spawn'),
   kind: kindName,
-  count: z.number().int().min(1).max(MAX_COUNT).optional(),
+  count: num(1, MAX_COUNT, true).optional(),
   arrange: z.enum(ARRANGEMENTS).optional(),
   at: PlacementSchema.optional(),
-  radius: z.number().positive().max(200).optional(),
-  vary: z.number().min(0).max(1).optional(),
+  radius: num(POS, 200).optional(),
+  vary: num(0, 1).optional(),
   facing: z.enum(FACINGS).optional(),
   set: PropsSchema.optional(),
   // Director-only room placement (see DirectorOpSchema). Overrides `at`; skips de-overlap.
-  xz: z.array(z.number().min(-1500).max(1500)).length(2).optional(),
-  yaw: z.number().min(-720).max(720).optional()
+  xz: z.array(num(-1500, 1500)).length(2).optional(),
+  yaw: num(-720, 720).optional()
 })
 
 const DefineOp = z.object({
@@ -295,12 +319,12 @@ const UndoOp = z.object({ op: z.literal('undo') })
 const AtmosphereOp = z.object({
   op: z.literal('atmosphere'),
   time: z.enum(TIMES).optional(),
-  fog: z.number().min(0).max(1).optional(),
+  fog: num(0, 1).optional(),
   ambient: z.enum(AMBIENTS).optional(),
   weather: z.enum(WEATHERS).optional(),
   event: z.enum(SKY_EVENTS).optional(),
   // "Make me tiny" / "make everything ten times bigger": the player's size (eye height, stride). 1 = normal.
-  playerScale: z.number().min(0.02).max(10).optional()
+  playerScale: num(0.02, 10).optional()
 }).refine(a => a.time !== undefined || a.fog !== undefined || a.ambient !== undefined || a.weather !== undefined || a.event !== undefined || a.playerScale !== undefined, 'atmosphere needs time, fog, ambient, weather, event or playerScale')
 
 const TeleportOp = z.object({ op: z.literal('teleport'), world: z.string().trim().min(1).max(80), brief: z.string().max(400).optional() })
