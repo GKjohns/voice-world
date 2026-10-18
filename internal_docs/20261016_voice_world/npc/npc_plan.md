@@ -132,3 +132,30 @@ Bugs only; no new behaviour.
 - Names recur across worlds.
 - The `casts` map and in-session `minds` grow with every person spawned in a session. They're small, and storage keeps only 60.
 - `VoiceQueue.stop()` calls `speechSynthesis.cancel()`, which also cuts the other channel's browser-fallback voice. That only matters when gateway TTS is down.
+
+## Calm mode (Oct 17, 2026)
+
+**Ask (Kyle):** keep most of it, but don't have people come up and talk to you and crowd you. They stand there, do what you ask, and aren't so proactive; people shouldn't be the whole game, just clearly a little smarter than you'd expect.
+
+**Turned off (and removed, not flagged):**
+- **Greetings and noticing.** The `notice` mode, `shouldGreet`, the `onNotice` hook, the `greet` talk mode (client, `/api/npc/talk`, prompt) and `lastGreetAt` are gone. People never speak first. Stand within 3.5 m (`GLANCE_RANGE`) and look at someone for 0.6 s and they glance at you, head only; they keep doing what they were doing. The old periodic "glance at you within 12 m" is gone too.
+- **Idle banter and chiming in.** `idleBanter`, the `chime` path, `People.chat` and `chatWith` are gone, as are `banterNow`/`setChime` on `window.__conjureNpc`. Bystanders still *overhear* your conversation (a memory line), but never reply to it.
+- **Wish chorus.** `wishBark` (up to three people shouting) became `wishLine`: only a startling or scary spawn (dragon, whale, monster, volcano and so on) draws one line of 2–8 words from the nearest bystander within 12 m, at most once every 90 s, and never while you're in a conversation or a reply is streaming. Everyone still stops and looks (`People.witness`). `/api/npc/banter` now takes one speaker and writes one line.
+
+**Gentler days:** routine places resolve only within 6 m of where the genie put them (`ROUTINE_RANGE`; home within 12 m). Anything further is done where they stand. Pottering is 2.5 m (`POTTER_RADIUS`), lingering is 18–40 s (`LINGER_S`), their own errands are at a stroll, and pottering never ends within 2 m of you.
+
+**Sharper when engaged:** replies are one or two sentences, 20 words at most, answer first, with one concrete detail they would notice or remember. There are no catchphrases, and they only ask back when they need to. The examples are rewritten in that register. Asked to come along, go or wait somewhere, sit or show you something, they agree briefly and do it, without stalling ("give me a minute"). They don't offer to tag along unasked.
+
+**Kept:** talking when addressed, follow/walk_to/sit/give/point, memory and overhearing, personas and casts, moods, flee and react, genie commands over people, the routing rule, and the follower's "heading back" line.
+
+**Checks:**
+- `npm test`: 133/133 (the behaviour test now asserts that standing close stays `routine`; a new test covers the routine range and the one-line wish prompt). Typecheck and lint are clean.
+- Intent bench: Haiku 76/76 and Sonnet 76/76 (unchanged; intent wasn't touched).
+- Smoke: `scripts/npc-calm-shoot.mjs --gpu` (new). It spawns three villagers, stands 2 m from them looking for 20 s, talks, asks one to follow and one to wait by the well, then makes a dragon.
+  - Across 7 runs, there was no unprompted speech in any 20 s window: 0 talk, voice or banter calls and no bubbles.
+  - Before `PERSONAL_SPACE`, one run had a person potter to 0.7 m.
+  - Before the compliance wording, follow requests were refused in 2 of 4 runs. After it, follow and walk_to were obeyed in 3 of 3 runs. One walk had a 9 s timeout before it was raised to 12 s.
+  - The dragon drew 0 or 1 line per run, for example "Hm. Dragon. Didn't need that today."
+- `scripts/npc-shoot.mjs` now says hello instead of waiting for a greeting.
+
+**Still known:** Haiku sometimes opens with a persona's filler ("Mm."). Everyone in a fresh hamlet tends to share the same routine theme (the cast writes it). Mid-conversation, a bare creature wish like "a dragon circling overhead" goes to the person you're talking to, because the unchanged routing rule only treats imperatives and sky or weather words as world commands; "make a dragon…" goes to the genie.

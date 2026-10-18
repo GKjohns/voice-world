@@ -7,10 +7,11 @@
  *   talk       → /api/npc/talk streams the line: the bubble fills as it's written, the first sentence is
  *                voiced while the rest is still coming (gateway speech, browser speech as the fallback),
  *                then the `>>` actions run (walk, follow, wave, point, give…)
- *   walk away  → the conversation ends and they remember it; next time they greet you as someone they know
- *   each other → people talk among themselves (/api/npc/banter): a shout after a wish ("Did you SEE that?!"),
- *                neighbours passing the time when you're within earshot, someone chiming in on what they
- *                overheard. Rate-limited, cheap, and every line becomes a memory for whoever heard it.
+ *   walk away  → the conversation ends and they remember it; next time they know you
+ *   calm mode  → nobody speaks first: no greetings, no idle banter, no chiming into your conversations.
+ *                Bystanders still overhear (it's a memory). Only a truly huge wish (a dragon, a volcano)
+ *                draws one short line from the nearest person, at most once every WISH_LINE_S
+ *                (/api/npc/banter); every line becomes a memory for whoever heard it.
  *   a crowd    → one cast call (/api/npc/cast) gives the whole group different jobs and ties, then each
  *                person's persona builds on their entry
  *
@@ -26,7 +27,7 @@ import { isEcho, routeUtterance } from '#shared/npc/routing'
 import type { Route, RouteContext } from '#shared/npc/routing'
 import { describeChange, howFar, npcScene, wishEvent } from '#shared/npc/scene'
 import type { WishChange } from '#shared/npc/scene'
-import { shouldGreet, TALK_LEAVE_RANGE } from '#shared/npc/behavior'
+import { SCARY, STARTLING, TALK_LEAVE_RANGE } from '#shared/npc/behavior'
 import { personGender, rolePreset } from '#shared/npc/people'
 import { pickBlock } from '#shared/npc/routine'
 import type { Vec3 } from '#shared/world/ops'
@@ -42,30 +43,23 @@ const VOICES = { f: ['ara', 'eve', 'una'], m: ['leo', 'rex', 'sal'] } as const
 const EAGER_PERSONAS = 4
 const NEAR_PERSONA = 16
 const CONVERSATION_IDLE_S = 75
-/** People talking among themselves: at most one idle exchange this often, a wish shout this often, a chime-in this often. */
-const IDLE_BANTER_S = 35
-const WISH_BARK_S = 6
-const CHIME_S = 45
-/** Idle banter only when you can hear it; who counts as "standing together". */
-const EARSHOT = 12
-const TOGETHER = 3.6
-/** Who overhears you talking to someone (and may chime in). */
+/** A huge wish draws one line from one bystander, at most this often, from someone at most WISH_LINE_NEAR m from you. */
+const WISH_LINE_S = 90
+const WISH_LINE_NEAR = 12
+/** Who overhears you talking to someone (it becomes a memory; they don't chime in). */
 const OVERHEAR = 5
-let chimeChance = 0.3
 
 interface Mind {
   sig: string
   persona: Persona
   personaState: 'stand-in' | 'pending' | 'ready'
   memory: Memory
-  lastGreetAt: number
 }
 
 export interface NpcTiming {
   id: string
   name: string
-  mode: 'talk' | 'greet'
-  utterance?: string
+  utterance: string
   /** Request → first spoken characters on screen. */
   firstTextMs?: number
   /** Request → first audio playing. */
@@ -94,10 +88,10 @@ const playerLine = shallowRef<{ text: string, to: string, at: number } | null>(n
 const timings = shallowRef<NpcTiming[]>([])
 const lastRoute = shallowRef<Route | null>(null)
 const busy = shallowRef<string | null>(null)
-/** The second bubble: people talking among themselves (never over the conversation you're in). */
+/** The second bubble: a line said aside (a gasp at a huge wish, a follower heading home), never over the conversation. */
 const sideBubble = shallowRef<Bubble | null>(null)
 const banterSpeaking = shallowRef<string | null>(null)
-const banterLog = shallowRef<{ kind: string, ms: number, lines: { who: string, line: string, to?: string, mood?: string }[], at: number }[]>([])
+const banterLog = shallowRef<{ ms: number, lines: { who: string, line: string, to?: string, mood?: string }[], at: number }[]>([])
 /** Cast entries for people spawned in a group, by mind signature (their persona call waits for it). */
 const casts = new Map<string, Promise<CastEntry | undefined>>()
 
@@ -130,8 +124,7 @@ function seedOf(e: Entity): PersonSeed {
 function load() {
   try {
     const raw = JSON.parse(localStorage.getItem(STORE_KEY) ?? '{}') as Record<string, Mind>
-    // performance.now() restarts with the page: a saved greet time means nothing now.
-    for (const [k, m] of Object.entries(raw)) if (m?.persona && m.memory) minds.set(k, { ...m, lastGreetAt: -1e9, personaState: m.personaState === 'pending' ? 'stand-in' : m.personaState })
+    for (const [k, m] of Object.entries(raw)) if (m?.persona && m.memory) minds.set(k, { sig: m.sig ?? k, persona: m.persona, memory: m.memory, personaState: m.personaState === 'pending' ? 'stand-in' : m.personaState })
   } catch {
     // nothing saved (or unreadable): everyone starts fresh
   }
@@ -160,7 +153,7 @@ function mindOf(e: Entity): Mind {
   const sig = sigOf(e)
   let m = minds.get(sig)
   if (!m) {
-    m = { sig, persona: fallbackPersona(seedOf(e)), personaState: 'stand-in', memory: emptyMemory(), lastGreetAt: -1e9 }
+    m = { sig, persona: fallbackPersona(seedOf(e)), personaState: 'stand-in', memory: emptyMemory() }
     minds.set(sig, m)
   }
   return m
@@ -339,18 +332,15 @@ function onWorld(next: WorldState, prev: WorldState | undefined) {
     m.memory = addEvent(m.memory, wishEvent(last.label, counts, changes, removed, atmos, playerNameOf(m)) ?? generic, now)
   }
   save()
-  wishBark(generic, spawned)
+  wishLine(generic, spawned)
 }
 
-// ---------- people talking to each other ----------
+// ---------- a line said aside ----------
 
 let banterBusy = false
 let banterGen = 0
 let banterQ: VoiceQueue | null = null
-let lastIdleBanterAt = -1e9
-let lastWishBarkAt = -1e9
-let lastChimeAt = -1e9
-let idleCheckT = 0
+let lastWishLineAt = -1e9
 
 function speakerOf(e: Entity) {
   const m = mindOf(e)
@@ -363,7 +353,7 @@ function speakerOf(e: Entity) {
   }
 }
 
-/** Cut off whatever people were saying among themselves (you spoke, or a bigger moment came along). */
+/** Cut off whatever was being said aside (you spoke, or someone left). */
 function stopBanter() {
   banterGen++
   banterBusy = false
@@ -425,10 +415,10 @@ async function speakAside(e: Entity, line: BanterLine | { line: string, to?: str
   save()
 }
 
-/** Ask the banter endpoint for lines from these people, then play them one after another. */
-async function banter(kind: 'wish' | 'idle' | 'chime', ids: string[], event?: string): Promise<number> {
+/** Ask the banter endpoint for one person's line about a wish they just watched, then say it. */
+async function banter(id: string, event: string): Promise<number> {
   if (!people) return 0
-  const ents = ids.map(entityOf).filter((x): x is Entity => !!x)
+  const ents = [entityOf(id)].filter((x): x is Entity => !!x)
   if (!ents.length) return 0
   stopBanter()
   banterBusy = true
@@ -439,14 +429,14 @@ async function banter(kind: 'wish' | 'idle' | 'chime', ids: string[], event?: st
     const res = await fetch('/api/npc/banter', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ kind, speakers: ents.map(speakerOf), scene: sceneFor(first), event, playerName: playerNameOf(mindOf(first)), visitor: howFar(distToPlayer(first.id)) })
+      body: JSON.stringify({ speakers: ents.map(speakerOf), scene: sceneFor(first), event, playerName: playerNameOf(mindOf(first)), visitor: howFar(distToPlayer(first.id)) })
     })
     const out = await res.json() as { lines?: BanterLine[] }
     if (gen !== banterGen) return 0
     const lines = out.lines ?? []
     const ms = Math.round(performance.now() - t0)
-    banterLog.value = [...banterLog.value.slice(-29), { kind, ms, lines: lines.map(l => ({ who: l.who, line: l.line, ...(l.to ? { to: l.to } : {}), ...(l.mood ? { mood: l.mood } : {}) })), at: Date.now() }]
-    console.info(`[npc] banter ${kind} (${ms} ms): ${lines.map(l => `${l.who}${l.to ? `→${l.to}` : ''}: “${l.line}”`).join(' | ') || '(nothing)'}`)
+    banterLog.value = [...banterLog.value.slice(-29), { ms, lines: lines.map(l => ({ who: l.who, line: l.line, ...(l.to ? { to: l.to } : {}), ...(l.mood ? { mood: l.mood } : {}) })), at: Date.now() }]
+    console.info(`[npc] wish line (${ms} ms): ${lines.map(l => `${l.who}${l.to ? `→${l.to}` : ''}: “${l.line}”`).join(' | ') || '(nothing)'}`)
     for (const line of lines) {
       if (gen !== banterGen) return lines.length
       const e = ents.find(x => x.props.name?.toLowerCase() === line.who.toLowerCase())
@@ -468,58 +458,24 @@ async function banter(kind: 'wish' | 'idle' | 'chime', ids: string[], event?: st
   }
 }
 
-/** A wish just came true in front of people: the nearest one to three shout about it. */
-function wishBark(event: string, spawned: Entity[]) {
+/**
+ * A wish just came true in front of people. Everyone already stops and looks (People.witness); only a truly
+ * huge one (something startling or scary: a dragon, a volcano, a whale in the sky) draws one short line from
+ * the nearest bystander, and not again for WISH_LINE_S. Never while you're talking to someone.
+ */
+function wishLine(event: string, spawned: Entity[]) {
   const now = performance.now()
-  if (now - lastWishBarkAt < WISH_BARK_S * 1000) return
+  const huge = spawned.some(e => [...STARTLING, ...SCARY].some(t => e.tags.includes(t)))
+  if (!huge || now - lastWishLineAt < WISH_LINE_S * 1000 || conversation.value || busy.value || banterBusy) return
   const near = useWorld().state.value.entities
-    .filter(e => e.kind === 'person' && !spawned.includes(e) && e.id !== conversation.value && !people?.get(e.id)?.hidden)
+    .filter(e => e.kind === 'person' && !spawned.includes(e) && !people?.get(e.id)?.hidden)
     .map(e => ({ e, d: distToPlayer(e.id) }))
-    .filter(x => x.d <= 15)
-    .sort((a, b) => a.d - b.d)
-    .slice(0, 3)
-  if (!near.length) return
-  lastWishBarkAt = now
-  // A beat after it lands, so the shout follows the spectacle.
-  setTimeout(() => void banter('wish', near.map(x => x.e.id), event), 900)
-}
-
-/** Neighbours standing together within earshot pass the time (at most once every IDLE_BANTER_S). */
-function idleBanter(force = false): boolean {
-  if (!people) return false
-  const now = performance.now()
-  if (!force && (banterBusy || busy.value || speakingId.value || now - lastIdleBanterAt < IDLE_BANTER_S * 1000)) return false
-  if (!force && conversation.value && now - convoLastAt < 15_000) return false
-  const c = camXZ()
-  if (!c) return false
-  // Only people who've settled in (a persona of their own, a few seconds in the world).
-  const settled = (id: string) => {
-    const e = entityOf(id)
-    const m = e ? mindOf(e) : undefined
-    if (e && m && personaPending(m)) void ensurePersona(e)
-    return m?.personaState === 'ready'
-  }
-  const free = people.all().filter(l => !l.hidden && (l.mode === 'routine' || l.mode === 'notice') && l.goal?.activity !== 'sleep' && l.id !== conversation.value && now - l.bornAt > 8000 && settled(l.id))
-  let best: [string, string, number] | null = null
-  for (let i = 0; i < free.length; i++) {
-    for (let j = i + 1; j < free.length; j++) {
-      const a = free[i]!
-      const b = free[j]!
-      if (Math.hypot(a.x - b.x, a.z - b.z) > TOGETHER) continue
-      const d = Math.hypot((a.x + b.x) / 2 - c[0], (a.z + b.z) / 2 - c[1])
-      if (d <= EARSHOT && (!best || d < best[2])) best = [a.id, b.id, d]
-    }
-  }
-  if (!best) return false
-  lastIdleBanterAt = now
-  people.chat(best[0], best[1], 16)
-  people.chat(best[1], best[0], 16)
-  for (const id of [best[0], best[1]]) {
-    const e = entityOf(id)
-    if (e && personaPending(mindOf(e))) void ensurePersona(e)
-  }
-  void banter('idle', [best[0], best[1]])
-  return true
+    .filter(x => x.d <= WISH_LINE_NEAR)
+    .sort((a, b) => a.d - b.d)[0]
+  if (!near) return
+  lastWishLineAt = now
+  // A beat after it lands, so the line follows the spectacle.
+  setTimeout(() => void banter(near.e.id, event), 1200)
 }
 
 /** A follower drifted off (a minute of silence, or you left them behind): they say so, and go back to their day. */
@@ -774,14 +730,13 @@ function applyActions(id: string, actions: NpcAction[], ctx: OpContext) {
 }
 
 /**
- * Speak to a person (or let them greet you: `utterance` undefined). Streams their answer into the bubble,
+ * Speak to a person (they never speak first). Streams their answer into the bubble,
  * voices it sentence by sentence while it's still being written, then runs what they decided to do.
  */
-async function talk(id: string, utterance: string | undefined, ctx: OpContext = useWorld().snapshot()): Promise<NpcTiming | null> {
+async function talk(id: string, utterance: string, ctx: OpContext = useWorld().snapshot()): Promise<NpcTiming | null> {
   const e = entityOf(id)
   if (!e || !people) return null
   const m = mindOf(e)
-  const mode = utterance ? 'talk' : 'greet'
   // A new line cuts off whatever anyone was saying (barge-in, like the genie), banter included.
   abortTalk?.abort()
   voiceQ?.stop()
@@ -794,15 +749,13 @@ async function talk(id: string, utterance: string | undefined, ctx: OpContext = 
   convoLastAt = performance.now()
   busy.value = id
   if (personaPending(m)) void ensurePersona(e)
-  if (utterance) {
-    playerLine.value = { text: utterance, to: e.props.name ?? '', at: Date.now() }
-    const { memory, toSummarize } = addTurn(m.memory, { who: 'player', text: utterance, at: Date.now() })
-    m.memory = memory
-    if (toSummarize.length) void summarize(m, toSummarize)
-  }
+  playerLine.value = { text: utterance, to: e.props.name ?? '', at: Date.now() }
+  const added = addTurn(m.memory, { who: 'player', text: utterance, at: Date.now() })
+  m.memory = added.memory
+  if (added.toSummarize.length) void summarize(m, added.toSummarize)
   setBubble(id, '', true)
   const t0 = performance.now()
-  const timing: NpcTiming = { id, name: e.props.name ?? id, mode, utterance }
+  const timing: NpcTiming = { id, name: e.props.name ?? id, utterance }
   const live = people.get(id)
   const q = new VoiceQueue(id, m.persona)
   voiceQ = q
@@ -836,11 +789,10 @@ async function talk(id: string, utterance: string | undefined, ctx: OpContext = 
       signal: ctrl.signal,
       body: JSON.stringify({
         persona: m.persona,
-        memory: { summary: m.memory.summary, turns: m.memory.turns.slice(utterance ? -9 : -8, utterance ? -1 : undefined), events: m.memory.events, facts: m.memory.facts, met: m.memory.met },
+        memory: { summary: m.memory.summary, turns: m.memory.turns.slice(-9, -1), events: m.memory.events, facts: m.memory.facts, met: m.memory.met },
         scene: sceneFor(e),
         doing: live?.doing ?? 'standing about',
         utterance,
-        mode,
         playerName: playerNameOf(m)
       })
     })
@@ -878,64 +830,29 @@ async function talk(id: string, utterance: string | undefined, ctx: OpContext = 
   m.memory = { ...memory, lastTalkAt: Date.now() }
   if (reply.remember) m.memory = addFact(m.memory, reply.remember)
   if (toSummarize.length) void summarize(m, toSummarize)
-  if (mode === 'greet') m.lastGreetAt = performance.now()
   convoLastAt = performance.now()
   if (reply.mood) people.setMood(id, reply.mood, 10)
   applyActions(id, reply.actions, ctx)
-  if (utterance) overheard(e, utterance, say, q)
+  overheard(e, utterance, say)
   save()
   timings.value = [...timings.value.slice(-19), timing]
-  console.info(`[npc] ${timing.name} ${mode}${utterance ? ` “${utterance.slice(0, 60)}”` : ''} → first text ${timing.firstTextMs ?? '-'} ms · done ${timing.doneMs} ms · “${say.slice(0, 80)}”${reply.actions.length ? ` · do ${reply.actions.map(a => a.act).join(', ')}` : ''}`)
+  console.info(`[npc] ${timing.name} talk “${utterance.slice(0, 60)}” → first text ${timing.firstTextMs ?? '-'} ms · done ${timing.doneMs} ms · “${say.slice(0, 80)}”${reply.actions.length ? ` · do ${reply.actions.map(a => a.act).join(', ')}` : ''}`)
   return timing
 }
 
-/**
- * Anyone standing near you hears what you said to their neighbour, and what they answered (so "do you
- * agree with that?" means something). Now and then the nearest one chimes in.
- */
-function overheard(e: Entity, utterance: string, answer: string, q: VoiceQueue) {
-  const c = camXZ()
-  if (!c || !people) return
+/** Anyone standing near you hears what you said to their neighbour, and the answer (a memory, never a reply). */
+function overheard(e: Entity, utterance: string, answer: string) {
   const now = Date.now()
-  const near = useWorld().state.value.entities
-    .filter(x => x.kind === 'person' && x.id !== e.id && !people?.get(x.id)?.hidden)
-    .map(x => ({ x, d: distToPlayer(x.id) }))
-    .filter(n => n.d <= OVERHEAR)
-    .sort((a, b) => a.d - b.d)
-  for (const { x } of near) {
+  for (const x of useWorld().state.value.entities) {
+    if (x.kind !== 'person' || x.id === e.id || people?.get(x.id)?.hidden || distToPlayer(x.id) > OVERHEAR) continue
     const m = mindOf(x)
     const you = playerNameOf(m) ?? 'the visitor'
     m.memory = addEvent(m.memory, `overheard ${you} say to ${e.props.name}: "${utterance.slice(0, 70)}", and ${e.props.name} answer: "${answer.slice(0, 80)}"`, now)
   }
-  const by = near.find(n => n.d <= 4.5 && people!.get(n.x.id)?.mode !== 'flee')
-  if (!by || performance.now() - lastChimeAt < CHIME_S * 1000 || Math.random() >= chimeChance) return
-  lastChimeAt = performance.now()
-  const you = playerNameOf(mindOf(by.x)) ?? 'the visitor'
-  const event = `${you} said to ${e.props.name}: "${utterance.slice(0, 120)}" and ${e.props.name} answered: "${answer.slice(0, 140)}"`
-  const go = () => {
-    // Only if nobody has spoken since (a new line from you wins).
-    if (busy.value || speakingId.value) return
-    void banter('chime', [by.x.id], event)
-  }
-  const wait = () => (q.active ? setTimeout(wait, 300) : setTimeout(go, 500))
-  wait()
 }
 
 function personaPending(m: Mind): boolean {
   return m.personaState === 'stand-in'
-}
-
-/** You walked up and looked at them: they turn to you, and now and then speak first. */
-function onNotice(id: string, lookedFor: number) {
-  if (busy.value || conversation.value) return
-  const e = entityOf(id)
-  if (!e) return
-  const m = mindOf(e)
-  if (personaPending(m)) void ensurePersona(e)
-  const now = performance.now()
-  if (!shouldGreet(lookedFor, (now - m.lastGreetAt) / 1000, (Date.now() - m.memory.lastTalkAt) / 1000)) return
-  m.lastGreetAt = now
-  void talk(id, undefined)
 }
 
 /** Per frame (throttled): end a conversation you walked away from; give nearby people their persona. */
@@ -957,11 +874,6 @@ function tick(dt: number) {
       voiceQ?.stop()
       if (bubble.value?.id === id) holdBubble(id, 900)
     } else if (idle) endConversation('silence')
-  }
-  idleCheckT -= 0.3
-  if (idleCheckT <= 0) {
-    idleCheckT = 3
-    idleBanter()
   }
   for (const e of useWorld().state.value.entities) {
     if (e.kind !== 'person') continue
@@ -999,7 +911,6 @@ function attach(r: WorldRenderer) {
   load()
   people = new People(r, {
     routineOf,
-    onNotice,
     talkingTo: () => conversation.value,
     isSpeaking: id => id === (speakingId.value ?? (busy.value && bubble.value?.thinking === false ? busy.value : null)) || id === banterSpeaking.value,
     onFollowEnd,
@@ -1050,7 +961,7 @@ function expose() {
       const e = entityOf(id)
       return e ? mindOf(e) : null
     },
-    talk: (id: string, text?: string) => talk(id, text),
+    talk: (id: string, text: string) => talk(id, text),
     say: (text: string) => say(text, useIntent().capture(), 'text'),
     route: (text: string) => routeUtterance(text, routeContext()),
     conversation: () => conversation.value,
@@ -1059,13 +970,6 @@ function expose() {
     sideBubble: () => sideBubble.value,
     slot: () => people?.slot(),
     banterLog: () => banterLog.value,
-    /** Verification: start an idle exchange now (between the nearest pair standing together within earshot). */
-    banterNow: () => idleBanter(true),
-    /** Verification: how likely a bystander chimes in (0..1). */
-    setChime: (p: number) => {
-      chimeChance = p
-      lastChimeAt = -1e9
-    },
     mood: (id: string) => people?.get(id)?.mood ?? null,
     /** Verification: show a feeling on someone's face for a while. */
     setMood: ([id, mood, secs]: [string, string, number?]) => people?.setMood(id, mood, secs ?? 20)

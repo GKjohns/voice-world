@@ -1,5 +1,5 @@
 // Headless end-to-end check for people (NPC): build a lake village, spawn people by typing to the genie,
-// walk up to one, let them greet you, talk by typing, give world commands mid-conversation, walk away and
+// walk up to one and say hello (calm mode: they never speak first), talk by typing, give world commands mid-conversation, walk away and
 // come back, and tell the whole town to wave and dance. Logs every [npc] line and the timings; PNGs to --out.
 // Usage: node scripts/npc-shoot.mjs [--url http://localhost:3091/] [--out dir] [--gpu]
 import { chromium } from 'playwright'
@@ -125,9 +125,11 @@ console.log('fisherman is', fisher)
 const persona = await npc('mind', ps.find(p => p.name === fisher)?.id)
 console.log('persona:', JSON.stringify(persona?.persona).slice(0, 600))
 
-// 2. Walk up and look: they notice, turn, and greet you.
+// 2. Walk up, look, and say hello (calm mode: they glance up but never speak first).
 let n = (await npc('timings')).length
 await faceOf(fisher, 2.6)
+await wait(1500)
+await type('Hello there.')
 const greet = await npcDone(n, 15000).catch(() => null)
 console.log('greet:', JSON.stringify(greet))
 await wait(600)
@@ -186,13 +188,12 @@ console.log('conversation after walking away:', await npc('conversation'))
 await page.evaluate((name) => {
   const p = window.__conjureNpc.people().find(x => x.name === name)
   const m = p && window.__conjureNpc.mind(p.id)
-  if (m) {
-    m.lastGreetAt = -1e9
-    m.memory.lastTalkAt = 0
-  }
+  if (m) m.memory.lastTalkAt = 0
 }, fisher)
 n = (await npc('timings')).length
 await faceOf(fisher, 2.4)
+await wait(800)
+await type('Remember me?')
 const back = await npcDone(n, 15000).catch(() => null)
 console.log('greet on return:', JSON.stringify(back))
 await wait(500)
@@ -227,5 +228,5 @@ const state = await page.evaluate(() => window.__conjure.state().entities.filter
 console.log('final:', state.join(' | '))
 const all = await npc('timings')
 writeFileSync(resolve(outDir, 'timings.json'), JSON.stringify({ timings, npc: all, log }, null, 2))
-console.log('npc timings:', all.map(t => `${t.name} ${t.mode} text ${t.firstTextMs} audio ${t.firstAudioMs} done ${t.doneMs}`).join('\n'))
+console.log('npc timings:', all.map(t => `${t.name} text ${t.firstTextMs} audio ${t.firstAudioMs} done ${t.doneMs}`).join('\n'))
 await browser.close()

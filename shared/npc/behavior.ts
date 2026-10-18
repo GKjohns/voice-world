@@ -8,19 +8,19 @@
  *   talk      a conversation is open and you're still close
  *   act       the genie told them to (dance, sit, follow) or they agreed to follow you
  *   react     a big event just happened (a dragon, thunder): they stop and look
- *   notice    you came close and looked at them: they turn to you (and may greet you)
- *   routine   their day: walk to the place for this time of day, then do the thing there
+ *   routine   their day: a gentle one, mostly in place (calm mode: they never come to you unasked)
+ *
+ * Calm mode: there is no "notice" mode. Stand close and look at someone and they glance at you (head only,
+ * `GLANCE_RANGE`), but they don't stop what they're doing, walk over or speak first.
  */
 
-export type Mode = 'flee' | 'talk' | 'act' | 'react' | 'notice' | 'routine'
+export type Mode = 'flee' | 'talk' | 'act' | 'react' | 'routine'
 
 export interface ModeInput {
   fleeing: boolean
   talking: boolean
   /** Metres to the player. */
   playerDist: number
-  /** The player is looking roughly at them (within ~12° of the crosshair). */
-  playerLooking: boolean
   /** A lasting act: dance, sit or follow (from the genie or their own "I'll come with you"). */
   lasting: boolean
   /** The genie told them to dance or sit: that wins even mid-conversation (they keep talking while they do it). */
@@ -28,7 +28,8 @@ export interface ModeInput {
   reacting: boolean
 }
 
-export const NOTICE_RANGE = 4
+/** Stand this close and look at someone, and they glance back (head only). */
+export const GLANCE_RANGE = 3.5
 export const TALK_LEAVE_RANGE = 8
 
 export function chooseMode(i: ModeInput): Mode {
@@ -38,13 +39,7 @@ export function chooseMode(i: ModeInput): Mode {
   if (i.talking && i.playerDist <= TALK_LEAVE_RANGE) return 'talk'
   if (i.lasting) return 'act'
   if (i.reacting) return 'react'
-  if (i.playerDist <= NOTICE_RANGE && i.playerLooking) return 'notice'
   return 'routine'
-}
-
-/** Should a person who just noticed you say something? Once per approach, not within `cooldown` s of the last time. */
-export function shouldGreet(lookedFor: number, sinceLastGreet: number, sinceLastTalk: number, cooldown = 90): boolean {
-  return lookedFor >= 0.8 && sinceLastGreet >= cooldown && sinceLastTalk >= 20
 }
 
 /** Is the player looking at a point: the angle between the view and the direction to it, in radians. */

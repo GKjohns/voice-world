@@ -12,11 +12,11 @@ import { buildContext } from '../shared/world/context.ts'
 import type { OpContext, WorldState } from '../shared/world/types.ts'
 import { fallbackPersona, parseCast, parsePersona, addTurn, emptyMemory, MAX_TURNS, KEEP_TURNS, addEvent } from '../shared/npc/persona.ts'
 import { capSpoken, parseBanter, parseReply, spokenSoFar, speakableCut, cleanSpoken } from '../shared/npc/reply.ts'
-import { cleanTarget, currentSlot, pickBlock, resolvePlace, standPoint, slotsFor, SLOT_SECONDS } from '../shared/npc/routine.ts'
+import { cleanTarget, currentSlot, pickBlock, resolvePlace, standPoint, slotsFor, ROUTINE_RANGE, SLOT_SECONDS } from '../shared/npc/routine.ts'
 import { routeUtterance, isEcho, isWorldCommand, isGenieHail } from '../shared/npc/routing.ts'
 import type { RouteContext } from '../shared/npc/routing.ts'
 import { deckAt, inWater, canStand, steer } from '../shared/npc/ground.ts'
-import { chooseMode, shouldGreet, viewAngle } from '../shared/npc/behavior.ts'
+import { chooseMode, viewAngle } from '../shared/npc/behavior.ts'
 import { genderOfWords, personGender, personWord, rolePreset } from '../shared/npc/people.ts'
 import { describeChange, howFar, npcScene, wishEvent } from '../shared/npc/scene.ts'
 import { honestSay } from '../shared/world/honesty.ts'
@@ -235,11 +235,11 @@ test('ground: docks are decks over the lake; the lake itself is not for walking'
   assert.ok(a !== null && Math.abs(a - Math.PI / 2) > 0.3)
 })
 
-test('behaviour: fleeing beats talking beats acts beats reacting beats noticing beats routine', () => {
-  const base = { fleeing: false, talking: false, playerDist: 20, playerLooking: false, lasting: false, reacting: false }
+test('behaviour: fleeing beats talking beats acts beats reacting beats routine; standing close never pulls them out of their day', () => {
+  const base = { fleeing: false, talking: false, playerDist: 20, lasting: false, reacting: false }
   assert.equal(chooseMode(base), 'routine')
-  assert.equal(chooseMode({ ...base, playerDist: 3, playerLooking: true }), 'notice')
-  assert.equal(chooseMode({ ...base, playerDist: 3, playerLooking: true, reacting: true }), 'react')
+  assert.equal(chooseMode({ ...base, playerDist: 1.5 }), 'routine') // calm mode: no notice, no greeting
+  assert.equal(chooseMode({ ...base, playerDist: 3, reacting: true }), 'react')
   assert.equal(chooseMode({ ...base, reacting: true, lasting: true }), 'act')
   assert.equal(chooseMode({ ...base, lasting: true, talking: true, playerDist: 5 }), 'talk')
   assert.equal(chooseMode({ ...base, talking: true, playerDist: 12 }), 'routine') // you walked away
@@ -247,9 +247,6 @@ test('behaviour: fleeing beats talking beats acts beats reacting beats noticing 
   assert.equal(chooseMode({ ...base, talking: true, playerDist: 2, lasting: true, commanded: true }), 'act') // the genie said dance
   assert.equal(chooseMode({ ...base, lasting: true, commanded: true, reacting: true }), 'react') // …but a dragon stops the dance
   assert.equal(chooseMode({ ...base, lasting: true, commanded: true, fleeing: true }), 'flee')
-  assert.ok(shouldGreet(1, 200, 100))
-  assert.ok(!shouldGreet(0.3, 200, 100))
-  assert.ok(!shouldGreet(1, 30, 100))
   assert.ok(viewAngle([0, 1.6, 0], 0, 0, [0, 1.6, -5]) < 0.01)
   assert.ok(viewAngle([0, 1.6, 0], 0, 0, [5, 1.6, 0]) > 1.5)
 })
@@ -409,4 +406,20 @@ test('routine: a word of a compound kind finds it ("pool" → pool_table, "count
   assert.equal(resolvePlace('pool', ents, [0, 0], 'me')?.id, 'pool_table#1')
   assert.equal(resolvePlace('counter', ents, [0, 0], 'me')?.id, 'bar_counter#2')
   assert.equal(resolvePlace('bar', ents, [0, 0], 'me')?.id, 'bar_counter#2')
+})
+
+test('calm mode: a routine stays local, and a wish draws one short line from one person', async () => {
+  const ents = [
+    { id: 'dock#1', kind: 'dock', tags: ['dock'], pos: [40, 0, 0] as [number, number, number], rotY: 0, props: {} },
+    { id: 'well#2', kind: 'well', tags: ['well'], pos: [4, 0, 3] as [number, number, number], rotY: 0, props: {} }
+  ]
+  assert.equal(resolvePlace('dock', ents, [0, 0], 'me', ROUTINE_RANGE), undefined) // across the map: not part of their day
+  assert.equal(resolvePlace('well', ents, [0, 0], 'me', ROUTINE_RANGE)?.id, 'well#2')
+  const { banterPrompt, talkPrompt } = await import('../server/utils/npc.ts')
+  const persona = fallbackPersona({ id: 'person#9', role: 'fisherman', name: 'Edda' })
+  const b = banterPrompt({ speakers: [{ id: 'person#9', persona, doing: 'fishing', recent: [] }], scene: 'a dock', event: 'a dragon appeared' })
+  assert.match(b, /Write 1 line/)
+  const t = talkPrompt({ persona, memory: { ...emptyMemory(), met: 0 }, scene: 'a dock', doing: 'fishing', utterance: 'follow me' })
+  assert.doesNotMatch(t, /Greet them first/)
+  assert.match(t, /Visitor: "follow me"/)
 })

@@ -11,6 +11,15 @@ import type { DaySlot, RoutineBlock } from './persona.ts'
 /** Seconds a slot lasts when the world's time spans several (a "day" is morning → midday → afternoon). */
 export const SLOT_SECONDS = 50
 
+/**
+ * Calm mode: a routine stays local. People stay roughly where the genie put them: a place further than this
+ * from there is out of their day (they do the thing where they are), they potter only a few steps, and they
+ * linger a long while between.
+ */
+export const ROUTINE_RANGE = 6
+export const POTTER_RADIUS = 2.5
+export const LINGER_S: [number, number] = [18, 40]
+
 export function slotsFor(time: TimeOfDay): DaySlot[] {
   switch (time) {
     case 'dawn': return ['dawn', 'morning']

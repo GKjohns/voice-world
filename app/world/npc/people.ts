@@ -6,16 +6,20 @@
  * moves them.
  *
  * The mind (persona, memory, talk) lives in `useNpc`; this file only knows bodies and routines, plus a few
- * hooks it calls back: `onNotice` (you walked up and looked at them), `routineOf` (their day).
+ * hooks it calls back: `routineOf` (their day), `onFollowEnd`.
+ *
+ * Calm mode: people stay put and get on with their day. They never walk over to you or turn to greet you;
+ * stand close and look at one and they glance back (head only). They move when asked, or when something
+ * startles them.
  */
 import { KIT } from '#shared/world/kinds'
 import type { Act, Vec3 } from '#shared/world/ops'
 import type { Entity, WorldState } from '#shared/world/types'
-import { chooseMode, FLEE_RANGE, NOTICE_RANGE, SCARY, SPEED, STARTLING, viewAngle } from '#shared/npc/behavior'
+import { chooseMode, FLEE_RANGE, GLANCE_RANGE, SCARY, SPEED, STARTLING, viewAngle } from '#shared/npc/behavior'
 import type { Mode } from '#shared/npc/behavior'
 import { canStand, deckAt, obstacles, steer } from '#shared/npc/ground'
 import type { RoutineBlock, DaySlot } from '#shared/npc/persona'
-import { cleanTarget, currentSlot, pickBlock, resolvePlace, standPoint } from '#shared/npc/routine'
+import { cleanTarget, currentSlot, LINGER_S, pickBlock, POTTER_RADIUS, resolvePlace, ROUTINE_RANGE, standPoint } from '#shared/npc/routine'
 import type { PlaceEntity } from '#shared/npc/routine'
 import { applyPose } from '../fx/motion'
 import { restPose } from '../kit/people'
@@ -84,16 +88,12 @@ export interface Live {
   ownActUntil: number
   /** Following: since when, and the last time you spoke to them (a follower drifts off after a minute of silence). */
   lastTouch: number
-  /** Passing the time with a neighbour (banter): who, and until when. */
-  chatWith: string | null
-  chatUntil: number
   mood: string
   moodUntil: number
 }
 
 export interface PeopleHooks {
   routineOf: (id: string) => RoutineBlock[]
-  onNotice?: (id: string, lookedFor: number) => void
   /** Who's mid-conversation, and whether this person is speaking aloud right now. */
   talkingTo: () => string | null
   isSpeaking: (id: string) => boolean
@@ -110,6 +110,8 @@ export const FOLLOW_QUIET_S = 60
 export const FOLLOW_FAR = 20
 
 const TAU = Math.PI * 2
+/** Their own pottering never ends closer than this to you. */
+const PERSONAL_SPACE = 2
 const STRIDE_LEN = 1.35 // metres per full stride cycle at a walk
 
 function hash(id: string, salt: string): number {
@@ -205,14 +207,6 @@ export class People {
     if (!l || !mood) return
     l.mood = mood
     l.moodUntil = performance.now() + secs * 1000
-  }
-
-  /** Stop and pass the time with a neighbour: face them, stay put, for `secs` seconds. */
-  chat(id: string, withId: string, secs: number): void {
-    const l = this.live.get(id)
-    if (!l) return
-    l.chatWith = withId
-    l.chatUntil = performance.now() + secs * 1000
   }
 
   walkTo(id: string, target: string): boolean {
@@ -362,13 +356,13 @@ export class People {
   private spawn(e: Entity, now: number): Live {
     return {
       id: e.id, name: e.props.name ?? 'someone', x: e.pos[0], z: e.pos[2], y: e.pos[1], yaw: e.rotY, home: [e.pos[0], e.pos[2]],
-      mode: 'routine', goal: null, arrived: false, arrivedAt: now, linger: 1.5 + hash(e.id, 'l') * 3, speed: 0, stride: hash(e.id, 's'),
+      mode: 'routine', goal: null, arrived: false, arrivedAt: now, linger: LINGER_S[0] * hash(e.id, 'l'), speed: 0, stride: hash(e.id, 's'),
       pose: { ...restPose(), seed: hash(e.id, 'pose') }, oneShot: null, following: false, ownAct: null, suppressAct: false,
       reactUntil: 0, reactAt: null, fleeFrom: null, fleeUntil: 0, lookAt: null, lookUntil: 0, lookedFor: 0,
       // A person born with an act does it once at birth; one already standing when the page loads doesn't replay it.
       seenActId: now - this.t0 < 2500 ? e.props.actId : undefined,
       seed: hash(e.id, 'seed'), doing: 'looking around', lastPos: [...e.pos], footT: 0, blockKey: '', stall: 0, hidden: false, bornAt: now,
-      actUntil: 0, ownActUntil: 0, lastTouch: now, chatWith: null, chatUntil: 0, mood: 'calm', moodUntil: 0
+      actUntil: 0, ownActUntil: 0, lastTouch: now, mood: 'calm', moodUntil: 0
     }
   }
 
@@ -411,7 +405,7 @@ export class People {
     const head: Vec3 = [l.x, l.y + 1.6, l.z]
     // A looser cone for someone walking past (the crosshair can't track a moving head).
     const looking = viewAngle(eye, this.r.yaw, this.r.pitch, head) < (l.speed > 0.3 ? 0.34 : 0.22) || this.r.gazeNow?.entity === l.id
-    l.lookedFor = pd <= NOTICE_RANGE && looking ? l.lookedFor + dt : 0
+    l.lookedFor = pd <= GLANCE_RANGE && looking ? l.lookedFor + dt : 0
     // Acts end: the genie's dance or sit runs its course, their own too, and then the day takes over.
     if (l.ownAct && now > l.ownActUntil) l.ownAct = null
     const genieAct = l.suppressAct ? undefined : e.props.act
@@ -428,12 +422,10 @@ export class People {
       fleeing: !!l.fleeFrom && now < l.fleeUntil,
       talking: this.hooks.talkingTo() === l.id,
       playerDist: pd,
-      playerLooking: looking,
       lasting,
       commanded: act === 'dance' || act === 'sit',
       reacting: now < l.reactUntil
     })
-    if (l.mode === 'notice' && this.hooks.onNotice) this.hooks.onNotice(l.id, l.lookedFor)
     if (l.mode === 'flee' && now > l.moodUntil - 3000) {
       l.mood = 'afraid'
       l.moodUntil = now + 6000
@@ -455,10 +447,9 @@ export class People {
         else if (!l.goal?.hold) l.goal = null
         l.doing = l.following ? 'walking with the visitor, talking' : 'talking with the visitor'
         return
-      case 'notice':
       case 'react':
         l.goal = l.goal?.hold ? l.goal : null
-        l.doing = l.mode === 'react' ? 'staring up at what just happened' : l.doing
+        l.doing = 'staring up at what just happened'
         return
       case 'act': {
         if (l.following) {
@@ -474,20 +465,7 @@ export class People {
         break
     }
 
-    // Passing the time with a neighbour: stay put and face them.
-    if (l.chatWith && now < l.chatUntil) {
-      const o = this.live.get(l.chatWith)
-      if (o) {
-        if (l.goal && !l.arrived) l.goal = { ...l.goal, x: l.x, z: l.z }
-        l.arrived = true
-        l.lookAt = [o.x, o.y + 1.55, o.z]
-        l.lookUntil = now + 400
-        l.doing = `chatting with ${o.name}`
-        return
-      }
-    } else if (l.chatWith) l.chatWith = null
-
-    // Routine: the block for this time of day → a place → a spot; then linger, then idle wander near it.
+    // Routine: the block for this time of day → a place near home → a spot; then a long linger, a few steps, linger again.
     if (l.goal?.hold) {
       if (l.arrived && (now - l.arrivedAt) / 1000 > l.goal.hold) l.goal = null
       else return
@@ -498,7 +476,7 @@ export class People {
       l.blockKey = key
       if (block && block.place !== 'wander') {
         const sleeping = block.activity === 'sleep'
-        const place = block.place === 'home' ? this.homeOf(l, ents) : resolvePlace(block.place, ents, l.home, l.id)
+        const place = block.place === 'home' ? this.homeOf(l, ents) : resolvePlace(block.place, ents, l.home, l.id, ROUTINE_RANGE)
         if (place) {
           const fp = (this.state!.kinds[place.kind] ?? KIT[place.kind])?.footprint ?? 1
           const sp = this.freeStandPoint(place, fp, l)
@@ -508,7 +486,7 @@ export class People {
           return
         }
       }
-      // Wander (or nowhere to go): stroll around home.
+      // Wander (or nowhere near to go): potter about home.
       l.goal = this.idleSpot(l, block?.activity === 'sleep' ? 'sit' : block?.activity ?? 'stand', block?.doing ?? 'strolling about', key)
       l.arrived = false
       return
@@ -519,9 +497,9 @@ export class People {
       // Fishing, sitting and sleeping stay put; everything else potters about now and then.
       const stays = ['fish', 'sit', 'sleep', 'read', 'chat', 'play', 'serve'].includes(l.goal.activity)
       if (l.linger <= 0 && !stays) {
-        l.goal = this.idleSpot(l, l.goal.activity === 'patrol' || l.goal.activity === 'wander' ? l.goal.activity : 'stand', l.goal.doing, key, [l.goal.x, l.goal.z], l.goal.activity === 'patrol' || l.goal.activity === 'wander' ? 9 : 3.5)
+        l.goal = this.idleSpot(l, l.goal.activity === 'patrol' || l.goal.activity === 'wander' ? l.goal.activity : 'stand', l.goal.doing, key, [l.goal.x, l.goal.z], POTTER_RADIUS)
         l.arrived = false
-        l.linger = 6 + hash(l.id, String(Math.floor(now / 1000))) * 10
+        l.linger = LINGER_S[0] + hash(l.id, String(Math.floor(now / 1000))) * (LINGER_S[1] - LINGER_S[0])
       }
     }
   }
@@ -550,13 +528,15 @@ export class People {
     }
   }
 
-  private idleSpot(l: Live, activity: string, doing: string, key: string, around: [number, number] = l.home, R = 7): Goal {
+  /** A few steps somewhere near `around`, never into your personal space (they don't crowd you). */
+  private idleSpot(l: Live, activity: string, doing: string, key: string, around: [number, number] = l.home, R = POTTER_RADIUS): Goal {
+    const cam = this.r.camera.position
     for (let i = 0; i < 8; i++) {
       const a = hash(l.id, `${key}${i}${Math.floor(performance.now() / 4000)}`) * TAU
       const r = (0.3 + 0.7 * hash(l.id, `r${i}${Math.floor(performance.now() / 4000)}`)) * R
       const x = around[0] + Math.sin(a) * r
       const z = around[1] + Math.cos(a) * r
-      if (this.standable(x, z)) return { x, z, activity, doing, key: `idle:${key}` }
+      if (Math.hypot(x - cam.x, z - cam.z) >= PERSONAL_SPACE && this.standable(x, z)) return { x, z, activity, doing, key: `idle:${key}` }
     }
     return { x: l.x, z: l.z, activity, doing, key: `idle:${key}` }
   }
@@ -579,7 +559,7 @@ export class People {
 
   private homeOf(l: Live, ents: PlaceEntity[]): PlaceEntity | undefined {
     for (const k of ['house', 'storefront', 'tent', 'cabin']) {
-      const hit = resolvePlace(k, ents, l.home, l.id, 80)
+      const hit = resolvePlace(k, ents, l.home, l.id, ROUTINE_RANGE * 2)
       if (hit) return hit
     }
     return undefined
@@ -607,11 +587,13 @@ export class People {
       if (d < 0.25) {
         l.arrived = true
         l.arrivedAt = performance.now()
-        if (l.mode === 'routine') l.linger = 4 + hash(l.id, String(Math.round(l.arrivedAt))) * 6
+        if (l.mode === 'routine') l.linger = LINGER_S[0] + hash(l.id, String(Math.round(l.arrivedAt))) * (LINGER_S[1] - LINGER_S[0])
       } else {
         const fleeing = l.mode === 'flee'
         const catchingUp = l.following || l.mode === 'act'
-        const pace = fleeing || (catchingUp && d > 7) ? SPEED.run : catchingUp && d > 3 ? SPEED.hurry : d > 30 ? SPEED.hurry : SPEED.walk * (0.9 + 0.2 * l.seed)
+        // Their own day is an amble; somewhere you asked them to go, a walk (a hurry if it's far).
+        const amble = l.mode === 'routine' && !g.hold
+        const pace = fleeing || (catchingUp && d > 7) ? SPEED.run : catchingUp && d > 3 ? SPEED.hurry : amble ? SPEED.stroll * (0.85 + 0.2 * l.seed) : d > 30 ? SPEED.hurry : SPEED.walk * (0.9 + 0.2 * l.seed)
         want = Math.min(pace, d * 2)
         const solid = obstacles(ents, k => this.footprint(k), [l.x, l.z])
         // Boxed in where they stand (spawned on a house, say): walk out ignoring solids.
@@ -670,13 +652,12 @@ export class People {
     const act0 = l.suppressAct ? undefined : e.props.act
     const act = (act0 === 'dance' || act0 === 'sit') && now > l.actUntil ? undefined : act0
     const atGoal = !!l.goal && l.arrived
-    const chatting0 = !!l.chatWith && now < l.chatUntil
-    const activity = l.mode === 'routine' && atGoal && !chatting0 ? l.goal!.activity : chatting0 ? 'chat' : ''
+    const activity = l.mode === 'routine' && atGoal ? l.goal!.activity : ''
     const lastingAct: string | null = act === 'dance' || act === 'sit' ? act : l.ownAct
 
-    // Face: you when talking or noticed; the thing that startled them; the routine's direction once there.
+    // Face: you when talking; the routine's direction once there.
     let face: number | null = null
-    if (l.mode === 'talk' || l.mode === 'notice') face = Math.atan2(eye[0] - l.x, eye[2] - l.z)
+    if (l.mode === 'talk') face = Math.atan2(eye[0] - l.x, eye[2] - l.z)
     else if (atGoal && l.goal!.yaw !== undefined && l.speed < 0.3) face = l.goal!.yaw
     else if (l.mode === 'act' && lastingAct === 'dance') face = Math.atan2(eye[0] - l.x, eye[2] - l.z) + 0.5 * Math.sin(p.t * 0.8 + l.seed * 6)
     if (face !== null && l.speed < 0.3) {
@@ -690,14 +671,10 @@ export class People {
     if (l.lookAt && now < l.lookUntil) look = l.lookAt
     // A dragon or a thunderclap gets a glance even mid-conversation.
     else if ((l.mode === 'react' || now < l.reactUntil) && l.reactAt) look = l.reactAt
-    else if (l.mode === 'talk' || l.mode === 'notice' || (l.oneShot && l.oneShot.kind !== 'point')) look = eye
+    else if (l.mode === 'talk' || (l.oneShot && l.oneShot.kind !== 'point')) look = eye
     else if (l.mode === 'flee' && l.fleeFrom) look = l.fleeFrom
-    else {
-      // Idle glances: now and then at you if you're close-ish, else around.
-      const pd = Math.hypot(eye[0] - l.x, eye[2] - l.z)
-      const w = Math.sin(p.t * 0.23 + l.seed * 9)
-      if (pd < 12 && w > 0.55) look = eye
-    }
+    // You're right beside them and looking: a glance back (the head only; they carry on).
+    else if (l.lookedFor > 0.6) look = eye
     let hy = 0.25 * Math.sin(p.t * 0.31 + l.seed * 5) * (l.speed < 0.3 ? 1 : 0.3)
     let hp = 0
     if (look) {
@@ -715,7 +692,6 @@ export class People {
     const speaking = this.hooks.isSpeaking(l.id)
     const sitting = l.speed < 0.2 && (lastingAct === 'sit' || activity === 'sit' || (activity === 'sleep' && !l.goal?.inside))
     const working = l.speed < 0.2 && ['fish', 'work', 'sweep', 'read', 'cast', 'tend', 'play', 'serve'].includes(activity)
-    const chatting = l.speed < 0.2 && activity === 'chat'
     p.wave = approach(p.wave, shot === 'wave' ? 1 : 0, 6, dt)
     p.bow = approach(p.bow, shot === 'bow' ? 1 : 0, 4, dt)
     p.cheer = approach(p.cheer, shot === 'cheer' ? 1 : 0, 6, dt)
@@ -727,8 +703,8 @@ export class People {
       if (Math.abs(p.pointYaw) > 0.8 && l.speed < 0.3) l.yaw = wrap(l.yaw + Math.sign(p.pointYaw) * Math.min(Math.abs(p.pointYaw), 3 * dt))
     }
     p.dance = approach(p.dance, l.mode === 'act' && lastingAct === 'dance' ? 1 : 0, 3, dt)
-    p.sit = approach(p.sit, sitting && l.mode !== 'talk' && l.mode !== 'notice' ? 1 : 0, 3, dt)
-    p.talk = approach(p.talk, speaking ? 1 : chatting ? 0.45 * Math.max(0, Math.sin(p.t * 0.5 + l.seed * 7)) : 0, 6, dt)
+    p.sit = approach(p.sit, sitting && l.mode !== 'talk' ? 1 : 0, 3, dt)
+    p.talk = approach(p.talk, speaking ? 1 : 0, 6, dt)
     p.work = approach(p.work, working && l.mode === 'routine' ? 1 : 0, 2.5, dt)
     if (working) p.workKind = activity
     p.sleep = approach(p.sleep, activity === 'sleep' && l.speed < 0.2 && l.mode === 'routine' ? 1 : 0, 1.5, dt)

@@ -5,8 +5,8 @@
  * to the side; gone a moment after they finish. Same type and glow as the genie's captions, but warm
  * parchment instead of gold, so the two voices never read as one.
  *
- * `side`: the second channel, for people talking among themselves (banter, a shout after a wish, someone
- * chiming in): smaller and dimmer, so it never fights the conversation you're in.
+ * `side`: the second channel, for a line said aside (a bystander's gasp at a huge wish, a follower heading
+ * home): smaller and dimmer, so it never fights the conversation you're in.
  */
 const props = defineProps<{ side?: boolean }>()
 const npc = useNpc()

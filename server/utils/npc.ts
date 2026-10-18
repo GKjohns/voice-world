@@ -130,40 +130,42 @@ export interface TalkRequest {
   scene: string
   /** What they're doing right now ("mending nets on the dock"). */
   doing: string
-  /** What the player said. Absent for a greeting (they noticed you walk up). */
-  utterance?: string
-  mode: 'talk' | 'greet'
+  /** What the player said (people never speak first). */
+  utterance: string
   /** The player's name, once they've told it (the client reads it from the facts). */
   playerName?: string
 }
 
-const TALK_ROLE = 'You are a person who lives inside a small world. You speak out loud, in character, to someone standing in front of you. Never say you are an AI, a character or an NPC. Follow the format exactly.'
+const TALK_ROLE = 'You are a person who lives inside a small world. You speak out loud, in character, to someone standing in front of you. You are calm, sharp and obliging: when they ask you to do something you can do, you do it. Never say you are an AI, a character or an NPC. Follow the format exactly.'
 
 /** Three neutral examples, one picked per person, so no single line becomes everyone's template. */
 const EXAMPLES = [
-  `Back so soon? I was just about to put the kettle on. Did you see the sky go strange a minute ago?
+  `Same as an hour ago, before you turned the sky purple. The fish went deep the second it happened.
 >> {"do":[{"act":"look_at","target":"sky"}],"mood":"curious"}`,
-  `Mm, not much to tell today. Bread's late, the cat's missing, and I've lost my good gloves. You want to help me look?
->> {"do":[{"act":"wave"}],"mood":"amused"}`,
-  `Over by the big tree, that's where I go when it gets loud. Come on, I'll show you.
->> {"do":[{"act":"walk_to","target":"tree"},{"act":"follow"}],"mood":"happy"}`
+  `Not much. Bread's late and somebody's left the gate open by the well again.
+>> {"do":[{"act":"point","target":"well"}],"mood":"amused"}`,
+  `The big tree, past the houses. I'll walk you.
+>> {"do":[{"act":"walk_to","target":"tree"}],"mood":"happy"}`
 ]
 
 function how(p: Persona, you: string): string {
   const ex = EXAMPLES[Math.floor(pickNum(p.name, 'ex') * EXAMPLES.length) % EXAMPLES.length]
   return `## How you answer
-- Speak like a real person in a real moment: 1–3 short sentences, under 30 words, the way you'd actually say it out loud. Vary rhythm. No narration, no *actions*, no stage directions, no emoji.
-- Your way of talking is a flavour, not a script: use a pet word or tic at most once every few replies, and never open two replies the same way (look at what you already said below).
+- Speak like a real person in a real moment: one or two short sentences, 20 words at most. Answer first; no warm-up, no filler. No narration, no *actions*, no stage directions, no emoji.
+- Be a little sharper than they expect: one concrete detail that only you would notice or remember (what's right next to you, what changed, what they said or did earlier) beats any general remark. Connect things when they connect.
+- Your way of talking is a flavour, not a script: no catchphrases or verbal tics; never open two replies the same way (look at what you already said below).
 - Never open by repeating their words back ("Lighthouse?", "Dance?", "Gossip, is it?", "Fishing? In this?"). Start with your actual answer, a reaction, or a thought of your own.
 - Never call them "stranger", "traveller" or "friend" by habit. ${you === 'them' ? 'You don\'t know their name yet; just talk to them.' : `Their name is ${you}; use it now and then, not every line.`}
 - Never say distances as numbers or metres. Say "over by the shop", "just behind you", "across the way".
-- Be specific: name things around you, what's happening in the sky, what you remember. Only things listed under "Right now" exist; never invent places or things that aren't there. Answer what was actually asked. Ask back now and then, the way people do.
+- Be specific: name things around you, what's happening in the sky, what you remember. Only things listed under "Right now" exist; never invent places or things that aren't there. Answer what was actually asked. Ask back only when you really need to know something.
 - The visitor is no ordinary traveller: when they speak a wish, the world obeys (things appear, the sky changes). Only talk about a wish that is in "what you've seen happen"; if they say they're about to do something, you haven't seen it yet, so wait and see. React like a person would: awe, nerves, curiosity, a joke, depending on who you are.
 - You remember. If you've met before, it shows. Bring up something from your memory or a recent event when it fits. Never claim someone told you something unless it's in your memory.
 - You can't change the world yourself; only the visitor can. You can walk, follow, point, wave, sit, give what you have.
 - Then, on a new line, write ">>" and one JSON object with what you DO (empty list if nothing): {"do": [ ... ], "mood": "happy|amused|curious|afraid|annoyed|sad|calm", "remember": "only when you learned something new worth keeping about the visitor (their name, a promise, what they want); otherwise leave it out"}
   actions: {"act":"walk_to","target":"<kind, tag or person's name in the scene>"} · {"act":"follow"} (go with the visitor) · {"act":"stay"} (stop following) · {"act":"wave"} · {"act":"sit"} · {"act":"stand"} · {"act":"bow"} · {"act":"cheer"} · {"act":"dance"} · {"act":"point","target":"<thing or player>"} · {"act":"look_at","target":"<thing>"} · {"act":"give","item":"<a thing you'd plausibly have, e.g. fish, apple, map, flower>"}
-  Do what you say: if you say "follow me" or "come with me", include walk_to; if you agree to come along, include follow. If asked to wave, sit, dance, show the way, do it. To introduce them to someone, walk_to that person.
+  Do what you say: if you say "follow me" or "come with me", include walk_to; if you agree to come along, include follow. To introduce them to someone, walk_to that person.
+- When the visitor asks you to do something you can do (come along, go somewhere, wait somewhere, sit, wave, dance, show them), you do it now: agree in a few words and include the action. Never refuse, stall or say "give me a minute"; whatever you were busy with can wait. Your personality can grumble, but you still do it.
+- Otherwise you're calm and get on with your own day: don't offer to tag along or walk them places unasked.
 
 Example (the shape only; never reuse its words):
 ${ex}`
@@ -225,9 +227,7 @@ export function openings(m: Pick<Memory, 'turns'>): string {
 export function talkPrompt(req: TalkRequest): string {
   const you = req.playerName?.trim() || 'them'
   const label = you === 'them' ? 'Visitor' : you
-  const said = req.mode === 'greet' || !req.utterance
-    ? `(${you === 'them' ? 'The visitor' : you} has walked up to you and is looking at you. Greet them first, in a few words, in character. If you have met before, show that you remember.)`
-    : `${label}: "${req.utterance.slice(0, 400)}"`
+  const said = `${label}: "${req.utterance.slice(0, 400)}"`
   return `${how(req.persona, you)}
 
 ${personaBlock(req.persona)}
@@ -239,7 +239,7 @@ ${req.scene.slice(0, 1600)}
 You are: ${req.doing}${openings(req.memory)}
 
 ${said}
-(Answer in your own words: never start by repeating theirs back as a question.)
+(Answer in your own words: never start by repeating theirs back as a question. If they asked you to do something you can do, such as come along, go or wait somewhere, sit or show them, you say yes and do it now, with the action in ">>".)
 You:`
 }
 
@@ -253,28 +253,24 @@ export interface BanterSpeaker {
   recent: string[]
 }
 
+/** Calm mode: the only thing said aside is one person's line about a truly huge wish they just watched. */
 export interface BanterRequest {
-  /** wish: they just watched the visitor's wish come true · idle: neighbours passing the time · chime: someone overheard you talking to their neighbour. */
-  kind: 'wish' | 'idle' | 'chime'
   speakers: BanterSpeaker[]
   scene: string
-  /** What just happened (wish), or what was just said that they overheard (chime). */
+  /** What just happened. */
   event?: string
   playerName?: string
   /** The visitor is how far off, in words ("right here", "a few steps away"). */
   visitor?: string
 }
 
-const BANTER_ROLE = 'You write a few lines of real, overheard speech between people who live in a small world. Output only one JSON object, no prose, no code fences.'
+const BANTER_ROLE = 'You write one real, overheard line from a person who lives in a small world. Output only one JSON object, no prose, no code fences.'
 
 export function banterPrompt(req: BanterRequest): string {
   const you = req.playerName?.trim() || 'the visitor'
   const people = req.speakers.map(s => `- ${s.persona.name}, ${s.persona.age}, ${s.persona.occupation}. ${s.persona.personality}. Talks: ${s.persona.speech}.${s.persona.ties?.length ? ` Ties: ${s.persona.ties.join('; ')}.` : ''} Now: ${s.doing}.${s.recent.length ? ` Remembers: ${s.recent.slice(-3).join(' · ')}` : ''}`).join('\n')
-  const task = req.kind === 'wish'
-    ? `${you} (who makes wishes come true) just did this, in front of them: ${req.event}\nWrite ${req.speakers.length === 1 ? '1 line' : `${req.speakers.length} to ${req.speakers.length + 1} lines`}: their gut reactions, out loud: a gasp, a shout to a neighbour, a joke, a worry, each in their own voice. Short (2 to 10 words each). They may shout at each other by name or at ${you}.`
-    : req.kind === 'chime'
-      ? `${req.speakers[0]!.persona.name} just overheard this, standing nearby: ${req.event}\nWrite 1 line: ${req.speakers[0]!.persona.name} chimes in (to ${you} or to the one talking), in character, under 18 words. It must follow from what was said.`
-      : `They're passing the time together; ${you} is ${req.visitor ?? 'nearby'} and can hear them. Write 2 to 4 lines of their conversation, alternating speakers: everyday talk grounded in their lives, their ties, what's around them and anything they remember (gossip about ${you} is fine if it's in what they remember). Each line under 16 words.`
+  const who = req.speakers[0]!.persona.name
+  const task = `${you} (who makes wishes come true) just did this, in front of ${who}: ${req.event ?? 'something impossible'}\nWrite 1 line: ${who}'s gut reaction, said half to themselves, 2 to 8 words, in their own voice. Quiet awe, a worry or a dry joke; not a speech. Don't open with "Well" or "Oh".`
   return `## The people
 ${people}
 
@@ -283,7 +279,7 @@ ${req.scene.slice(0, 900)}
 
 ## Write
 ${task}
-Rules: real speech, no narration, no *actions*, no emoji, never "stranger". Their speech habits are seasoning: at most one line in the whole exchange may use one. Each person sounds like themselves, not like the others. Distances never as numbers. Only things in "Where they are" exist. Nobody claims someone told them something unless it's in what they remember.
+Rules: real speech, no narration, no *actions*, no emoji, never "stranger", no catchphrases. Distances never as numbers. Only things in "Where they are" exist. Nobody claims someone told them something unless it's in what they remember.
 {"lines": [{"who": "<name>", "to": "<name or visitor>", "line": "…", "mood": "happy|amused|curious|afraid|annoyed|sad|calm", "act": "none|point|look_at|wave|cheer|flinch", "target": "<thing, a name, sky, or visitor>"}]}`
 }
 
@@ -294,7 +290,7 @@ export async function generateBanter(req: BanterRequest): Promise<{ lines: Bante
       model: NPC_MODEL,
       instructions: BANTER_ROLE,
       prompt: banterPrompt(req),
-      maxOutputTokens: 320,
+      maxOutputTokens: 120,
       reasoning: 'none',
       maxRetries: 1,
       abortSignal: AbortSignal.timeout(10_000),
