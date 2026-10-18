@@ -43,6 +43,8 @@ import { skyDome, skyUniforms } from './style/sky'
 import type { SkyUniforms } from './style/sky'
 import { GROUND_UNIFORMS, groundMaterial } from './style/ground'
 import { Grass, grassCircles, nearMasks } from './style/grass'
+import { Studio } from './studio'
+import { boxHeight, contactShadow, disposeObject, entityReach, glowSprite, hashParts, radialTexture, ring, round2, safeHits, skyDir, slotMeshes, starfield, v3, wrapAngle } from './sceneHelpers'
 
 const EYE = 1.6
 const WALK = 6
@@ -62,11 +64,8 @@ const MID = 3
 const GLOW_TINT = new THREE.Color('#ffe2a8')
 const PARTICLE_BUDGET = 1600 // dissolve sparks per sync (a teleport dissolves the whole old world)
 // The forge (progressive generation): refined parts stream in at most this many new meshes per frame,
-// studio shots render on their own layer (lights join it, nothing else does), and the swap sweep's length.
+// the swap sweep's length, and how faint the draft ghosts while it's refined (studio shots: studio.ts).
 const PARTS_PER_FRAME = 4
-const STUDIO_LAYER = 30
-const STUDIO_W = 640
-const STUDIO_H = 480
 const SWEEP_MS = 1800
 const GHOST_LEVEL = 0.55
 
@@ -80,12 +79,6 @@ interface RefineJob {
   added: number
   draftCount: number
   level: number
-}
-
-interface StudioReq {
-  id: string
-  body?: THREE.Group
-  resolve: (url: string | null) => void
 }
 
 /** Gauntlet loop 1 (track B): one item's physics-lite clocks (its flight, its tip, when it first appeared). */
@@ -179,7 +172,6 @@ export class WorldRenderer {
   private skyUniforms: SkyUniforms
   // Painted Toy World: the one post pass (MSAA target, Neutral tone map, grade, depth edges, vignette).
   private post = new Post()
-  private studioTarget: THREE.WebGLRenderTarget | null = null
   private gridShown = 0
   private grass = new Grass()
   private grassMasks: [number, number, number][] = []
@@ -237,9 +229,7 @@ export class WorldRenderer {
   // The forge: kinds being refined, a gentle swirl round the focused one, and queued studio shots.
   private refining = new Map<string, RefineJob>()
   private refineMotes = new Placeholder()
-  private studioQueue: StudioReq[] = []
-  private studioCam = new THREE.PerspectiveCamera(40, STUDIO_W / STUDIO_H, 0.05, 2000)
-  private studioPixels = new Uint8Array(STUDIO_W * STUDIO_H * 4)
+  private studio = new Studio()
   // Gauntlet loop 1 (track B): physics-lite clocks per item, followers, no-gravity, flight, the "take me to
   // the top" glide, a soft camera track on things that arrive moving, and the extra moons.
   private phys = new Map<string, PhysClock>()
@@ -345,7 +335,6 @@ export class WorldRenderer {
     this.ghost = ring(1.5, 1.8, 0x7dd3a8, 0)
     this.scene.add(this.reticle, this.highlight, this.ghost)
     this.scene.add(this.vortex.obj, this.gathering.obj, this.forming.obj, this.refineMotes.obj)
-    this.studioCam.layers.set(STUDIO_LAYER)
     this.scene.add(this.weather.obj, this.lightPool.obj)
     this.weather.onThunder = (d, ms) => {
       this.sound.sfxThunder(d, ms)
@@ -1448,82 +1437,8 @@ export class WorldRenderer {
     return new Promise((resolve) => {
       if (!this.items.has(id)) return resolve(null)
       if (body) this.fresh.push(body)
-      this.studioQueue.push({ id, body, resolve })
+      this.studio.enqueue({ id, body, resolve })
     })
-  }
-
-  private shoot(req: StudioReq): void {
-    const item = this.items.get(req.id)
-    if (!item) return req.resolve(null)
-    const obj = req.body ?? item.body
-    if (req.body) {
-      req.body.traverse(o => o.layers.set(STUDIO_LAYER))
-      item.stretch.add(req.body)
-    }
-    // Lights join the studio layer (the light count, and so every program key, stays the same).
-    this.scene.traverse((o) => {
-      if ((o as THREE.Light).isLight && o.layers.test(this.camera.layers)) o.layers.enable(STUDIO_LAYER)
-    })
-    const meshes = meshesOf(obj)
-    for (const m of meshes) m.layers.enable(STUDIO_LAYER)
-    obj.updateWorldMatrix(true, true)
-    const box = new THREE.Box3().setFromObject(obj)
-    const c = box.getCenter(new THREE.Vector3())
-    const r = Math.max(0.3, box.getSize(new THREE.Vector3()).length() / 2)
-    const d = (r / Math.sin(0.35)) * 1.05
-    const dir = new THREE.Vector3(0.62, 0.28, 0.73).normalize().applyAxisAngle(new THREE.Vector3(0, 1, 0), item.holder.rotation.y)
-    const cam = this.studioCam
-    cam.position.copy(c).addScaledVector(dir, d)
-    cam.near = Math.max(0.05, d - r * 2)
-    cam.far = d + r * 3
-    cam.updateProjectionMatrix()
-    cam.lookAt(c)
-    cam.updateMatrixWorld()
-    const fog = this.scene.fog as THREE.Fog
-    const fogNF = [fog.near, fog.far]
-    fog.near = 1e5
-    fog.far = 2e5
-    const hemiI = this.hemi.intensity
-    const sunI = this.sun.intensity
-    this.hemi.intensity = Math.max(hemiI, 1.2)
-    this.sun.intensity = Math.max(sunI, 2.3)
-    const r3 = this.renderer
-    const pr = r3.getPixelRatio()
-    const size = r3.getSize(new THREE.Vector2())
-    const clear = r3.getClearColor(new THREE.Color())
-    const alpha = r3.getClearAlpha()
-    let url: string | null = null
-    try {
-      // Rendered like the main frame (same target type, so the same programs), then graded into a corner.
-      this.studioTarget ??= new THREE.WebGLRenderTarget(STUDIO_W, STUDIO_H, { type: THREE.HalfFloatType, samples: 4, depthTexture: new THREE.DepthTexture(STUDIO_W, STUDIO_H, THREE.UnsignedIntType) })
-      r3.setClearColor(0x9fb7cf, 1)
-      const bg = this.scene.background
-      this.scene.background = null
-      r3.setRenderTarget(this.studioTarget)
-      r3.render(this.scene, cam)
-      r3.setRenderTarget(null)
-      this.scene.background = bg
-      r3.setViewport(0, 0, STUDIO_W / pr, STUDIO_H / pr)
-      r3.setScissor(0, 0, STUDIO_W / pr, STUDIO_H / pr)
-      r3.setScissorTest(true)
-      this.post.composite(r3, this.studioTarget, cam)
-      const gl = r3.getContext()
-      gl.readPixels(0, 0, STUDIO_W, STUDIO_H, gl.RGBA, gl.UNSIGNED_BYTE, this.studioPixels)
-      url = encodeJpeg(this.studioPixels, STUDIO_W, STUDIO_H)
-    } catch (err) {
-      console.warn('[forge] studio shot failed', err)
-    } finally {
-      r3.setScissorTest(false)
-      r3.setViewport(0, 0, size.x, size.y)
-      r3.setClearColor(clear, alpha)
-      fog.near = fogNF[0]!
-      fog.far = fogNF[1]!
-      this.hemi.intensity = hemiI
-      this.sun.intensity = sunI
-      for (const m of meshes) m.layers.disable(STUDIO_LAYER)
-      if (req.body) req.body.removeFromParent()
-    }
-    req.resolve(url)
   }
 
   /** Build a candidate body from parts (merged), compiled ahead, for a judge's studio shot. */
@@ -2050,10 +1965,9 @@ export class WorldRenderer {
       this.gridUniforms.opacity.value = this.atmos.grid * this.gridShown
       this.grid.visible = this.atmos.grid * this.gridShown > 0.005
     }
-    // One studio shot per frame (the forge's render of a draft), drawn into a corner just before the frame
-    // itself paints over it: same renderer, same programs, no second GL context.
-    const shot = this.studioQueue.shift()
-    if (shot) this.shoot(shot)
+    // One studio shot per frame (the forge's render of a draft), drawn just before the frame paints over it.
+    const shot = this.studio.next()
+    if (shot) this.studio.shoot(shot, this.items.get(shot.id), { renderer: this.renderer, scene: this.scene, camera: this.camera, hemi: this.hemi, sun: this.sun, post: this.post })
     this.post.render(this.renderer, this.scene, this.camera, dt * 1000, now)
     const w = window as unknown as { __sceneReady?: boolean }
     if (!w.__sceneReady) w.__sceneReady = true
@@ -2645,183 +2559,8 @@ export class WorldRenderer {
     this.pmrem.dispose()
     this.post.dispose()
     this.grass.dispose()
-    this.studioTarget?.dispose()
+    this.studio.dispose()
     this.renderer.dispose()
     this.renderer.domElement.remove()
-  }
-}
-
-// ---------- helpers ----------
-
-function ring(inner: number, outer: number, color: number, opacity: number): THREE.Mesh {
-  const m = new THREE.Mesh(
-    new THREE.RingGeometry(inner, outer, 48).rotateX(-Math.PI / 2),
-    new THREE.MeshBasicMaterial({ color, transparent: true, opacity, depthWrite: false, fog: false })
-  )
-  m.renderOrder = 2
-  return m
-}
-
-function slotMeshes(root: THREE.Object3D, slot: string): THREE.Mesh[] {
-  const out: THREE.Mesh[] = []
-  root.traverse(o => (o as THREE.Mesh).isMesh && o.userData.slot === slot && out.push(o as THREE.Mesh))
-  return out
-}
-
-function boxHeight(o: THREE.Object3D): number {
-  // Measure in the body's own frame so the holder's current tween state doesn't skew it.
-  const box = new THREE.Box3()
-  o.updateMatrixWorld(true)
-  const inv = new THREE.Matrix4().copy(o.matrixWorld).invert()
-  o.traverse((c) => {
-    const m = c as THREE.Mesh
-    if (!m.isMesh || !m.geometry) return
-    if (!m.geometry.boundingBox) m.geometry.computeBoundingBox()
-    const b = m.geometry.boundingBox!.clone().applyMatrix4(new THREE.Matrix4().multiplyMatrices(inv, m.matrixWorld))
-    box.union(b)
-  })
-  return box.isEmpty() ? 0 : box.max.y
-}
-
-function disposeObject(root: THREE.Object3D): void {
-  root.traverse((o) => {
-    const m = o as THREE.Mesh
-    if (m.geometry && !m.geometry.userData.shared) m.geometry.dispose()
-    const mats = m.material ? (Array.isArray(m.material) ? m.material : [m.material]) : []
-    for (const mat of mats) {
-      for (const v of Object.values(mat)) if (v instanceof THREE.Texture && !v.userData.shared) v.dispose()
-      mat.dispose()
-    }
-  })
-}
-
-/** RGBA pixels from readPixels (bottom-up) → a JPEG data URL. */
-function encodeJpeg(px: Uint8Array, w: number, h: number): string {
-  const c = document.createElement('canvas')
-  c.width = w
-  c.height = h
-  const g = c.getContext('2d')!
-  const img = g.createImageData(w, h)
-  const row = w * 4
-  for (let y = 0; y < h; y++) img.data.set(px.subarray((h - 1 - y) * row, (h - y) * row), y * row)
-  g.putImageData(img, 0, 0)
-  return c.toDataURL('image/jpeg', 0.86)
-}
-
-function hashParts(desc: KindDescriptor): number {
-  let h = 0
-  for (const ch of JSON.stringify(desc.parts)) h = (h * 31 + ch.charCodeAt(0)) | 0
-  return h
-}
-
-function wrapAngle(a: number): number {
-  return Math.atan2(Math.sin(a), Math.cos(a))
-}
-
-function v3(p: THREE.Vector3): Vec3 {
-  return [round2(p.x), round2(p.y), round2(p.z)]
-}
-
-function round2(v: number): number {
-  return Math.round(v * 100) / 100
-}
-
-/** How far an entity reaches from its origin, so the reveal fog clears all of a wall or a lake. */
-function entityReach(desc: KindDescriptor, e: Entity): number {
-  const s = e.props.scale ?? 1
-  const len = e.props.length ?? desc.defaults.length ?? 0
-  const wid = e.props.width ?? desc.defaults.width ?? 0
-  return Math.max(desc.footprint, len / 2, wid / 2) * s
-}
-
-function skyDir(p: [number, number, number]): THREE.Vector3 {
-  return new THREE.Vector3(p[0], p[1], p[2]).normalize()
-}
-
-let radial: THREE.Texture | null = null
-/** White centre fading to black at the rim: alpha maps for the floor patch and contact shadows. */
-function radialTexture(): THREE.Texture {
-  if (radial) return radial
-  const c = document.createElement('canvas')
-  c.width = c.height = 128
-  const g = c.getContext('2d')!
-  const grad = g.createRadialGradient(64, 64, 0, 64, 64, 64)
-  grad.addColorStop(0, '#ffffff')
-  grad.addColorStop(0.55, '#bbbbbb')
-  grad.addColorStop(1, '#000000')
-  g.fillStyle = grad
-  g.fillRect(0, 0, 128, 128)
-  radial = new THREE.CanvasTexture(c)
-  radial.userData.shared = true
-  return radial
-}
-
-const contactGeo = new THREE.PlaneGeometry(2, 2).rotateX(-Math.PI / 2)
-contactGeo.userData.shared = true
-/** A soft dark blob under furniture and learned kinds: grounds them where the sun casts no shadow. */
-function contactShadow(radius: number): THREE.Mesh {
-  const m = new THREE.Mesh(contactGeo, new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.42, alphaMap: radialTexture(), depthWrite: false }))
-  m.scale.setScalar(radius)
-  m.position.y = 0.115 // just above a floor slab (0.1 m) so it shows indoors too
-  m.renderOrder = 1
-  m.userData.contactShadow = true
-  m.raycast = () => {} // the gaze ray should hit the furniture, not its shadow
-  return m
-}
-
-function starfield(): THREE.Points {
-  const n = 1400
-  const pos = new Float32Array(n * 3)
-  for (let i = 0; i < n; i++) {
-    // Uniform on the upper hemisphere, thinning toward the horizon haze.
-    const u = Math.random()
-    const y = 0.06 + 0.94 * Math.sqrt(u)
-    const a = Math.random() * Math.PI * 2
-    const r = Math.sqrt(1 - y * y)
-    pos.set([Math.cos(a) * r * 450, y * 450, Math.sin(a) * r * 450], i * 3)
-  }
-  const geo = new THREE.BufferGeometry()
-  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3))
-  const pts = new THREE.Points(geo, new THREE.PointsMaterial({ color: 0xdfe6ff, size: 1.6, sizeAttenuation: false, transparent: true, opacity: 0, depthWrite: false, fog: false }))
-  pts.frustumCulled = false
-  pts.renderOrder = -1
-  return pts
-}
-
-/** A sky sprite: the moon (a crisp disc inside a halo) or the sun's glow (all halo). */
-function glowSprite(color: string, disc: boolean): THREE.Sprite {
-  const c = document.createElement('canvas')
-  c.width = c.height = 256
-  const g = c.getContext('2d')!
-  const grad = g.createRadialGradient(128, 128, 0, 128, 128, 128)
-  if (disc) {
-    grad.addColorStop(0, 'rgba(255,255,255,1)')
-    grad.addColorStop(0.13, 'rgba(255,255,255,1)')
-    grad.addColorStop(0.16, 'rgba(255,255,255,0.35)')
-    grad.addColorStop(0.45, 'rgba(255,255,255,0.08)')
-    grad.addColorStop(1, 'rgba(255,255,255,0)')
-  } else {
-    grad.addColorStop(0, 'rgba(255,255,255,1)')
-    grad.addColorStop(0.08, 'rgba(255,255,255,0.95)')
-    grad.addColorStop(0.25, 'rgba(255,255,255,0.35)')
-    grad.addColorStop(1, 'rgba(255,255,255,0)')
-  }
-  g.fillStyle = grad
-  g.fillRect(0, 0, 256, 256)
-  const tex = new THREE.CanvasTexture(c)
-  tex.colorSpace = THREE.SRGBColorSpace
-  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, color, transparent: true, depthWrite: false, fog: false, opacity: 0 }))
-  sprite.scale.setScalar(disc ? 130 : 260)
-  sprite.renderOrder = -1
-  sprite.visible = false
-  return sprite
-}
-
-/** Raycast `targets` (already flattened to meshes) without recursing: nothing exotic can throw in here. */
-function safeHits(ray: THREE.Raycaster, targets: THREE.Object3D[]): THREE.Intersection[] {
-  try {
-    return ray.intersectObjects(targets, false)
-  } catch {
-    return []
   }
 }
