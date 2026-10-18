@@ -39,7 +39,7 @@ function aerial<T extends THREE.Material>(m: T): T {
       .replace('#include <common>', '#include <common>\nvarying float vTerrainY;')
       .replace('#include <fog_fragment>', AERIAL)
   }
-  m.customProgramCacheKey = () => 'conjure-aerial'
+  m.customProgramCacheKey = () => 'voice-world-aerial'
   return m
 }
 
@@ -51,7 +51,7 @@ function aerialWater(color: THREE.Color): THREE.MeshStandardMaterial {
     fogPatch.call(m, sh, r)
     waterPatch(sh)
   }
-  m.customProgramCacheKey = () => 'conjure-aerial-water'
+  m.customProgramCacheKey = () => 'voice-world-aerial-water'
   return m
 }
 

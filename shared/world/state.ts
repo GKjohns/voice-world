@@ -751,7 +751,7 @@ export function upgradeKind(state: WorldState, kind: string, parts: Part[], opts
 /** Load a saved world by replaying its log. Every batch's ops are re-validated, since files can be hand-edited. */
 export function importWorld(saved: unknown): WorldState {
   const log = (saved as Partial<SavedWorld> | null)?.log
-  if (!Array.isArray(log)) throw new Error('not a Conjure world: expected { version, log: [...] }')
+  if (!Array.isArray(log)) throw new Error('not a saved Voice World: expected { version, log: [...] }')
   const ups: Record<string, KindUpgrade> = {}
   for (const [k, u] of Object.entries((saved as Partial<SavedWorld>).upgrades ?? {})) {
     const parts = cleanParts(u?.parts)

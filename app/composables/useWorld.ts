@@ -16,9 +16,9 @@ import { useDirector } from './useDirector'
 import { useForge } from './useForge'
 import { useNpc } from './useNpc'
 
-const STORAGE_KEY = 'conjure:world:v1'
+const STORAGE_KEY = 'voice-world:world:v1'
 /** The saved view (WorldScene saves it on pagehide); a reset forgets it so a reload starts at the start. */
-export const VIEW_KEY = 'conjure.view'
+export const VIEW_KEY = 'voice-world.view'
 /** Where you stand when the world starts (the renderer's own default). */
 const START_VIEW = { yaw: 0, pitch: -0.12, pos: [0, 0] as [number, number] }
 
@@ -196,7 +196,7 @@ function undo() {
   return run([{ op: 'undo' }], 'undo')
 }
 
-/** "Start over" without a word: the HUD's Reset world (and `__conjure.clear`). Same path as the op. */
+/** "Start over" without a word: the HUD's Reset world (and `__voiceWorld.clear`). Same path as the op. */
 function reset() {
   return run([{ op: 'reset' }, { op: 'say', text: 'A blank slate.' }], 'reset world', snapshot(), { source: 'console' })
 }
@@ -222,7 +222,7 @@ function restore() {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (raw) load(JSON.parse(raw), 'restored')
   } catch (err) {
-    console.warn('[conjure] could not restore the saved world', err)
+    console.warn('[voice-world] could not restore the saved world', err)
   }
 }
 
@@ -231,7 +231,7 @@ function exportFile() {
   const a = document.createElement('a')
   const stamp = new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '')
   a.href = URL.createObjectURL(blob)
-  a.download = `conjure-world-${stamp}.json`
+  a.download = `voice-world-${stamp}.json`
   a.click()
   URL.revokeObjectURL(a.href)
 }

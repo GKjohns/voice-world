@@ -18,7 +18,7 @@ const gazeText = computed(() => {
         name="i-lucide-sparkles"
         class="size-4 text-primary"
       />
-      <span class="text-sm font-semibold text-highlighted">Conjure</span>
+      <span class="text-sm font-semibold text-highlighted">Voice World</span>
       <span class="text-xs text-muted">{{ state.place }} · {{ state.atmosphere.time }}</span>
       <USeparator
         orientation="vertical"

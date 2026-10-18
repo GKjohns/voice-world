@@ -46,7 +46,7 @@ export type IntentEvent
 /** A first op normally lands in 0.9–1.6 s; past this the call is stuck and one retry is cheaper than waiting. */
 const FIRST_OP_MS = 6000
 
-const ROLE = 'You are the builder inside Conjure, a 3D world the player changes by talking. Turn the one sentence you get into world ops, following the language, rules and examples in the digest exactly. Output only the JSON object { "ops": [...] }: no prose, no code fences.'
+const ROLE = 'You are the builder inside Voice World, a 3D world the player changes by talking. Turn the one sentence you get into world ops, following the language, rules and examples in the digest exactly. Output only the JSON object { "ops": [...] }: no prose, no code fences.'
 
 const KIT_NOTES: Record<string, string> = {
   house: 'small cottage; props floors (default 1), color = walls, trim = roof',
@@ -67,7 +67,7 @@ function kitCatalog(): string {
   return Object.values(KIT).map(k => `- ${k.kind} [${k.tags.join(', ')}]: ${KIT_NOTES[k.kind] ?? k.note ?? ''}`).join('\n')
 }
 
-export const DIGEST = `# Conjure world language
+export const DIGEST = `# Voice World language
 
 You never do coordinate math and never list ids. You say WHAT, HOW MANY, WHICH ONES and ROUGHLY WHERE; a deterministic engine does placement, spacing, collision and set logic.
 

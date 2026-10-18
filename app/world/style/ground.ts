@@ -38,6 +38,6 @@ float gNoise( vec2 p ) {
     diffuseColor.rgb *= 1.0 + fine * 0.07 * uGroundPatch;
   }`)
   }
-  m.customProgramCacheKey = () => 'conjure-ground'
+  m.customProgramCacheKey = () => 'voice-world-ground'
   return m
 }

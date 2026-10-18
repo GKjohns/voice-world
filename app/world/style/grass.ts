@@ -121,7 +121,7 @@ float grNoise( vec2 p ) {
     diffuseColor.rgb = base * mix( vec3( 0.82 ), vec3( 0.88, 1.08, 1.2 ), vGrassTip );
   }`)
     }
-    material.customProgramCacheKey = () => 'conjure-grass'
+    material.customProgramCacheKey = () => 'voice-world-grass'
     this.mesh = new THREE.InstancedMesh(tuftGeometry(), material, offsets.length)
     const m4 = new THREE.Matrix4()
     offsets.forEach(([x, z], i) => this.mesh.setMatrixAt(i, m4.makeTranslation(x, 0, z)))

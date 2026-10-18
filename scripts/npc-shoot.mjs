@@ -13,7 +13,7 @@ const opt = (k, d) => {
   return i >= 0 ? args[i + 1] : d
 }
 const url = opt('--url', 'http://localhost:3091/')
-const outDir = resolve(opt('--out', resolve(tmpdir(), 'conjure-npc-shots')))
+const outDir = resolve(opt('--out', resolve(tmpdir(), 'voice-world-npc-shots')))
 const width = 1440
 const height = 900
 mkdirSync(outDir, { recursive: true })
@@ -41,9 +41,9 @@ const shot = async (label) => {
   shots.push(out)
   console.log('shot', out)
 }
-const npc = (fn, arg) => page.evaluate(([f, a]) => window.__conjureNpc[f](a), [fn, arg])
+const npc = (fn, arg) => page.evaluate(([f, a]) => window.__voiceWorldNpc[f](a), [fn, arg])
 const people = () => npc('people')
-const look = (yaw, pitch, pos) => page.evaluate(([y, p, q]) => window.__conjure.look(y, p, q), [yaw, pitch, pos])
+const look = (yaw, pitch, pos) => page.evaluate(([y, p, q]) => window.__voiceWorld.look(y, p, q), [yaw, pitch, pos])
 
 /** Type into the real text field (as a person would), press Enter. */
 async function type(text) {
@@ -54,12 +54,12 @@ async function type(text) {
 }
 /** Wait for the genie's builder to finish (if the sentence went to it). */
 async function genieDone(timeout = 30000) {
-  await page.waitForFunction(() => window.__conjure.phase() === 'thinking', null, { timeout: 2500 }).catch(() => {})
-  await page.waitForFunction(() => window.__conjure.phase() !== 'thinking', null, { timeout })
+  await page.waitForFunction(() => window.__voiceWorld.phase() === 'thinking', null, { timeout: 2500 }).catch(() => {})
+  await page.waitForFunction(() => window.__voiceWorld.phase() !== 'thinking', null, { timeout })
 }
 /** Wait for the person's reply to finish streaming. */
 async function npcDone(before, timeout = 20000) {
-  await page.waitForFunction(n => window.__conjureNpc.timings().length > n, before, { timeout })
+  await page.waitForFunction(n => window.__voiceWorldNpc.timings().length > n, before, { timeout })
   const t = await npc('timings')
   return t[t.length - 1]
 }
@@ -79,15 +79,15 @@ async function faceOf(name, d = 2.6, side = 0) {
 }
 
 await page.goto(url, { waitUntil: 'networkidle' })
-await page.waitForFunction(() => window.__sceneReady === true && !!window.__conjureNpc, null, { timeout: 60000 })
+await page.waitForFunction(() => window.__sceneReady === true && !!window.__voiceWorldNpc, null, { timeout: 60000 })
 await page.evaluate(() => document.querySelectorAll('#nuxt-devtools-container, nuxt-devtools-anchor, [id^="nuxt-devtools"]').forEach(e => e.remove()))
 await page.evaluate(() => {
-  localStorage.removeItem('conjure:npc:v1')
-  window.__conjure.clear()
+  localStorage.removeItem('voice-world:npc:v1')
+  window.__voiceWorld.clear()
 })
 await look(0, -0.1, [0, 0])
 // A lake village at golden hour: water ahead, a dock running out into it, a boat, pines, cottages, a fire.
-await page.evaluate(() => window.__conjure.run({ ops: [
+await page.evaluate(() => window.__voiceWorld.run({ ops: [
   { op: 'atmosphere', time: 'golden' },
   { op: 'spawn', kind: 'water', at: { anchor: 'player', dir: 'ahead', dist: 34 }, set: { length: 44, width: 36 } },
   { op: 'spawn', kind: 'dock', at: { anchor: 'player', dir: 'ahead', dist: 13 }, facing: 'player', set: { length: 12 } },
@@ -119,8 +119,8 @@ let ps = await people()
 console.log('people:', ps.map(p => `${p.name} ${p.mode} "${p.doing}" @${p.pos.join(',')}`).join(' | '))
 
 // Personas land in the background.
-await page.waitForFunction(() => window.__conjureNpc.people().every(p => window.__conjureNpc.mind(p.id)?.personaState !== 'pending'), null, { timeout: 20000 }).catch(() => console.log('personas still pending'))
-const fisher = await page.evaluate(() => window.__conjure.state().entities.find(e => e.props.role === 'fisherman')?.props.name)
+await page.waitForFunction(() => window.__voiceWorldNpc.people().every(p => window.__voiceWorldNpc.mind(p.id)?.personaState !== 'pending'), null, { timeout: 20000 }).catch(() => console.log('personas still pending'))
+const fisher = await page.evaluate(() => window.__voiceWorld.state().entities.find(e => e.props.role === 'fisherman')?.props.name)
 console.log('fisherman is', fisher)
 const persona = await npc('mind', ps.find(p => p.name === fisher)?.id)
 console.log('persona:', JSON.stringify(persona?.persona).slice(0, 600))
@@ -139,7 +139,7 @@ await shot('greeting')
 n = (await npc('timings')).length
 await type('What can you tell me about this lake?')
 const r1 = await npcDone(n)
-console.log('route:', JSON.stringify(await page.evaluate(() => window.__conjureNpc.route('What can you tell me about this lake?'))))
+console.log('route:', JSON.stringify(await page.evaluate(() => window.__voiceWorldNpc.route('What can you tell me about this lake?'))))
 console.log('talk1:', JSON.stringify(r1))
 await wait(400)
 await shot('talk_lake')
@@ -176,7 +176,7 @@ await look(-1.2 + Math.PI * 0.75, -0.1, [-4, 2])
 await wait(1200)
 await shot('following')
 n = (await npc('timings')).length
-console.log('route (stay):', JSON.stringify(await page.evaluate(() => window.__conjureNpc.route('Thanks. You can go back to fishing now.'))))
+console.log('route (stay):', JSON.stringify(await page.evaluate(() => window.__voiceWorldNpc.route('Thanks. You can go back to fishing now.'))))
 await type('Thanks. You can go back to fishing now.')
 const r4 = await npcDone(n)
 console.log('talk4 (stay):', JSON.stringify(r4))
@@ -186,8 +186,8 @@ await look(Math.PI / 2, -0.1, [-22, 6])
 await wait(4000)
 console.log('conversation after walking away:', await npc('conversation'))
 await page.evaluate((name) => {
-  const p = window.__conjureNpc.people().find(x => x.name === name)
-  const m = p && window.__conjureNpc.mind(p.id)
+  const p = window.__voiceWorldNpc.people().find(x => x.name === name)
+  const m = p && window.__voiceWorldNpc.mind(p.id)
   if (m) m.memory.lastTalkAt = 0
 }, fisher)
 n = (await npc('timings')).length
@@ -216,7 +216,7 @@ await type('make them stop dancing')
 await genieDone()
 
 // 8. "give her a dog", looking at a villager.
-const villager = (await page.evaluate(() => window.__conjure.state().entities.filter(e => e.kind === 'person' && e.props.role !== 'fisherman').map(e => e.props.name)))[0]
+const villager = (await page.evaluate(() => window.__voiceWorld.state().entities.filter(e => e.kind === 'person' && e.props.role !== 'fisherman').map(e => e.props.name)))[0]
 await faceOf(villager, 3.5)
 await wait(800)
 await type('give her a dog')
@@ -224,7 +224,7 @@ await genieDone()
 await wait(2000)
 await shot('dog')
 
-const state = await page.evaluate(() => window.__conjure.state().entities.filter(e => e.kind === 'person' || e.kind === 'dog').map(e => `${e.kind}:${e.props.name ?? ''}:${e.props.role ?? ''}:${e.props.act ?? ''}`))
+const state = await page.evaluate(() => window.__voiceWorld.state().entities.filter(e => e.kind === 'person' || e.kind === 'dog').map(e => `${e.kind}:${e.props.name ?? ''}:${e.props.role ?? ''}:${e.props.act ?? ''}`))
 console.log('final:', state.join(' | '))
 const all = await npc('timings')
 writeFileSync(resolve(outDir, 'timings.json'), JSON.stringify({ timings, npc: all, log }, null, 2))

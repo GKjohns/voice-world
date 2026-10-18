@@ -520,7 +520,7 @@ function opsBrief(ops: Op[]): string {
 }
 
 const started = Date.now()
-console.log(`Conjure intent bench · ${new Date().toISOString().slice(0, 16)} · ${cases.length} cases × ${repeat} · models ${(models.length ? models : ['haiku', 'sonnet']).join(', ')}\n`)
+console.log(`Voice World intent bench · ${new Date().toISOString().slice(0, 16)} · ${cases.length} cases × ${repeat} · models ${(models.length ? models : ['haiku', 'sonnet']).join(', ')}\n`)
 const summary: string[] = []
 for (const model of models.length ? models : ['haiku', 'sonnet']) {
   const jobs = Array.from({ length: repeat }, () => cases).flat()

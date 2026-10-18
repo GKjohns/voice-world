@@ -13,7 +13,7 @@ const opt = (k, d) => {
   return i >= 0 ? args[i + 1] : d
 }
 const url = opt('--url', 'http://localhost:3091/')
-const outDir = resolve(opt('--out', resolve(tmpdir(), 'conjure-npc-calm')))
+const outDir = resolve(opt('--out', resolve(tmpdir(), 'voice-world-npc-calm')))
 mkdirSync(outDir, { recursive: true })
 const gl = args.includes('--gpu')
   ? ['--use-angle=metal', '--ignore-gpu-blocklist', '--enable-gpu']
@@ -37,9 +37,9 @@ page.on('pageerror', e => console.log('[pageerror]', e.message))
 const wait = ms => page.waitForTimeout(ms)
 let shotN = 0
 const shot = label => page.screenshot({ path: resolve(outDir, `${String(++shotN).padStart(2, '0')}_${label}.png`) })
-const npc = (fn, arg) => page.evaluate(([f, a]) => window.__conjureNpc[f](a), [fn, arg])
+const npc = (fn, arg) => page.evaluate(([f, a]) => window.__voiceWorldNpc[f](a), [fn, arg])
 const people = () => npc('people')
-const look = (yaw, pitch, pos) => page.evaluate(([y, p, q]) => window.__conjure.look(y, p, q), [yaw, pitch, pos])
+const look = (yaw, pitch, pos) => page.evaluate(([y, p, q]) => window.__voiceWorld.look(y, p, q), [yaw, pitch, pos])
 const results = []
 const check = (ok, what) => {
   results.push(ok)
@@ -52,11 +52,11 @@ async function type(text) {
   await page.keyboard.press('Enter')
 }
 async function genieDone(timeout = 30000) {
-  await page.waitForFunction(() => window.__conjure.phase() === 'thinking', null, { timeout: 2500 }).catch(() => {})
-  await page.waitForFunction(() => window.__conjure.phase() !== 'thinking', null, { timeout })
+  await page.waitForFunction(() => window.__voiceWorld.phase() === 'thinking', null, { timeout: 2500 }).catch(() => {})
+  await page.waitForFunction(() => window.__voiceWorld.phase() !== 'thinking', null, { timeout })
 }
 async function npcDone(before, timeout = 20000) {
-  await page.waitForFunction(n => window.__conjureNpc.timings().length > n, before, { timeout })
+  await page.waitForFunction(n => window.__voiceWorldNpc.timings().length > n, before, { timeout })
   const t = await npc('timings')
   return t[t.length - 1]
 }
@@ -71,14 +71,14 @@ async function faceOf(name, d = 2.2) {
 }
 
 await page.goto(url, { waitUntil: 'networkidle' })
-await page.waitForFunction(() => window.__sceneReady === true && !!window.__conjureNpc, null, { timeout: 60000 })
+await page.waitForFunction(() => window.__sceneReady === true && !!window.__voiceWorldNpc, null, { timeout: 60000 })
 await page.evaluate(() => {
   document.querySelectorAll('[id^="nuxt-devtools"], nuxt-devtools-anchor').forEach(e => e.remove())
-  localStorage.removeItem('conjure:npc:v1')
-  window.__conjure.clear()
+  localStorage.removeItem('voice-world:npc:v1')
+  window.__voiceWorld.clear()
 })
 await look(0, -0.1, [0, 0])
-await page.evaluate(() => window.__conjure.run({ ops: [
+await page.evaluate(() => window.__voiceWorld.run({ ops: [
   { op: 'atmosphere', time: 'day' },
   { op: 'spawn', kind: 'house', count: 3, arrange: 'line', at: { anchor: 'player', dir: 'ahead', dist: 14 } },
   { op: 'spawn', kind: 'well', at: { anchor: 'player', dir: 'right', dist: 10 } },
@@ -89,8 +89,8 @@ await wait(1500)
 // 1. Villagers through the genie.
 await type('three villagers in front of me')
 await genieDone()
-await page.waitForFunction(() => window.__conjureNpc.people().length >= 3, null, { timeout: 10000 })
-await page.waitForFunction(() => window.__conjureNpc.people().every(p => window.__conjureNpc.mind(p.id)?.personaState !== 'pending'), null, { timeout: 20000 }).catch(() => console.log('personas still pending'))
+await page.waitForFunction(() => window.__voiceWorldNpc.people().length >= 3, null, { timeout: 10000 })
+await page.waitForFunction(() => window.__voiceWorldNpc.people().every(p => window.__voiceWorldNpc.mind(p.id)?.personaState !== 'pending'), null, { timeout: 20000 }).catch(() => console.log('personas still pending'))
 let ps = await people()
 const [a, b] = ps
 console.log('people:', ps.map(p => `${p.name} ${p.mode} "${p.doing}" @${p.pos.join(',')}`).join(' | '))
@@ -139,7 +139,7 @@ await npcDone(n)
 // 4. Ask B to go somewhere.
 await faceOf(b.name, 2.4)
 await wait(600)
-const wellPos = await page.evaluate(() => window.__conjure.state().entities.find(e => e.kind === 'well').pos)
+const wellPos = await page.evaluate(() => window.__voiceWorld.state().entities.find(e => e.kind === 'well').pos)
 const before = Math.hypot(b.pos[0] - wellPos[0], b.pos[2] - wellPos[2])
 n = (await npc('timings')).length
 await type(`${b.name}, could you go and wait by the well for me?`)
@@ -154,7 +154,7 @@ await shot('went_to_well')
 // 5. A dragon: at most one short line from one person.
 // Step back so the conversation ends (a wish line never interrupts one), with the others still close by.
 await look(0, 0.1, [0, 4])
-await page.waitForFunction(() => !window.__conjureNpc.conversation(), null, { timeout: 15000 }).catch(() => console.log('conversation still open'))
+await page.waitForFunction(() => !window.__voiceWorldNpc.conversation(), null, { timeout: 15000 }).catch(() => console.log('conversation still open'))
 await wait(3000) // let the last reply's bubble go
 const vb = voice.filter(v => v.url.includes('banter')).length
 const lb = (await npc('banterLog')).length
@@ -163,7 +163,7 @@ await type('make a dragon circle overhead')
 await genieDone()
 await wait(9000)
 await shot('dragon')
-console.log('dragons:', await page.evaluate(() => window.__conjure.state().entities.filter(e => e.kind === 'dragon').length))
+console.log('dragons:', await page.evaluate(() => window.__voiceWorld.state().entities.filter(e => e.kind === 'dragon').length))
 const lines = (await npc('banterLog')).slice(lb).flatMap(x => x.lines)
 console.log('wish lines:', JSON.stringify(lines))
 check(voice.filter(v => v.url.includes('banter')).length - vb <= 1 && lines.length <= 1 && lines.every(l => l.line.split(/\s+/).length <= 12) && (await npc('timings')).length === tl2, `dragon: ${lines.length} line(s), no chorus`)

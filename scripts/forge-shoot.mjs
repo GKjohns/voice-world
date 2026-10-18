@@ -11,7 +11,7 @@ import { basename, resolve } from 'node:path'
 
 const args = process.argv.slice(2)
 const opt = (k, d) => (args.includes(k) ? args[args.indexOf(k) + 1] : d)
-const outDir = resolve(opt('--out', resolve(tmpdir(), 'conjure-forge-shots')))
+const outDir = resolve(opt('--out', resolve(tmpdir(), 'voice-world-forge-shots')))
 const only = opt('--only', '')
 mkdirSync(outDir, { recursive: true })
 const WISHES = [
@@ -69,14 +69,14 @@ const results = []
 for (const [i, wish] of WISHES.entries()) {
   const slug = wish.replace(/\W+/g, '_').replace(/^_|_$/g, '')
   await page.evaluate(() => {
-    window.__conjure.clear()
-    window.__conjure.run([{ op: 'atmosphere', time: 'day' }], 'day')
-    window.__conjure.look(0, -0.22, [0, 0])
+    window.__voiceWorld.clear()
+    window.__voiceWorld.run([{ op: 'atmosphere', time: 'day' }], 'day')
+    window.__voiceWorld.look(0, -0.22, [0, 0])
   })
   await wait(1500)
   const n0 = await page.evaluate(() => window.__forge?.log?.length ?? 0)
   const t0 = await page.evaluate(() => performance.now())
-  const out = await page.evaluate(w => window.__conjure.ask(w).then(o => ({ summary: o.summary, model: o.model, ms: o.ms, ops: o.ops.map(x => x.op === 'spawn' ? `spawn ${x.kind}×${x.count ?? 1}` : x.op === 'define' ? `define ${x.kind}(${x.parts.length})` : x.op) })), wish)
+  const out = await page.evaluate(w => window.__voiceWorld.ask(w).then(o => ({ summary: o.summary, model: o.model, ms: o.ms, ops: o.ops.map(x => x.op === 'spawn' ? `spawn ${x.kind}×${x.count ?? 1}` : x.op === 'define' ? `define ${x.kind}(${x.parts.length})` : x.op) })), wish)
   console.log(`\n[${i + 1}] “${wish}” → ${out.summary} · ${out.ops.join(', ')} · ${out.ms} ms`)
   // Did a forge start?
   const started = await page.waitForFunction(n => (window.__forge?.log?.length ?? 0) > n, n0, { timeout: 4000 }).then(() => true).catch(() => false)

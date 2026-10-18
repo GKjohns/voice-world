@@ -1,5 +1,5 @@
 {
-  "name": "conjure",
+  "name": "voice-world",
   "private": true,
   "description": "Speak a world into existence: a first-person 3D world that an LLM builds from your voice.",
   "type": "module",

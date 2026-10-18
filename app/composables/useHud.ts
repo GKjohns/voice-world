@@ -9,7 +9,7 @@ import { useDirector } from './useDirector'
 export type HudPhase
   = | 'idle' | 'connecting' | 'listening' | 'hearing' | 'thinking' | 'building' | 'summoning' | 'speaking'
 
-const DEV_KEY = 'conjure.devHud'
+const DEV_KEY = 'voice-world.devHud'
 const devMode = shallowRef(false)
 let loaded = false
 

@@ -1,5 +1,5 @@
 /**
- * The progressive replace (conjure-progressive's staged look, in conjure's renderer):
+ * The progressive replace (conjure-progressive's staged look, in this renderer):
  * - `ghost`: the draft turns into a translucent gold ghost while the refined version grows through it;
  *   the ghost level falls as refined parts arrive. `unghost` brings it back if the forge is discarded.
  * - `popIn`: one refined part grows in with an elastic scale and a gold flash that decays (1 − t)².

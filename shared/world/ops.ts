@@ -406,7 +406,7 @@ export function parseOps(raw: unknown): { ops: Op[], dropped: DroppedOp[] } {
       dropped.push({ index, raw: item, reason })
     }
   })
-  for (const d of dropped) console.warn(`[conjure] dropped op #${d.index}: ${d.reason}`)
+  for (const d of dropped) console.warn(`[voice-world] dropped op #${d.index}: ${d.reason}`)
   return { ops, dropped }
 }
 

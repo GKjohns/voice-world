@@ -16,7 +16,7 @@ const opt = (k, d) => {
 }
 const url = opt('--url', 'http://localhost:3091/')
 const wav = resolve(opt('--wav', 'bench/fixtures/session.wav'))
-const outDir = resolve(opt('--out', resolve(tmpdir(), 'conjure-voice-shots')))
+const outDir = resolve(opt('--out', resolve(tmpdir(), 'voice-world-voice-shots')))
 const width = 1440
 const height = 900
 mkdirSync(outDir, { recursive: true })
@@ -53,8 +53,8 @@ async function open() {
   await page.goto(url, { waitUntil: 'networkidle' })
   await page.waitForFunction(() => window.__sceneReady === true, null, { timeout: 60000 })
   await page.evaluate(() => document.querySelectorAll('#nuxt-devtools-container, nuxt-devtools-anchor, [id^="nuxt-devtools"]').forEach(e => e.remove()))
-  await page.evaluate(() => window.__conjure.clear())
-  await page.evaluate(() => window.__conjure.look(0.5, -0.16, [0, 0]))
+  await page.evaluate(() => window.__voiceWorld.clear())
+  await page.evaluate(() => window.__voiceWorld.look(0.5, -0.16, [0, 0]))
   await page.mouse.move(width / 2, height / 2 - 120)
   await wait(400)
 }
@@ -73,24 +73,24 @@ while (Date.now() - started < 40000) {
   if (p && !seen.has(p) && wanted.includes(p)) {
     seen.add(p)
     if (p === 'hearing' && !snapshot) {
-      snapshot = await page.evaluate(() => window.__conjureVoice.snapshot())
+      snapshot = await page.evaluate(() => window.__voiceWorldVoice.snapshot())
       await shot(`voice_${p}`)
       // Turn away mid-sentence: the build must still land where we were looking at speech start.
-      await page.evaluate(() => window.__conjure.look(-1.1, -0.16))
+      await page.evaluate(() => window.__voiceWorld.look(-1.1, -0.16))
       await wait(150)
-      liveGazeAfterTurn = await page.evaluate(() => window.__conjureVoice.snapshot())
+      liveGazeAfterTurn = await page.evaluate(() => window.__voiceWorldVoice.snapshot())
     } else {
       await shot(`voice_${p}`)
     }
   }
-  const calls = await page.evaluate(() => window.__conjureVoice.toolCalls())
+  const calls = await page.evaluate(() => window.__voiceWorldVoice.toolCalls())
   if (calls >= 2 && p === 'listening' && Date.now() - started > 22000) break
   await wait(80)
 }
 await wait(600)
 await shot('voice_after')
 const result = await page.evaluate(() => {
-  const s = window.__conjure.state()
+  const s = window.__voiceWorld.state()
   const by = {}
   for (const e of s.entities) by[e.kind] = (by[e.kind] || 0) + 1
   const pines = s.entities.filter(e => e.tags.includes('tree'))
@@ -99,8 +99,8 @@ const result = await page.evaluate(() => {
     by,
     centroid: c,
     colors: [...new Set(pines.map(e => e.props.color ?? 'default'))],
-    voice: { heard: window.__conjureVoice.heard(), said: window.__conjureVoice.said(), timing: window.__conjureVoice.timing(), toolCalls: window.__conjureVoice.toolCalls(), error: window.__conjureVoice.error() },
-    log: window.__conjure.lastEntry()
+    voice: { heard: window.__voiceWorldVoice.heard(), said: window.__voiceWorldVoice.said(), timing: window.__voiceWorldVoice.timing(), toolCalls: window.__voiceWorldVoice.toolCalls(), error: window.__voiceWorldVoice.error() },
+    log: window.__voiceWorld.lastEntry()
   }
 })
 console.log(JSON.stringify({ seen: [...seen], snapshot, result }, null, 1))

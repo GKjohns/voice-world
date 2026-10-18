@@ -80,7 +80,7 @@ if (args.includes('--list')) {
   for (const s of SCENARIOS) console.log(`${s.id.padEnd(18)} ${s.group.padEnd(9)} ${s.steps.map(x => typeof x === 'string' ? x : x.say ?? JSON.stringify(x)).join(' → ')}`)
   process.exit(0)
 }
-const outDir = resolve(opt('--out', resolve(tmpdir(), 'conjure-gauntlet')))
+const outDir = resolve(opt('--out', resolve(tmpdir(), 'voice-world-gauntlet')))
 const url = opt('--url', 'http://localhost:3091/')
 const only = opt('--only', '').split(',').map(s => s.trim()).filter(Boolean)
 const maxUsd = Number(opt('--max-usd', 2.5))
@@ -156,12 +156,12 @@ const fps = (a, b) => page.evaluate(([a, b]) => {
   return { avg: Math.round(f.length / span), min1: min1 === Infinity ? null : min1, gap: Math.round(Math.max(...f.map(x => x[1]))) }
 }, [a, b])
 const pose = () => page.evaluate(() => {
-  const r = window.__conjure.renderer()
+  const r = window.__voiceWorld.renderer()
   const p = r?.player()
   return { pos: p?.pos, yaw: p?.yaw, pitch: r ? Math.round(r.pitch * 100) / 100 : null }
 })
 const census = () => page.evaluate(() => {
-  const s = window.__conjure.state()
+  const s = window.__voiceWorld.state()
   const by = {}
   for (const e of s.entities) by[e.kind] = (by[e.kind] || 0) + 1
   return { entities: s.entities.length, kinds: Object.keys(by).length, top: Object.entries(by).sort((a, b) => b[1] - a[1]).slice(0, 12).map(([k, n]) => `${k}×${n}`), time: s.atmosphere?.time, weather: s.atmosphere?.weather }
@@ -183,7 +183,7 @@ async function blurField() {
 
 /** Type a sentence the way a person does: open the field, type, Enter. Then wait for everything it started. */
 async function speak(text, settle) {
-  const lastN = await page.evaluate(() => window.__conjure.lastEntry()?.n ?? 0)
+  const lastN = await page.evaluate(() => window.__voiceWorld.lastEntry()?.n ?? 0)
   const forgeN = await page.evaluate(() => window.__forge?.log?.length ?? 0)
   const intentN = intentLog.length
   await blurField()
@@ -194,24 +194,24 @@ async function speak(text, settle) {
   await page.keyboard.type(text, { delay: 12 })
   const t0 = await now()
   await page.keyboard.press('Enter')
-  const thought = await page.waitForFunction(() => window.__conjure.phase() === 'thinking', null, { timeout: 4000 }).then(() => true).catch(() => false)
-  await page.waitForFunction(() => window.__conjure.phase() !== 'thinking', null, { timeout: 45000 }).catch(() => {})
+  const thought = await page.waitForFunction(() => window.__voiceWorld.phase() === 'thinking', null, { timeout: 4000 }).then(() => true).catch(() => false)
+  await page.waitForFunction(() => window.__voiceWorld.phase() !== 'thinking', null, { timeout: 45000 }).catch(() => {})
   const tIdle = await now()
   const entry = await page.evaluate((n) => {
-    const e = window.__conjure.lastEntry()
+    const e = window.__voiceWorld.lastEntry()
     return e && e.n > n ? { model: e.model, ms: e.ms, ops: e.ops, dropped: e.dropped?.length ?? 0, notes: e.notes, say: e.say, error: e.error, spawned: e.spawned, modified: e.modified, removed: e.removed } : null
   }, lastN)
   // A teleport: wait out the Director's build.
   let director = null
   const d0 = await page.evaluate((t) => {
-    const d = window.__conjure.director()
+    const d = window.__voiceWorld.director()
     return d && d.t0 >= t - 50 ? d.status : null
   }, t0)
   if (d0) {
-    await page.waitForFunction(() => window.__conjure.director()?.status !== 'building', null, { timeout: 120000 }).catch(() => {})
+    await page.waitForFunction(() => window.__voiceWorld.director()?.status !== 'building', null, { timeout: 120000 }).catch(() => {})
     await wait(3000) // last arrivals land, the fog lifts
     director = await page.evaluate((t) => {
-      const d = window.__conjure.director()
+      const d = window.__voiceWorld.director()
       return { world: d.world, status: d.status, ops: d.ops, dropped: d.dropped, firstOpMs: d.firstOpAt ? Math.round(d.firstOpAt - t) : null, doneMs: d.doneAt ? Math.round(d.doneAt - t) : null, usd: d.costUsd ?? null, error: d.error ?? null }
     }, t0)
   }
@@ -270,8 +270,8 @@ for (const [si, sc] of picked.entries()) {
   await blurField()
   await page.keyboard.press('Escape').catch(() => {})
   await page.evaluate(() => {
-    window.__conjure.reset()
-    window.__conjure.look(0, -0.12, [0, 0])
+    window.__voiceWorld.reset()
+    window.__voiceWorld.look(0, -0.12, [0, 0])
   })
   await wait(1800)
   const scT0 = await now()
@@ -283,7 +283,7 @@ for (const [si, sc] of picked.entries()) {
     const before = await pose()
     let rec = {}
     if (st.look) {
-      await page.evaluate(([y, p]) => window.__conjure.look(y, p), st.look)
+      await page.evaluate(([y, p]) => window.__voiceWorld.look(y, p), st.look)
       await wait(400)
     }
     const hud0 = st.talk ? await hudText() : ''

@@ -44,7 +44,7 @@ onMounted(async () => {
   restoreView()
   // A handle for the Playwright shoot script (and for poking at the world from devtools).
   const w = window as unknown as Record<string, unknown>
-  w.__conjure = {
+  w.__voiceWorld = {
     run: world.run,
     undo: world.undo,
     clear: world.clear,

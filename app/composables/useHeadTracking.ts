@@ -84,7 +84,7 @@ async function loadModels() {
   try {
     ;[face, hands] = await make('GPU')
   } catch (err) {
-    console.warn('[conjure] MediaPipe GPU delegate failed, falling back to CPU', err)
+    console.warn('[voice-world] MediaPipe GPU delegate failed, falling back to CPU', err)
     ;[face, hands] = await make('CPU')
   }
   connections.value = { face: vision.FaceLandmarker.FACE_LANDMARKS_FACE_OVAL, hand: vision.HandLandmarker.HAND_CONNECTIONS }
@@ -123,7 +123,7 @@ async function enable(): Promise<TrackingStatus> {
     await video.play()
     await loadModels()
   } catch (err) {
-    console.warn('[conjure] head tracking failed to start', err)
+    console.warn('[voice-world] head tracking failed to start', err)
     return fail('error', `Tracking: ${(err as Error).message}`)
   }
   if (my !== session) return status.value
@@ -211,7 +211,7 @@ function loop() {
       handLm = hr.landmarks[0] ?? null
       frame.value = { face: faceLm, hand: handLm, aspect }
     } catch (err) {
-      console.warn('[conjure] tracking frame failed', err)
+      console.warn('[voice-world] tracking frame failed', err)
       return
     }
   }
@@ -262,7 +262,7 @@ function loop() {
 if (import.meta.client) {
   // A handle for the shoot script / devtools: force a pointed spot without a hand.
   const w = window as unknown as Record<string, unknown>
-  w.__conjureTracking = {
+  w.__voiceWorldTracking = {
     state: () => ({ enabled: enabled.value, status: status.value, yaw: yaw.value, pitch: pitch.value, pointing: pointing.value, pointRay: pointRay.value, error: error.value, camYaw: useWorld().renderer()?.yaw ?? 0, camPitch: useWorld().renderer()?.pitch ?? 0 }),
     point: (ndc: [number, number] | null) => {
       forced = ndc

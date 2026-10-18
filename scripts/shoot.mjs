@@ -16,7 +16,7 @@ const scenario = args.find((a, i) => !a.startsWith('--') && !(args[i - 1] || '')
 const url = opt('--url', 'http://localhost:3091/')
 const width = Number(opt('--w', 1440))
 const height = Number(opt('--h', 900))
-const outDir = resolve(opt('--out', resolve(tmpdir(), 'conjure-shots')))
+const outDir = resolve(opt('--out', resolve(tmpdir(), 'voice-world-shots')))
 mkdirSync(outDir, { recursive: true })
 
 const browser = await chromium.launch({
@@ -34,8 +34,8 @@ await page.waitForFunction(() => window.__sceneReady === true, null, { timeout: 
 await page.evaluate(() => document.querySelectorAll('#nuxt-devtools-container, nuxt-devtools-anchor, [id^="nuxt-devtools"]').forEach(e => e.remove()))
 
 const wait = ms => page.waitForTimeout(ms)
-const look = (yaw, pitch, pos) => page.evaluate(([y, p, q]) => window.__conjure.look(y, p, q), [yaw, pitch, pos])
-const clear = () => page.evaluate(() => window.__conjure.clear())
+const look = (yaw, pitch, pos) => page.evaluate(([y, p, q]) => window.__voiceWorld.look(y, p, q), [yaw, pitch, pos])
+const clear = () => page.evaluate(() => window.__voiceWorld.clear())
 const chip = async (id, settle = 2200) => {
   await page.click(`[data-example="${id}"]`)
   await page.mouse.move(width / 2, height / 2) // move off the chip so its tooltip doesn't sit in the shot
@@ -52,7 +52,7 @@ const shot = async (label) => {
   console.log(out)
 }
 const summary = () => page.evaluate(() => {
-  const s = window.__conjure.state()
+  const s = window.__voiceWorld.state()
   const by = {}
   for (const e of s.entities) by[e.kind] = (by[e.kind] || 0) + 1
   return { entities: s.entities.length, by, log: s.log.map(b => b.id), time: s.atmosphere.time }
@@ -61,7 +61,7 @@ const summary = () => page.evaluate(() => {
 // Turn to face the centroid of a kind (yaw 0 = -z, positive turns left), optionally offset.
 const face = async (kind, pitch = -0.18, offset = 0) => {
   const [x, z] = await page.evaluate((k) => {
-    const es = window.__conjure.state().entities.filter(e => e.kind === k)
+    const es = window.__voiceWorld.state().entities.filter(e => e.kind === k)
     return [es.reduce((a, e) => a + e.pos[0], 0) / es.length, es.reduce((a, e) => a + e.pos[2], 0) / es.length]
   }, kind)
   await look(Math.atan2(-x, -z) + offset, pitch)
@@ -73,10 +73,10 @@ const ask = async (text, { midShot } = {}) => {
   await page.click('input[data-intent-input], [data-intent-input] input')
   await page.keyboard.type(text, { delay: 18 })
   await page.keyboard.press('Enter')
-  await page.waitForFunction(() => window.__conjure.phase() === 'thinking', null, { timeout: 5000 }).catch(() => {})
+  await page.waitForFunction(() => window.__voiceWorld.phase() === 'thinking', null, { timeout: 5000 }).catch(() => {})
   if (midShot) await shot(midShot)
-  await page.waitForFunction(() => window.__conjure.phase() !== 'thinking', null, { timeout: 30000 })
-  const last = await page.evaluate(() => window.__conjure.lastEntry())
+  await page.waitForFunction(() => window.__voiceWorld.phase() !== 'thinking', null, { timeout: 30000 })
+  const last = await page.evaluate(() => window.__voiceWorld.lastEntry())
   console.log(`  “${text}” → ${last?.model} ${last?.ms} ms · ops ${JSON.stringify((last?.ops || []).map(o => o.op === 'spawn' ? `spawn ${o.kind}×${o.count || 1}` : o.op))}${last?.dropped?.length ? ` · dropped ${last.dropped.length}` : ''}${last?.notes?.length ? ` · notes ${last.notes.join('; ')}` : ''}${last?.error ? ` · error ${last.error}` : ''} · say ${JSON.stringify(last?.say)}`)
   await page.evaluate(() => document.activeElement?.blur())
 }
@@ -104,7 +104,7 @@ if (scenario === 'sprint1') {
   await wait(300)
   await chip('trees-red', 1400)
   await shot('trees_red')
-  console.log('red', await page.evaluate(() => window.__conjure.state().entities.map(e => `${e.kind}:${e.props.color ?? '-'}`).join(' ')))
+  console.log('red', await page.evaluate(() => window.__voiceWorld.state().entities.map(e => `${e.kind}:${e.props.color ?? '-'}`).join(' ')))
 
   // "A few houses" then "those houses twice as tall".
   await clear()
@@ -114,7 +114,7 @@ if (scenario === 'sprint1') {
   await shot('houses')
   await chip('houses-tall', 1600)
   await shot('houses_tall')
-  console.log('tall', await page.evaluate(() => window.__conjure.state().entities.map(e => `${e.kind}:h${e.props.height ?? 1}`).join(' ')))
+  console.log('tall', await page.evaluate(() => window.__voiceWorld.state().entities.map(e => `${e.kind}:h${e.props.height ?? 1}`).join(' ')))
 
   // A learned grandfather clock, then "five more of those", then undo.
   await clear()
@@ -187,23 +187,23 @@ if (scenario === 'sprint1') {
     await page.keyboard.type(text, { delay: 18 })
     const t0 = await page.evaluate(() => performance.now())
     await page.keyboard.press('Enter')
-    await page.waitForFunction(() => window.__conjure.phase() === 'thinking', null, { timeout: 5000 }).catch(() => {})
-    await page.waitForFunction(() => window.__conjure.phase() !== 'thinking', null, { timeout: 30000 })
+    await page.waitForFunction(() => window.__voiceWorld.phase() === 'thinking', null, { timeout: 5000 }).catch(() => {})
+    await page.waitForFunction(() => window.__voiceWorld.phase() !== 'thinking', null, { timeout: 30000 })
     await page.evaluate(() => document.activeElement?.blur())
     const intentMs = Math.round(await page.evaluate(t => performance.now() - t, t0))
-    const entry = await page.evaluate(() => window.__conjure.lastEntry())
+    const entry = await page.evaluate(() => window.__voiceWorld.lastEntry())
     console.log(`  “${text}” → ${entry?.model} ${entry?.ms} ms · ${JSON.stringify((entry?.ops || []).slice(0, 2))}`)
     if (fogShot) {
       await wait(700)
       await shot(`s4_${slug}_fog`)
     }
     // Mid-build: a moment after the first Director op lands.
-    await page.waitForFunction(() => window.__conjure.director()?.firstOpAt, null, { timeout: 60000 })
+    await page.waitForFunction(() => window.__voiceWorld.director()?.firstOpAt, null, { timeout: 60000 })
     await wait(midAfterMs)
     await shot(`s4_${slug}_mid`)
-    await page.waitForFunction(() => window.__conjure.director()?.status !== 'building', null, { timeout: 90000 })
+    await page.waitForFunction(() => window.__voiceWorld.director()?.status !== 'building', null, { timeout: 90000 })
     await wait(3200) // the last arrivals land and the fog lifts
-    const d = await page.evaluate(() => window.__conjure.director())
+    const d = await page.evaluate(() => window.__voiceWorld.director())
     const fromAsk = await page.evaluate(([a, b]) => [Math.round(b.firstOpAt - a), Math.round(b.doneAt - a)], [t0, d])
     console.log(`  ${slug}: intent ${intentMs} ms · director first op ${Math.round(d.firstOpAt - d.t0)} ms, done ${Math.round(d.doneAt - d.t0)} ms · from Enter: first op ${fromAsk[0]} ms, complete ${fromAsk[1]} ms · ${d.ops} ops (${d.dropped} dropped) · $${(d.costUsd ?? 0).toFixed(4)} · ${d.status}${d.error ? ` ${d.error}` : ''}`)
     await shot(`s4_${slug}`)
@@ -214,14 +214,14 @@ if (scenario === 'sprint1') {
   await look(0, -0.08, [0, 0])
   await wait(600)
   // Something to fog out: the void with a grove in it.
-  await page.evaluate(() => window.__conjure.example('trees'))
+  await page.evaluate(() => window.__voiceWorld.example('trees'))
   await wait(2200)
   if (!only || only === 'pool') {
     await teleport('take me to a pool hall', 'pool', { fogShot: true })
     await ask('make all the lamps blue')
     await wait(1600)
     await shot('s4_pool_lamps_blue')
-    console.log('   lamps:', await page.evaluate(() => window.__conjure.state().entities.filter(e => e.tags.includes('light') || e.tags.includes('lamp')).map(e => `${e.kind}:${e.props.color ?? '-'}`).join(' ')))
+    console.log('   lamps:', await page.evaluate(() => window.__voiceWorld.state().entities.filter(e => e.tags.includes('light') || e.tags.includes('lamp')).map(e => `${e.kind}:${e.props.color ?? '-'}`).join(' ')))
   }
   if (!only || only === 'lake') await teleport('take me somewhere tranquil so I can relax', 'lake', { view: [0, -0.04] })
   if (!only || only === 'street') await teleport('a neon city street at night', 'street', { view: [0, -0.02] })

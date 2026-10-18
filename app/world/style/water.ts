@@ -55,6 +55,6 @@ export function waterPatch(sh: THREE.WebGLProgramParametersWithUniforms): void {
 export function waterMaterial(color: THREE.ColorRepresentation, opts: THREE.MeshStandardMaterialParameters = {}): THREE.MeshStandardMaterial {
   const m = new THREE.MeshStandardMaterial({ color, roughness: 0.3, metalness: 0, ...opts })
   m.onBeforeCompile = sh => waterPatch(sh)
-  m.customProgramCacheKey = () => 'conjure-water'
+  m.customProgramCacheKey = () => 'voice-world-water'
   return m
 }

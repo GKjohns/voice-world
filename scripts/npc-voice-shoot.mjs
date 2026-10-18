@@ -14,7 +14,7 @@ const opt = (k, d) => {
 }
 const url = opt('--url', 'http://localhost:3091/')
 const wav = resolve(opt('--wav', 'bench/fixtures/npc_session.wav'))
-const outDir = resolve(opt('--out', resolve(tmpdir(), 'conjure-npc-voice')))
+const outDir = resolve(opt('--out', resolve(tmpdir(), 'voice-world-npc-voice')))
 mkdirSync(outDir, { recursive: true })
 const gl = args.includes('--gpu') ? ['--use-angle=metal', '--ignore-gpu-blocklist', '--enable-gpu'] : ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--enable-webgl']
 const browser = await chromium.launch({
@@ -38,12 +38,12 @@ const shot = async (label) => {
 }
 
 await page.goto(url, { waitUntil: 'networkidle' })
-await page.waitForFunction(() => window.__sceneReady === true && !!window.__conjureNpc, null, { timeout: 60000 })
+await page.waitForFunction(() => window.__sceneReady === true && !!window.__voiceWorldNpc, null, { timeout: 60000 })
 await page.evaluate(() => {
-  localStorage.removeItem('conjure:npc:v1')
-  window.__conjure.clear()
-  window.__conjure.look(0, -0.08, [0, 0])
-  window.__conjure.run({ ops: [
+  localStorage.removeItem('voice-world:npc:v1')
+  window.__voiceWorld.clear()
+  window.__voiceWorld.look(0, -0.08, [0, 0])
+  window.__voiceWorld.run({ ops: [
     { op: 'atmosphere', time: 'golden' },
     { op: 'spawn', kind: 'water', at: { anchor: 'player', dir: 'ahead', dist: 30 }, set: { length: 40, width: 30 } },
     { op: 'spawn', kind: 'dock', at: { anchor: 'player', dir: 'ahead', dist: 12 }, facing: 'player' },
@@ -51,15 +51,15 @@ await page.evaluate(() => {
   ] }, 'a fisherman by the lake')
 })
 // Let his persona land and the greeting (if any) play out before the mic opens.
-await page.waitForFunction(() => window.__conjureNpc.people().every(p => window.__conjureNpc.mind(p.id)?.personaState === 'ready'), null, { timeout: 20000 }).catch(() => {})
+await page.waitForFunction(() => window.__voiceWorldNpc.people().every(p => window.__voiceWorldNpc.mind(p.id)?.personaState === 'ready'), null, { timeout: 20000 }).catch(() => {})
 await wait(6000)
-const before = (await page.evaluate(() => window.__conjureNpc.timings())).length
+const before = (await page.evaluate(() => window.__voiceWorldNpc.timings())).length
 await page.click('[data-mic]')
 const t0 = Date.now()
 let shots = 0
 while (Date.now() - t0 < 46000) {
   await wait(500)
-  const b = await page.evaluate(() => window.__conjureNpc.bubble())
+  const b = await page.evaluate(() => window.__voiceWorldNpc.bubble())
   if (b && !b.thinking && b.text && shots < 3 && Date.now() - t0 > 6000 * (shots + 1)) {
     await shot(`voice_npc_${shots + 1}`)
     shots++
@@ -67,11 +67,11 @@ while (Date.now() - t0 < 46000) {
 }
 await shot('voice_after')
 const res = await page.evaluate(() => ({
-  npc: window.__conjureNpc.timings(),
-  heard: window.__conjureVoice.heard(),
-  said: window.__conjureVoice.said(),
-  toolCalls: window.__conjureVoice.toolCalls(),
-  time: window.__conjure.state().atmosphere.time
+  npc: window.__voiceWorldNpc.timings(),
+  heard: window.__voiceWorldVoice.heard(),
+  said: window.__voiceWorldVoice.said(),
+  toolCalls: window.__voiceWorldVoice.toolCalls(),
+  time: window.__voiceWorld.state().atmosphere.time
 }))
 console.log(JSON.stringify({ ...res, npc: res.npc.slice(before) }, null, 1))
 await browser.close()

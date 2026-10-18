@@ -423,7 +423,7 @@ function stop() {
 /** A read-only handle for the headless voice check (scripts/voice-shoot.mjs) and devtools. */
 function exposeHandle() {
   const w = window as unknown as Record<string, unknown>
-  w.__conjureVoice ??= {
+  w.__voiceWorldVoice ??= {
     status: () => status.value,
     presence: () => presence.value,
     heard: () => heard.value,

@@ -38,7 +38,7 @@ import { People } from '~/world/npc/people'
 import { VoiceQueue } from '~/world/npc/voice'
 import type { WorldRenderer } from '~/world/renderer'
 
-const STORE_KEY = 'conjure:npc:v1'
+const STORE_KEY = 'voice-world:npc:v1'
 /** Persona calls for a batch bigger than this wait until you come within NEAR_PERSONA of them. */
 const EAGER_PERSONAS = 4
 const NEAR_PERSONA = 16
@@ -868,7 +868,7 @@ function wipe() {
 
 function expose() {
   const w = window as unknown as Record<string, unknown>
-  w.__conjureNpc = {
+  w.__voiceWorldNpc = {
     people: () => (people?.all() ?? []).map(l => ({ id: l.id, name: l.name, mode: l.mode, doing: l.doing, pos: [l.x, l.y, l.z].map(v => Math.round(v * 100) / 100), following: l.following, hidden: l.hidden, gesture: l.oneShot?.kind ?? null, wave: Math.round(l.pose.wave * 100) / 100, dance: Math.round(l.pose.dance * 100) / 100, headPitch: Math.round(l.pose.headPitch * 100) / 100 })),
     mind: (id: string) => {
       const e = entityOf(id)

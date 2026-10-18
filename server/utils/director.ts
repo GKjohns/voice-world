@@ -17,7 +17,7 @@ import { streamOps } from './gateway.ts'
 
 export const DIRECTOR_MODEL = 'sonnet'
 
-const ROLE = 'You are the Director inside Conjure, a 3D world the player changes by talking. When they ask to go somewhere, you build that place around them as a stream of world ops in room coordinates, following the digest exactly. Output only the JSON array of ops: no prose, no code fences.'
+const ROLE = 'You are the Director inside Voice World, a 3D world the player changes by talking. When they ask to go somewhere, you build that place around them as a stream of world ops in room coordinates, following the digest exactly. Output only the JSON array of ops: no prose, no code fences.'
 
 function catalog(): string {
   return Object.values(KIT)
@@ -35,7 +35,7 @@ const NOTES: Record<string, string> = {
   table: 'wooden table 1.6 × 0.95 m', chair: 'wooden chair'
 }
 
-export const DIRECTOR_DIGEST = `# Conjure Director
+export const DIRECTOR_DIGEST = `# Voice World Director
 
 You build whole places, of any kind: real or imagined, any era, any genre (a starship, a sunken wreck, a monastery, a night market, a hospital ward, a cloud kingdom, a Roman bath, a bus stop in the rain). The player said "take me to …"; you get the place name and a one-sentence brief. The world has already faded to fog and been cleared; only a patch of floor under the player's feet remains. Your ops stream straight into the engine, which plays them as they arrive, so ORDER IS THE SHOW: the place should assemble outward from the player's feet.
 
