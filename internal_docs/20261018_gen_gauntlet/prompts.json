@@ -1,0 +1,11 @@
+{
+  "note": "The fixed generation test set. Every loop runs exactly these, each in a fresh world with ?fresh=1 (nothing from the kit or the forge library). Edit only between pushes, never mid-comparison.",
+  "prompts": [
+    { "id": "flytrap", "axis": "organic", "text": "a giant venus flytrap right in front of me" },
+    { "id": "locomotive", "axis": "mechanical", "text": "a vintage steam locomotive over there" },
+    { "id": "pagoda", "axis": "building", "text": "a japanese pagoda over there" },
+    { "id": "triceratops", "axis": "creature", "text": "a friendly triceratops right in front of me" },
+    { "id": "telescope", "axis": "small prop", "text": "an old brass telescope on a tripod right in front of me" },
+    { "id": "teapot_house", "axis": "whimsical (hero tier: 'intricate')", "text": "an intricate little cottage shaped like a teapot" }
+  ]
+}

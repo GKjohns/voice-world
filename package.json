@@ -16,6 +16,7 @@
     "test": "node --test tests/*.test.ts",
     "shoot": "node scripts/shoot.mjs",
     "gauntlet": "node scripts/gauntlet.mjs",
+    "gen:gauntlet": "node scripts/gen-gauntlet.mjs",
     "bench:intent": "node --env-file=.env bench/intent.ts",
     "bench:director": "node --env-file=.env bench/director.ts",
     "bench:realtime": "node --env-file=.env bench/realtime_check.ts"
