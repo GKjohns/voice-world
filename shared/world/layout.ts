@@ -41,6 +41,7 @@ export interface Anchor {
 }
 
 const PLAYER_RADIUS = 1.5 // nothing lands on top of the viewer
+const THREE_QUARTER = 0.65
 const PLAYER_CLEAR = 2.5 // gaze-anchored groups keep their near edge this far from the viewer
 const TAU = Math.PI * 2
 /** The renderer's vertical field of view; placement keeps a wish inside 86% of it (the camera tilts to fit). */
@@ -303,6 +304,9 @@ export function layout(state: WorldState, spec: LayoutSpec, ctx: OpContext, rand
     else if (facing === 'along') rotY = faceAxis ? faceAxisYaw(pos, faceAxis) : Math.atan2(rv[0], rv[1])
     else if (facing === 'uniform') rotY = uniformYaw
     else rotY = faceToward(pos, ctx.player.pos)
+    // Gen loop 2: a new thing shown alone turns a three-quarter view to you (a locomotive or a telescope
+    // nose-on reads as a disc), its long axis ~37° off the line of sight.
+    if (facing === 'player' && n === 1 && desc.tags.includes('placeholder')) rotY += THREE_QUARTER
     if (facing !== 'random' && !(room && spec.yaw !== undefined)) rotY += (rand() * 2 - 1) * vary * 0.3
     if (stack) rotY += (rand() * 2 - 1) * 0.18
     return { pos, rotY, scale: round(scale, 3), hue: round(hue, 4) }

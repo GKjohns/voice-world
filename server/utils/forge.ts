@@ -59,6 +59,8 @@ export interface ForgeRequest {
   text: string
   tier: Tier
   draft: Part[]
+  /** Gen loop 2: the target size (largest dimension, m) decided at the spawn. */
+  size?: number
   /** A data: URL (PNG) of the draft's studio render, or none. */
   image?: string
   session: string
@@ -198,7 +200,7 @@ ${partsToProgram(req.draft)}
 ${render ? 'Image 1 is its render (front-right view).' : '(No render available.)'}${ref ? ` Image ${render ? 2 : 1} is the reference target. ${REF_NOTE}` : ''}${issues}
 Write the complete improved program. ${SPEED}`
     : `Make: "${req.text}" (it is a ${req.kind.replace(/_/g, ' ')}).
-Design it from scratch at real-world scale, resting on the ground.${ref ? ` Image 1 is the reference target. ${REF_NOTE}` : ''}
+Design it from scratch, resting on the ground.${req.size ? ` Its size is fixed: its largest dimension is ${Math.round(req.size * 10) / 10} m (fill that, don't exceed it).` : ' Real-world scale.'} If it is long (a vehicle, a creature, a telescope tube), its long axis runs along z.${ref ? ` Image 1 is the reference target. ${REF_NOTE}` : ''}
 Write the complete program. ${SPEED}`
 
   yield { t: 'stage', stage: 'refine', ms: ms() }

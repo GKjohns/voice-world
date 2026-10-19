@@ -342,3 +342,23 @@ export function partsToProgram(parts: Part[]): string {
 export function cleanParts(raw: unknown): Part[] {
   return Array.isArray(raw) ? programParts(raw) : []
 }
+
+// ---------- Gen loop 2: one target size, decided at the spawn ----------
+
+/** The largest side of a part list's bounding box (m), or 0. */
+export function maxDim(parts: Part[]): number {
+  const b = boundsOf(parts)
+  return b ? Math.max(b.max[0] - b.min[0], b.max[1] - b.min[1], b.max[2] - b.min[2]) : 0
+}
+
+/**
+ * The uniform scale that holds a (streaming) object to its target size S. While parts still stream it only
+ * ever shrinks (the head and tail that arrive later never make it jump bigger); once complete it also
+ * grows something that came out well under size (< 0.6 S).
+ */
+export function sizeK(parts: Part[], S: number | undefined, complete: boolean): number {
+  const m = maxDim(parts)
+  if (!S || m <= 0) return 1
+  if (m > S) return r4(S / m)
+  return complete && m < S * 0.6 ? r4(S / m) : 1
+}

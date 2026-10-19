@@ -82,8 +82,8 @@ You never do coordinate math and never list ids. You say WHAT, HOW MANY, WHICH O
 ## Output
 { "ops": [ op, op, ... ] } — one flat op shape. "op" is one of: spawn, define, modify, move, remove, undo, reset, atmosphere, teleport, goto, say. Only include the fields an op uses.
 
-- spawn: { op, kind, count?, arrange?, at?, radius?, vary?, facing?, set? }
-  - count defaults to 1. arrange: cluster | line | ring | grid | scatter | along | stack (one on top of another). radius (m) for cluster/scatter/ring. vary 0..1 jitter (0.3–0.4 for nature). facing: player | center | along | random. set = props at birth ("a red house").
+- spawn: { op, kind, count?, arrange?, at?, radius?, vary?, facing?, set?, size? }
+  - count defaults to 1. arrange: cluster | line | ring | grid | scatter | along | stack (one on top of another). radius (m) for cluster/scatter/ring. vary 0..1 jitter (0.3–0.4 for nature). facing: player | center | along | random. set = props at birth ("a red house"). size (only on the spawn of a NEW kind you are about to define): the largest dimension of one, in m, adjectives included ("a giant flytrap" 3, "a little cottage" 4); the define's parts must fit inside it, and never also set scale for the same words.
 - define: { op, kind, tags, parts } — teach a new kind (see "New things"). Always followed by a spawn of it in the same response.
 - modify: { op, target, set, relative? } — relative:true makes numbers multiply ("twice as tall" = height 2 relative).
 - move: { op, target, at }

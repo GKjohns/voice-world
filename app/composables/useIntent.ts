@@ -11,6 +11,11 @@ import type { DroppedOp, Op, Part } from '#shared/world/ops'
 import type { BatchResult } from '#shared/world/state'
 import type { OpContext } from '#shared/world/types'
 import { readNdjson } from '~/utils/ndjson'
+import { sizeK, transformPart } from '#shared/world/forge'
+import { targetSize } from '#shared/world/size'
+
+/** Gen loop 2: each new kind's target size (largest dimension, m), decided once at its spawn. */
+const sizes = new Map<string, number>()
 
 export type IntentPhase = 'idle' | 'listening' | 'thinking' | 'building'
 
@@ -193,7 +198,20 @@ async function build(request: string, ctx: OpContext, source: 'text' | 'voice' =
     else if (out.effects.reset) target = null
     absorb(out)
   }
-  const apply = (op: Op) => {
+  const apply = (op0: Op) => {
+    let op = op0
+    // Gen loop 2: a new kind's size is decided here, once, before any part of it exists. The spawn carries
+    // it (placement), the renderer holds both streams to it, the forge designs to it, and the draft's
+    // define is normalised to it (its streamed parts were shown at the same scale, so nothing jumps).
+    if (op.op === 'spawn' && !world.state.value.kinds[op.kind]) {
+      const S = sizes.get(op.kind) ?? targetSize(op.kind, text, op.size)
+      sizes.set(op.kind, S)
+      world.renderer()?.setTargetSize(op.kind, S)
+      op = { ...op, size: S }
+    } else if (op.op === 'define' && sizes.has(op.kind) && !world.state.value.kinds[op.kind]?.learned) {
+      const k = sizeK(op.parts, sizes.get(op.kind), true)
+      if (k !== 1) op = { ...op, parts: op.parts.map(p => transformPart(p, k, [0, 0, 0])) }
+    }
     // Spawn before define: a not-yet-designed kind's spawn holds the spot (a labelled blob, motes swirling
     // round it) and is not an arrival yet; its define is.
     const fresh = op.op === 'spawn' && !world.state.value.kinds[op.kind]
@@ -219,7 +237,7 @@ async function build(request: string, ctx: OpContext, source: 'text' | 'voice' =
     }
     if (op.op === 'define') draftAt[op.kind] ??= performance.now()
     // Gen loop 1: a kind nobody has designed yet starts its refine now, in parallel with the draft.
-    if (fresh && world.state.value.entities.some(e => e.kind === op.kind)) useForge().early(op.kind, text, op.count ?? 1, started)
+    if (fresh && op.op === 'spawn' && world.state.value.entities.some(e => e.kind === op.kind)) useForge().early(op.kind, text, op.count ?? 1, started)
     if (spawned.size + modified.size + removed.size || other.length) {
       firstAppliedMs ??= Math.round(performance.now() - started)
       setPhase('building')

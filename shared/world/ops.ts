@@ -278,6 +278,8 @@ const SpawnOp = z.object({
   vary: num(0, 1).optional(),
   facing: z.enum(FACINGS).optional(),
   set: PropsSchema.optional(),
+  /** Gen loop 2: a new kind's size (its largest dimension in m, adjectives included), decided at the spawn. */
+  size: num(0.1, 400).optional(),
   // Director-only room placement (see DirectorOpSchema). Overrides `at`; skips de-overlap.
   xz: z.array(num(-1500, 1500)).length(2).optional(),
   yaw: num(-720, 720).optional()

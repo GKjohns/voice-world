@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Gen Gauntlet loop2</title>
+<style>
+:root{--bg:#f6f5f2;--fg:#1d1c1a;--muted:#6b6862;--card:#fff;--line:#e3e0da;--accent:#b7791f}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#151514;--fg:#ecebe8;--muted:#9a978f;--card:#1f1f1d;--line:#33322f;--accent:#e0a84a}}
+:root[data-theme="dark"]{--bg:#151514;--fg:#ecebe8;--muted:#9a978f;--card:#1f1f1d;--line:#33322f;--accent:#e0a84a}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.45 system-ui,-apple-system,sans-serif;padding:24px 16px}
+main{max-width:1500px;margin:0 auto}h1{margin:0 0 4px;font-size:22px}.sub{color:var(--muted);margin:0 0 18px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(420px,1fr));gap:16px}
+@media (max-width:480px){.grid{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px}
+.card h2{font-size:16px;margin:0}.axis{font-weight:400;color:var(--muted);font-size:13px}.said{margin:2px 0 8px;color:var(--muted)}
+video,.card>img{width:100%;border-radius:6px;background:#000;display:block}
+.strip{display:flex;gap:4px;margin-top:6px}.strip img{width:100%;border-radius:4px;display:block}.strip a{flex:1}
+dl{display:grid;grid-template-columns:repeat(4,1fr);gap:6px 10px;margin:10px 0 6px}dl div{min-width:0}dt{color:var(--muted);font-size:11px}dd{margin:0;font-weight:600;font-variant-numeric:tabular-nums}
+.outcome,.note{color:var(--muted);font-size:12px;margin:2px 0}.err{color:#c0392b}
+.tablewrap{overflow-x:auto;margin:22px 0}table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums;font-size:13px}
+th,td{border-bottom:1px solid var(--line);padding:6px 8px;text-align:left;white-space:nowrap}th{color:var(--muted);font-weight:500}tr.avg td{font-weight:700}
+</style></head><body><main>
+<h1>Generation gauntlet · loop2</h1>
+<p class="sub">2026-10-19T03:20:36.525Z · 6 prompts, each in a fresh world with <code>?fresh=1</code> · times are from pressing Enter · tracked $0.2352 (forge ledger +$0.2511, gateway account +$0.2545)</p>
+<div class="tablewrap"><table><thead><tr><th>prompt</th><th>tier</th><th>draft (first object px)</th><th>refine starts</th><th>first refined part</th><th>50% of final parts</th><th>swap</th><th>settled</th><th>parts</th><th>$</th><th>outcome</th></tr></thead><tbody>
+<tr><td>flytrap</td><td>good</td><td>2.0 s</td><td>2.0 s</td><td>3.6 s</td><td>8.7 s</td><td>12.8 s</td><td>13.1 s</td><td>7→34</td><td>0.035</td><td>refined</td></tr>
+<tr><td>locomotive</td><td>good</td><td>2.2 s</td><td>2.2 s</td><td>4.5 s</td><td>9.5 s</td><td>14.0 s</td><td>14.3 s</td><td>12→38</td><td>0.035</td><td>refined</td></tr>
+<tr><td>pagoda</td><td>good</td><td>1.6 s</td><td>1.6 s</td><td>4.2 s</td><td>7.2 s</td><td>8.7 s</td><td>9.0 s</td><td>11→39</td><td>0.023</td><td>refined</td></tr>
+<tr><td>triceratops</td><td>good</td><td>2.2 s</td><td>2.2 s</td><td>7.1 s</td><td>12.1 s</td><td>14.2 s</td><td>14.6 s</td><td>13→27</td><td>0.031</td><td>refined</td></tr>
+<tr><td>telescope</td><td>good</td><td>2.3 s</td><td>2.3 s</td><td>4.5 s</td><td>8.3 s</td><td>11.1 s</td><td>11.5 s</td><td>7→20</td><td>0.031</td><td>refined</td></tr>
+<tr><td>teapot_house</td><td>hero</td><td>1.9 s</td><td>1.9 s</td><td>9.2 s</td><td>13.1 s</td><td>19.7 s</td><td>20.1 s</td><td>8→41</td><td>0.080</td><td>refined; polish lost the judge (Teapot silhouette, spout and handle read clearly; muted palette matches referenc)</td></tr>
+<tr class="avg"><td>mean</td><td></td><td>2.0 s</td><td>2.0 s</td><td>5.5 s</td><td>9.8 s</td><td>13.4 s</td><td>13.8 s</td><td></td><td>0.235</td><td></td></tr>
+</tbody></table></div>
+<div class="grid">
+<article class="card">
+  <h2>flytrap <span class="axis">organic</span></h2>
+  <p class="said">“a giant venus flytrap right in front of me”</p>
+  <video src="videos/flytrap.mp4" controls muted loop playsinline preload="metadata" poster="stills/flytrap_3_final.jpg"></video>
+  <div class="strip"><a href="stills/flytrap_1_draft.jpg"><img src="stills/flytrap_1_draft.jpg" alt="1_draft" title="1_draft"></a><a href="stills/flytrap_2_refining.jpg"><img src="stills/flytrap_2_refining.jpg" alt="2_refining" title="2_refining"></a><a href="stills/flytrap_3_final.jpg"><img src="stills/flytrap_3_final.jpg" alt="3_final" title="3_final"></a></div>
+  <dl><div><dt>draft (first object px)</dt><dd>2.0 s</dd></div><div><dt>refine starts</dt><dd>2.0 s</dd></div><div><dt>first refined part</dt><dd>3.6 s</dd></div><div><dt>50% of final parts</dt><dd>8.7 s</dd></div><div><dt>swap</dt><dd>12.8 s</dd></div><div><dt>settled</dt><dd>13.1 s</dd></div>
+  <div><dt>parts</dt><dd>7 → 34</dd></div>
+  <div><dt>tier · $</dt><dd>good · $0.035</dd></div></dl>
+  <p class="outcome">venus_flytrap · refined · 60 fps, worst gap 17 ms</p>
+  <p class="note">Video starts 2 s before Enter; the corner clock is the harness overlay.</p>
+</article>
+<article class="card">
+  <h2>locomotive <span class="axis">mechanical</span></h2>
+  <p class="said">“a vintage steam locomotive over there”</p>
+  <video src="videos/locomotive.mp4" controls muted loop playsinline preload="metadata" poster="stills/locomotive_3_final.jpg"></video>
+  <div class="strip"><a href="stills/locomotive_1_draft.jpg"><img src="stills/locomotive_1_draft.jpg" alt="1_draft" title="1_draft"></a><a href="stills/locomotive_2_refining.jpg"><img src="stills/locomotive_2_refining.jpg" alt="2_refining" title="2_refining"></a><a href="stills/locomotive_3_final.jpg"><img src="stills/locomotive_3_final.jpg" alt="3_final" title="3_final"></a></div>
+  <dl><div><dt>draft (first object px)</dt><dd>2.2 s</dd></div><div><dt>refine starts</dt><dd>2.2 s</dd></div><div><dt>first refined part</dt><dd>4.5 s</dd></div><div><dt>50% of final parts</dt><dd>9.5 s</dd></div><div><dt>swap</dt><dd>14.0 s</dd></div><div><dt>settled</dt><dd>14.3 s</dd></div>
+  <div><dt>parts</dt><dd>12 → 38</dd></div>
+  <div><dt>tier · $</dt><dd>good · $0.035</dd></div></dl>
+  <p class="outcome">steam_locomotive · refined · 60 fps, worst gap 17 ms</p>
+  <p class="note">Video starts 2 s before Enter; the corner clock is the harness overlay.</p>
+</article>
+<article class="card">
+  <h2>pagoda <span class="axis">building</span></h2>
+  <p class="said">“a japanese pagoda over there”</p>
+  <video src="videos/pagoda.mp4" controls muted loop playsinline preload="metadata" poster="stills/pagoda_3_final.jpg"></video>
+  <div class="strip"><a href="stills/pagoda_1_draft.jpg"><img src="stills/pagoda_1_draft.jpg" alt="1_draft" title="1_draft"></a><a href="stills/pagoda_2_refining.jpg"><img src="stills/pagoda_2_refining.jpg" alt="2_refining" title="2_refining"></a><a href="stills/pagoda_3_final.jpg"><img src="stills/pagoda_3_final.jpg" alt="3_final" title="3_final"></a></div>
+  <dl><div><dt>draft (first object px)</dt><dd>1.6 s</dd></div><div><dt>refine starts</dt><dd>1.6 s</dd></div><div><dt>first refined part</dt><dd>4.2 s</dd></div><div><dt>50% of final parts</dt><dd>7.2 s</dd></div><div><dt>swap</dt><dd>8.7 s</dd></div><div><dt>settled</dt><dd>9.0 s</dd></div>
+  <div><dt>parts</dt><dd>11 → 39</dd></div>
+  <div><dt>tier · $</dt><dd>good · $0.023</dd></div></dl>
+  <p class="outcome">japanese_pagoda · refined · 60 fps, worst gap 33 ms</p>
+  <p class="note">Video starts 2 s before Enter; the corner clock is the harness overlay.</p>
+</article>
+<article class="card">
+  <h2>triceratops <span class="axis">creature</span></h2>
+  <p class="said">“a friendly triceratops right in front of me”</p>
+  <video src="videos/triceratops.mp4" controls muted loop playsinline preload="metadata" poster="stills/triceratops_3_final.jpg"></video>
+  <div class="strip"><a href="stills/triceratops_1_draft.jpg"><img src="stills/triceratops_1_draft.jpg" alt="1_draft" title="1_draft"></a><a href="stills/triceratops_2_refining.jpg"><img src="stills/triceratops_2_refining.jpg" alt="2_refining" title="2_refining"></a><a href="stills/triceratops_3_final.jpg"><img src="stills/triceratops_3_final.jpg" alt="3_final" title="3_final"></a></div>
+  <dl><div><dt>draft (first object px)</dt><dd>2.2 s</dd></div><div><dt>refine starts</dt><dd>2.2 s</dd></div><div><dt>first refined part</dt><dd>7.1 s</dd></div><div><dt>50% of final parts</dt><dd>12.1 s</dd></div><div><dt>swap</dt><dd>14.2 s</dd></div><div><dt>settled</dt><dd>14.6 s</dd></div>
+  <div><dt>parts</dt><dd>13 → 27</dd></div>
+  <div><dt>tier · $</dt><dd>good · $0.031</dd></div></dl>
+  <p class="outcome">triceratops · refined · 60 fps, worst gap 17 ms</p>
+  <p class="note">Video starts 2 s before Enter; the corner clock is the harness overlay.</p>
+</article>
+<article class="card">
+  <h2>telescope <span class="axis">small prop</span></h2>
+  <p class="said">“an old brass telescope on a tripod right in front of me”</p>
+  <video src="videos/telescope.mp4" controls muted loop playsinline preload="metadata" poster="stills/telescope_3_final.jpg"></video>
+  <div class="strip"><a href="stills/telescope_1_draft.jpg"><img src="stills/telescope_1_draft.jpg" alt="1_draft" title="1_draft"></a><a href="stills/telescope_2_refining.jpg"><img src="stills/telescope_2_refining.jpg" alt="2_refining" title="2_refining"></a><a href="stills/telescope_3_final.jpg"><img src="stills/telescope_3_final.jpg" alt="3_final" title="3_final"></a></div>
+  <dl><div><dt>draft (first object px)</dt><dd>2.3 s</dd></div><div><dt>refine starts</dt><dd>2.3 s</dd></div><div><dt>first refined part</dt><dd>4.5 s</dd></div><div><dt>50% of final parts</dt><dd>8.3 s</dd></div><div><dt>swap</dt><dd>11.1 s</dd></div><div><dt>settled</dt><dd>11.5 s</dd></div>
+  <div><dt>parts</dt><dd>7 → 20</dd></div>
+  <div><dt>tier · $</dt><dd>good · $0.031</dd></div></dl>
+  <p class="outcome">brass_telescope · refined · 60 fps, worst gap 17 ms</p>
+  <p class="note">Video starts 2 s before Enter; the corner clock is the harness overlay.</p>
+</article>
+<article class="card">
+  <h2>teapot_house <span class="axis">whimsical (hero tier: 'intricate')</span></h2>
+  <p class="said">“an intricate little cottage shaped like a teapot”</p>
+  <video src="videos/teapot_house.mp4" controls muted loop playsinline preload="metadata" poster="stills/teapot_house_3_final.jpg"></video>
+  <div class="strip"><a href="stills/teapot_house_1_draft.jpg"><img src="stills/teapot_house_1_draft.jpg" alt="1_draft" title="1_draft"></a><a href="stills/teapot_house_2_refining.jpg"><img src="stills/teapot_house_2_refining.jpg" alt="2_refining" title="2_refining"></a><a href="stills/teapot_house_3_final.jpg"><img src="stills/teapot_house_3_final.jpg" alt="3_final" title="3_final"></a></div>
+  <dl><div><dt>draft (first object px)</dt><dd>1.9 s</dd></div><div><dt>refine starts</dt><dd>1.9 s</dd></div><div><dt>first refined part</dt><dd>9.2 s</dd></div><div><dt>50% of final parts</dt><dd>13.1 s</dd></div><div><dt>swap</dt><dd>19.7 s</dd></div><div><dt>settled</dt><dd>20.1 s</dd></div>
+  <div><dt>parts</dt><dd>8 → 41</dd></div>
+  <div><dt>tier · $</dt><dd>hero · $0.080</dd></div></dl>
+  <p class="outcome">teapot_cottage · refined; polish lost the judge (Teapot silhouette, spout and handle read clearly; muted palette matches referenc) · 60 fps, worst gap 17 ms</p>
+  <p class="note">Video starts 2 s before Enter; the corner clock is the harness overlay.</p>
+</article>
+</div>
+</main></body></html>

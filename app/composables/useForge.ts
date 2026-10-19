@@ -213,7 +213,7 @@ async function start(kind: string, text: string, tier: Tier, marks: { t0: number
     const res = await fetch('/api/forge', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ kind, text, tier, draft, ...(image ? { image } : {}), session, fresh, job: job.id }),
+      body: JSON.stringify({ kind, text, tier, draft, size: r.targetSize(kind), ...(image ? { image } : {}), session, fresh, job: job.id }),
       signal: job.ctrl.signal
     })
     if (!res.ok || !res.body) throw new Error(`forge HTTP ${res.status}`)
@@ -240,8 +240,8 @@ async function start(kind: string, text: string, tier: Tier, marks: { t0: number
     }
     basis = job.basis
     if (job.ctrl.signal.aborted) return
-    // The scale the stream was fixed at on screen (the hand-over), so the exchange is in place.
-    const k = world.renderer()?.refineScale(kind) ?? 1
+    // Gen loop 2: the final parts are held to the kind's target size (the stream already was, on screen).
+    const k = world.renderer()?.refineFinalK(kind, d.parts) ?? 1
     if (k !== 1) d.parts = d.parts.map(p => transformPart(p, k, [0, 0, 0]))
     const ok = world.upgradeKind(kind, d.parts, { basis, quality: tier })
     world.renderer()?.endRefine(kind, ok)

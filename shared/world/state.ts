@@ -77,7 +77,10 @@ function step(state: WorldState, op0: Op, ctx: OpContext): StepResult {
         return { ...top, notes: [`no ${landform} here: raised one first`, ...base.notes, ...top.notes], facts: [...(base.facts ?? []), ...(top.facts ?? [])] }
       }
       const notes: string[] = []
-      const desc = kindOf(state, op.kind)
+      // Gen loop 2: a new kind's size is known at its spawn, so the spot is chosen for the real thing (far
+      // enough off to see all of it), not for the 2 m placeholder that holds it.
+      const desc0 = kindOf(state, op.kind)
+      const desc = !state.kinds[op.kind] && op.size ? { ...desc0, footprint: round3(op.size * 0.45), baseHeight: round3(op.size * 0.75) } : desc0
       if (!state.kinds[op.kind]) notes.push(`unknown kind "${op.kind}": holding its spot with a placeholder until it's defined`)
       const out = layout(state, { desc, count: op.count ?? 1, arrange: op.arrange, at: op.at, radius: op.radius, vary: op.vary, facing: op.facing, xz: op.xz, yaw: op.yaw, props: op.set }, ctx, rand)
       notes.push(...out.notes)

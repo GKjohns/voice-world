@@ -17,7 +17,7 @@ import type { AtmospherePreset } from './atmosphere'
 import { BUILD_READS_COLOR, KIT_BUILDERS, blob } from './kit'
 import { applyMaterialProps, gazeNdc, lookTargets } from './look'
 import { buildFromParts, buildFromPartsMerged, partMesh } from './parts'
-import { boundsOf, fitToDraft, transformPart } from '#shared/world/forge'
+import { boundsOf, maxDim, sizeK, transformPart } from '#shared/world/forge'
 import { crossfade, ghost, growIn, meshesOf } from './fx/refine'
 import { Ambience } from './sound'
 import { Gathering } from './fx/anticipate'
@@ -86,7 +86,7 @@ interface RefineJob {
   handed: boolean
   /** Kept for the gauntlet's timeline (was the ghost level): 1 = draft solid, 0 = handed over. */
   level: number
-  /** The refined version's scale, fixed once at the hand-over (its first masses fitted to the draft). */
+  /** Gen loop 2: the scale that holds the streaming refine to the kind's target size (shrink-only). */
   k: number
 }
 
@@ -94,6 +94,8 @@ interface RefineJob {
 interface DraftStream {
   overlays: Map<string, THREE.Group>
   parts: Part[]
+  /** Gen loop 2: the scale that holds the streaming draft to its kind's target size (shrink-only). */
+  k: number
 }
 
 /** Gauntlet loop 1 (track B): one item's physics-lite clocks (its flight, its tip, when it first appeared). */
@@ -244,6 +246,8 @@ export class WorldRenderer {
   // The forge: kinds being refined, a gentle swirl round the focused one, and queued studio shots.
   private refining = new Map<string, RefineJob>()
   private drafting = new Map<string, DraftStream>()
+  /** Gen loop 2: each new kind's target size (largest dimension, m), decided at its spawn. */
+  private sizes = new Map<string, number>()
   private refineMotes = new Placeholder()
   private studio = new Studio()
   // Gauntlet loop 1 (track B): physics-lite clocks per item, followers, no-gravity, flight, the "take me to
@@ -433,11 +437,9 @@ export class WorldRenderer {
         if (!forged && job?.handed && job.focusId === item.entity.id) item.body.visible = false
       })
       if (streamed) this.endDraft(kind)
-      // Camera restraint: only re-frame when what it became is much taller than what you saw (the labelled
-      // blob a spawn-before-define held the spot with, or the draft before its forged upgrade).
-      const beforeH = prev?.kinds[kind]?.baseHeight ?? 2.2
-      const after = state.kinds[kind]
-      if (list[0] && after && after.baseHeight > beforeH * 1.3 && prev && !this.reveal && !this.userActive()) this.frameWish([wanted.get(list[0].entity.id) ?? list[0].entity])
+      // Gen loop 2: once a new design lands (the draft's define, then its forged upgrade), frame it if any
+      // of it (height, width or depth) is off-screen; solveFrame leaves the camera alone when it already fits.
+      if (list[0] && state.kinds[kind] && prev && !this.reveal && !this.userActive()) this.frameWish([wanted.get(list[0].entity.id) ?? list[0].entity])
     }
 
     // Spawns, staggered tk-tk-tk. Big batches tick faster so a forest still lands in about two seconds.
@@ -1310,10 +1312,11 @@ export class WorldRenderer {
   draftPart(kind: string, part: Part): void {
     let d = this.drafting.get(kind)
     if (!d) {
-      d = { overlays: new Map(), parts: [] }
+      d = { overlays: new Map(), parts: [], k: 1 }
       this.drafting.set(kind, d)
     }
     d.parts.push(part)
+    d.k = sizeK(d.parts, this.sizes.get(kind), false)
     const job = this.refining.get(kind)
     const now = performance.now()
     let n = 0
@@ -1324,6 +1327,7 @@ export class WorldRenderer {
       let g = d.overlays.get(it.entity.id)
       if (!g) {
         g = new THREE.Group()
+        g.scale.setScalar(d.k)
         it.stretch.add(g)
         d.overlays.set(it.entity.id, g)
         it.body.visible = false
@@ -1373,12 +1377,25 @@ export class WorldRenderer {
     overlay.userData.refineOverlay = true
     focus.stretch.add(overlay)
     this.refining.set(kind, { kind, focusId: focus.entity.id, overlay, queue: [], streamed: [], added: 0, handed: false, level: 1, k: 1 })
+    const S = this.targetSize(kind)
+    if (S) this.sizes.set(kind, S)
     return focus.entity.id
   }
 
-  /** The scale factor the refined version was fixed at during the hand-over (1 if it never handed over). */
-  refineScale(kind: string): number {
-    return this.refining.get(kind)?.k ?? 1
+  /** Gen loop 2: a new kind's target size, decided once at its spawn (both streams are held to it). */
+  setTargetSize(kind: string, size: number): void {
+    this.sizes.set(kind, size)
+  }
+
+  /** The target size of `kind`: the one set at its spawn, else the size of its current design. */
+  targetSize(kind: string): number | undefined {
+    const desc = this.state?.kinds[kind]
+    return this.sizes.get(kind) ?? (desc?.parts?.length ? maxDim(desc.parts) : undefined)
+  }
+
+  /** The scale for a refine's final parts: its target size, now that the object is complete. */
+  refineFinalK(kind: string, parts: Part[]): number {
+    return sizeK(parts, this.targetSize(kind), true)
   }
 
   /** Refined parts arrived (in the kind's own coordinates, at their final size): queue them to grow in. */
@@ -1418,7 +1435,19 @@ export class WorldRenderer {
 
   /** Per frame: grow up to PARTS_PER_FRAME queued refined parts; hand over from the draft once a few are in. */
   private growRefined(now: number): void {
+    // Gen loop 2: streaming objects are held to their target size: each overlay eases to its scale (the
+    // first part snaps, so nothing appears big and then shrinks).
+    const ease1 = Math.min(1, this.dt * 10)
+    for (const d of this.drafting.values()) {
+      for (const g of d.overlays.values()) g.scale.setScalar(g.scale.x + (d.k - g.scale.x) * ease1)
+    }
     for (const job of this.refining.values()) {
+      if (job.streamed.length) {
+        const k = sizeK(job.streamed, this.sizes.get(job.kind), false)
+        const s = job.added ? job.overlay.scale.x + (k - job.overlay.scale.x) * ease1 : k
+        job.k = k
+        job.overlay.scale.setScalar(s)
+      }
       const item = this.items.get(job.focusId)
       if (!item || item.leaving) {
         job.queue.length = 0
@@ -1443,14 +1472,6 @@ export class WorldRenderer {
   private handOff(job: RefineJob, item: Item, now: number): void {
     job.handed = true
     job.level = 0
-    // Fix the scale up front: the first (biggest) refined masses are fitted to the draft once, here, and
-    // everything after streams in at that scale; the final parts get the same factor (refineScale).
-    const desc = this.state?.kinds[job.kind]
-    const target = desc?.learned && desc.parts?.length ? desc.parts : this.drafting.get(job.kind)?.parts
-    if (target?.length) {
-      job.k = fitToDraft(job.streamed, target).k
-      job.overlay.scale.setScalar(job.k)
-    }
     const body = item.body
     const draft = this.drafting.get(job.kind)?.overlays.get(item.entity.id)
     if (draft) this.drafting.get(job.kind)!.overlays.delete(item.entity.id)
