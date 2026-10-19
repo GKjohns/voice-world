@@ -24,7 +24,7 @@ import { Gathering } from './fx/anticipate'
 import { Placeholder } from './fx/placeholder'
 import { beam, dissolve, shimmer, shockwave, sparkle } from './fx/arrival'
 import type { Fx } from './fx/common'
-import { OUTDOOR_BACK, skyTilt, solveFrame } from './fx/frame'
+import { OUTDOOR_BACK, fitFrame, skyTilt, solveFrame } from './fx/frame'
 import type { FrameBox, View } from './fx/frame'
 import { Vortex } from './fx/vortex'
 import { applyPose, blendedPose, driveOf, flightPose, flightTimes, followStep, motionPose, tipPose, weightlessPose, GRAVITY, TIP_SECONDS } from './fx/motion'
@@ -73,6 +73,8 @@ const HANDOFF_PARTS = 3
 const CROSSFADE_MS = 350
 /** Gen loop 3: a newly landed design is framed with more air than a spawn (bottoms were clipping). */
 const LANDED_MARGIN = 0.8
+/** Gen loop 4: a newly landed design is dollied to fill about this much of the view (worst |NDC|). */
+const LANDED_FILL = 0.74
 /** How many instances of a kind show its draft streaming in (the rest get it when the define lands). */
 const DRAFT_STREAM_MAX = 12
 
@@ -596,7 +598,7 @@ export class WorldRenderer {
     if (!this.state || (this.userActive() && !base)) return
     const boxes: FrameBox[] = entities.map((e) => {
       const d = this.desc(e)
-      return { x: e.pos[0], z: e.pos[2], r: Math.max(0.3, entityReach(d, e)), h: e.pos[1] + kindHeight(d, e.props) }
+      return { x: e.pos[0], z: e.pos[2], r: Math.max(0.3, entityReach(d, e)), h: e.pos[1] + kindHeight(d, e.props), pts: this.corners(e) }
     })
     if (boxes.length === 1 && boxes[0]!.h < 1.2 && boxes[0]!.r < 1) return
     const now = this.view()
@@ -605,7 +607,11 @@ export class WorldRenderer {
     // Inside a room (a ceiling over you), framing only turns and tilts: a step back would leave through a
     // wall that may not even have arrived yet (the room's own build backed players 6 m out of it).
     const indoors = !!ceilingOver(this.state, cur.x, cur.z)
-    const to = (preferLift && !indoors ? this.godView(boxes, cur) : solveFrame(this.camera, cur, boxes, this.eyeAt(cur.x, cur.z), { free, maxBack: indoors ? 0 : OUTDOOR_BACK, margin })) ?? base ?? (indoors || preferLift ? null : this.approach(boxes, cur))
+    // Gen loop 4: one newly landed design outdoors is dollied to fill the view (closer or back) from its real box.
+    const fit = margin !== undefined && !indoors && !preferLift && boxes.length === 1 && boxes[0]!.pts
+    const to = fit
+      ? fitFrame(this.camera, cur, boxes, this.eyeAt(cur.x, cur.z), { free, maxBack: OUTDOOR_BACK, margin, fill: LANDED_FILL, minDist: boxes[0]!.r + 1.5 })
+      : (preferLift && !indoors ? this.godView(boxes, cur) : solveFrame(this.camera, cur, boxes, this.eyeAt(cur.x, cur.z), { free, maxBack: indoors ? 0 : OUTDOOR_BACK, margin })) ?? base ?? (indoors || preferLift ? null : this.approach(boxes, cur))
     if (!to) return
     if (base) {
       this.camMove = { from: now, to, start: performance.now(), dur: 1400 }
@@ -615,6 +621,29 @@ export class WorldRenderer {
     this.camMove = preferLift
       ? { from: cur, to, start: performance.now(), dur: 1300 }
       : { from: cur, to, start: performance.now() + 120, dur: Math.min(1600, 1050 + travel * 9) }
+  }
+
+  /**
+   * Gen loop 4: a learned thing's world-space box as 8 corners: its parts' bounds, scaled, turned by its yaw
+   * (three's rotation.y) and moved to where it stands. Undefined for kit kinds (no parts).
+   */
+  private corners(e: Entity): [number, number, number][] | undefined {
+    const parts = this.state?.kinds[e.kind]?.parts
+    const b = parts?.length ? boundsOf(parts) : null
+    if (!b) return undefined
+    const s = e.props.scale ?? 1
+    const sy = s * (e.props.height ?? 1)
+    const c = Math.cos(e.rotY)
+    const sn = Math.sin(e.rotY)
+    const out: [number, number, number][] = []
+    for (const x of [b.min[0], b.max[0]]) {
+      for (const y of [b.min[1], b.max[1]]) {
+        for (const z of [b.min[2], b.max[2]]) {
+          out.push([e.pos[0] + (x * c + z * sn) * s, e.pos[1] + y * sy, e.pos[2] + (-x * sn + z * c) * s])
+        }
+      }
+    }
+    return out
   }
 
   /**

@@ -32,7 +32,26 @@ function part(p) {
     profile: __v(p.profile, 32), outline: __v(p.outline, 32), depth: p.depth });
   return p;
 }
-const __o = o => (o && typeof o === 'object') ? o : {};
+// Gen loop 4: compact options. A flag string (or an object's f field): m mirror, p/t/g slot primary/trim/glow,
+// z lay along z, x lay along x, W wood, M metal, G glass, S stone, A matte. Fewer output tokens per part.
+const __flags = (f, o) => {
+  if (typeof f !== 'string') return o;
+  for (const c of f.slice(0, 12)) {
+    if (c === 'm') o.mirror = true;
+    else if (c === 'p') o.slot = 'primary';
+    else if (c === 't') o.slot = 'trim';
+    else if (c === 'g') o.slot = 'glow';
+    else if (c === 'z' && !o.rot) o.rot = [Math.PI / 2, 0, 0];
+    else if (c === 'x' && !o.rot) o.rot = [0, 0, Math.PI / 2];
+    else if (c === 'W') o.material = 'wood';
+    else if (c === 'M') o.material = 'metal';
+    else if (c === 'G') o.material = 'glass';
+    else if (c === 'S') o.material = 'stone';
+    else if (c === 'A') o.material = 'matte';
+  }
+  return o;
+};
+const __o = o => typeof o === 'string' ? __flags(o, {}) : (o && typeof o === 'object') ? __flags(o.f, Object.assign({}, o)) : {};
 const __mk = s => (size, at, color, o) => part(Object.assign({}, __o(o), { shape: s, size, at, color }));
 const box = __mk('box'), sphere = __mk('sphere'), cylinder = __mk('cylinder'), cone = __mk('cone'), capsule = __mk('capsule'), torus = __mk('torus');
 const tube = (points, radii, color, o) => part(Object.assign({}, __o(o), { shape: 'tube', points, radii, color }));

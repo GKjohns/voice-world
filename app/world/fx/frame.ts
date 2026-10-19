@@ -14,6 +14,11 @@ export interface FrameBox {
   r: number
   /** top (m above ground) */
   h: number
+  /**
+   * Gen loop 4: the thing's real world-space box, as its 8 corners (parts bounds after scale and yaw). When
+   * present these are the samples, instead of a footprint circle that misses a yawed long body's corners.
+   */
+  pts?: [number, number, number][]
 }
 
 export interface View {
@@ -63,6 +68,10 @@ function samples(boxes: FrameBox[]): THREE.Vector3[] {
   // Keep the cost bounded on a 200-thing teleport: sample the biggest boxes.
   const list = boxes.length > 60 ? [...boxes].sort((a, b) => b.h * b.r - a.h * a.r).slice(0, 60) : boxes
   for (const b of list) {
+    if (b.pts?.length) {
+      for (const p of b.pts) out.push(new THREE.Vector3(p[0], Math.max(0.05, p[1]), p[2]))
+      continue
+    }
     const k = b.r > 3 ? 8 : 4
     for (let i = 0; i < k; i++) {
       const a = (i / k) * Math.PI * 2
@@ -164,6 +173,58 @@ export function solveFrame(cam: THREE.PerspectiveCamera, cur: View, boxes: Frame
   }
   // Too big to frame from here: don't move, just turn and tilt toward it and let it be too big.
   return stay
+}
+
+/**
+ * Gen loop 4: frame a newly landed design so it fills the view comfortably (worst |NDC| about `fill`), dollying
+ * along the line from its middle to you: closer when it landed small and far, back when it clips. Never
+ * through a wall either way, never nearer than `minDist` to its middle. Null when the current view is
+ * already within a metre of the right distance and fits.
+ */
+export function fitFrame(cam: THREE.PerspectiveCamera, cur: View, boxes: FrameBox[], eye: number, opts: FrameOpts & { fill: number, minDist: number }): View | null {
+  if (!boxes.length) return null
+  const pts = samples(boxes)
+  let x0 = Infinity
+  let x1 = -Infinity
+  let z0 = Infinity
+  let z1 = -Infinity
+  for (const p of pts) {
+    x0 = Math.min(x0, p.x)
+    x1 = Math.max(x1, p.x)
+    z0 = Math.min(z0, p.z)
+    z1 = Math.max(z1, p.z)
+  }
+  const cx = (x0 + x1) / 2
+  const cz = (z0 + z1) / 2
+  const d0 = Math.hypot(cur.x - cx, cur.z - cz)
+  const dir: [number, number] = d0 > 0.5 ? [(cur.x - cx) / d0, (cur.z - cz) / d0] : [Math.sin(cur.yaw), Math.cos(cur.yaw)]
+  const maxBack = opts.maxBack ?? MAX_BACK
+  const backFree = opts.free ? opts.free(cur.x, cur.z, dir[0], dir[1], maxBack + WALL_GAP) - WALL_GAP : maxBack
+  const fwdFree = opts.free && d0 > opts.minDist ? opts.free(cur.x, cur.z, -dir[0], -dir[1], d0 - opts.minDist + WALL_GAP) - WALL_GAP : Infinity
+  const lo = Math.max(opts.minDist, d0 - Math.max(0, fwdFree))
+  const hi = d0 + Math.max(0, Math.min(maxBack, backFree))
+  const at = (d: number): { view: View, w: number } => {
+    const x = cx + dir[0] * d
+    const z = cz + dir[1] * d
+    const centerYaw = Math.atan2(-(cx - x), -(cz - z))
+    const { yaw, pitch } = aim(pts, x, z, eye + cur.lift, centerYaw)
+    const view: View = { yaw: cur.yaw + wrap(yaw - cur.yaw), pitch, x, z, lift: cur.lift }
+    place(cam, view, eye)
+    return { view, w: worst(pts) }
+  }
+  const far = at(hi)
+  if (far.w > opts.fill) return solveFrame(cam, cur, boxes, eye, opts)
+  let a = lo
+  let b = hi
+  if (at(lo).w <= opts.fill) b = lo
+  else for (let i = 0; i < 22; i++) {
+    const m = (a + b) / 2
+    if (at(m).w <= opts.fill) b = m
+    else a = m
+  }
+  place(cam, cur, eye)
+  if (Math.abs(b - d0) < 1 && worst(pts) <= (opts.margin ?? MARGIN)) return null
+  return at(b).view
 }
 
 function wrap(a: number): number {

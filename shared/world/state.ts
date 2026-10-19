@@ -81,9 +81,10 @@ function step(state: WorldState, op0: Op, ctx: OpContext): StepResult {
       // Gen loop 2: a new kind's size is known at its spawn, so the spot is chosen for the real thing (far
       // enough off to see all of it), not for the 2 m placeholder that holds it.
       const desc0 = kindOf(state, op.kind)
-      // Gen loop 3: laid out as if S were its height plus 15% headroom, so whichever way S runs it fills about
-      // 70% of the view instead of 86% (big things were framed tight and clipped at the bottom).
-      const desc = !state.kinds[op.kind] && op.size ? { ...desc0, footprint: round3(op.size * 0.5), baseHeight: round3(op.size * 1.15), tags: isUpright(op.kind) ? [...desc0.tags, 'upright'] : desc0.tags } : desc0
+      // Gen loop 4: laid out by its likely real height: S for upright kinds, about half of S for long or low
+      // ones (loop 3's 1.15 S pushed the telescope and triceratops far off). The landed frame then dollies to
+      // fill the view from the real bounding box.
+      const desc = !state.kinds[op.kind] && op.size ? { ...desc0, footprint: round3(op.size * 0.5), baseHeight: round3(op.size * (isUpright(op.kind) ? 1 : 0.5)), tags: isUpright(op.kind) ? [...desc0.tags, 'upright'] : desc0.tags } : desc0
       if (!state.kinds[op.kind]) notes.push(`unknown kind "${op.kind}": holding its spot with a placeholder until it's defined`)
       const out = layout(state, { desc, count: op.count ?? 1, arrange: op.arrange, at: op.at, radius: op.radius, vary: op.vary, facing: op.facing, xz: op.xz, yaw: op.yaw, props: op.set }, ctx, rand)
       notes.push(...out.notes)

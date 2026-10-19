@@ -28,23 +28,24 @@ Every part must touch or overlap another part; the whole thing rests on the grou
 Colours are "#hex".
 ${STYLE_WITH_PALETTE}`
 
-const API = `Write the BODY of a JS function. Available functions (each adds one part; o = optional {rot:[x,y,z], mirror:true, slot, material}):
+const API = `Write the BODY of a JS function. Available functions (each adds one part; o = optional flags string or {rot:[x,y,z], f:'flags'}):
   box(size,at,color,o) sphere(size,at,color,o) cylinder(size,at,color,o) cone(size,at,color,o) capsule(size,at,color,o) torus(size,at,color,o)
      size [w,h,d] bounding box, at = centre. Cylinders/cones/capsules stand along y; rot [1.571,0,0] lays one along z. Torus lies in the x–y plane.
   tube(points, radii, color, o) — smooth swept tapered body through [[x,y,z],...] (2–8 points) with a radius per point. Bodies, necks, tails, legs, horns, branches, pipes, rope.
   lathe(profile, at, color, o) — [[r,y],...] bottom→top turned around y (r=0 closes an end). Towers, vases, domes, columns, bottles, tree crowns.
   extrude(outline, depth, at, color, o) — 2D [[x,y],...] outline with thickness along z. Wings, sails, fins, ears, signs. o.rot [0,1.571,0] = side panel, [-1.571,0,0] = lying flat.
-  PI, Math, loops and variables are available. mirror:true adds the x → −x copy: describe the +x side only (legs, wings, eyes, wheels).
-Slots: o.slot:'primary' on the main body masses (when the player says "make it red", those parts turn red), 'trim' on accents and secondary colour, 'glow' on things that emit light (lamps, flames, windows, eyes, crystals). o.material: 'wood' | 'metal' | 'glass' | 'stone' | 'matte'.
+  PI, Math, loops and variables are available. Mirror ('m') adds the x → −x copy: describe the +x side only (legs, wings, eyes, wheels).
+Flags (letters in one string, e.g. 'mp' or {rot:[0.3,0,0],f:'mt'}): m = mirror x → −x; p = primary slot on the main body masses (when the player says "make it red", those parts turn red); t = trim slot on accents and the secondary colour; g = glow on things that emit light (lamps, flames, windows, eyes); z = lay along z (instead of rot [1.571,0,0]); x = lay along x (a wheel: cylinder([0.9,0.15,0.9],at,C,'xm'), size is always given standing, before the turn); W wood, M metal, G glass, S stone, A matte. Omit o when nothing applies.
+Colours: declare the 3–6 colours once as single-letter consts on the first code line (const A='#402713',B='#c9a14a';) and pass the letter; that keeps the palette coherent and the lines short. Round numbers to 2 decimals.
 Use consts for key anchor points so parts line up and joints are shared; loops for repeats (windows, spokes, planks, ribs). Aim for 30–90 parts (a showpiece 90–180); at most 200 after mirroring. More parts are not better: chunky readable masses beat fine detail.
-Silhouette over detail: exaggerate what makes it recognisable from 20 m.
-Order statements biggest to smallest: main masses first, then limbs and structure, small details last — the player watches each line appear. One statement per line.
+Silhouette over detail: exaggerate what makes it recognisable from 20 m. Before writing, name to yourself the 3–5 features that make it read as this thing at a glance (a triceratops: three horns + frill + beak; a locomotive: boiler + smokestack + cab + big wheels + cowcatcher) and build those within the first third of the lines, at bold, slightly exaggerated proportions and in their true colours, so the half-built object already reads as the thing.
+Order statements: main masses, then the defining silhouette features, then limbs and structure, small details last — the player watches each line appear. One statement per line.
 Output ONLY the JavaScript body. First line: // name: <snake_case>. No JSON, no code fences, no prose.`
 
 const LIVE = `You are a toy-diorama 3D sculptor who writes tiny JavaScript programs that build charming, instantly recognisable objects for a world that is built by talking.\n${FRAME}\n${API}`
 const REFINE = `${LIVE}\nYou are REFINING a first draft. Look at its render, find the most important problems (floating or disconnected parts, wrong proportions, missing signature features, flat single colour) and rewrite the whole program much better. Keep what works: the same kind of thing, its colours and its overall size.`
 const REFINE_ROLE = 'You are a toy-diorama 3D sculptor. Follow the brief in the first message part. Output only the JavaScript body.'
-const SPEED = 'SPEED MATTERS: the player watches each line appear, so the line right after the name line must already create the main body mass. Declare at most 2–3 key numbers, all on ONE line, then build immediately (use literal numbers where you can; no palette object, no long block of consts). Order: main masses first, then limbs and structure, small details last. No comments other than the name line.'
+const SPEED = 'SPEED MATTERS: the player watches each line appear, so the line right after the name line must already create the main body mass. Put the colour letters and at most 2–3 key numbers on ONE line, then build immediately (use literal numbers where you can; no palette object, no long block of consts). Order: main masses first, then limbs and structure, small details last. No comments other than the name line.'
 
 const POLISH_BUDGET_MS = 28_000
 const REF_DIR = resolve(process.cwd(), '.data/forge/ref')
