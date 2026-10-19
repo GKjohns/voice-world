@@ -216,6 +216,76 @@ export function islands(parts: Part[], margin = 0.03): { floating: number, group
   return { floating, groups: list.length, notes }
 }
 
+/**
+ * Gen loop 5: snap small floating islands onto the main structure instead of rejecting the build. Each
+ * floating island (not the biggest, not touching the object's lowest level) whose parts are under
+ * `maxFrac` of the total box volume moves by the shortest per-axis translation that closes the gap to the
+ * nearest attached part; if that move is longer than `maxMove` × the object's largest dimension, the island
+ * is dropped. A big floating island is left alone (`core` false: the structure itself is broken).
+ */
+export function snapFloating(parts: Part[], maxFrac = 0.2, maxMove = 0.35): { parts: Part[], snapped: number, dropped: number, core: boolean } {
+  const res = { parts, snapped: 0, dropped: 0, core: true }
+  if (parts.length < 3 || !islands(parts).floating) return res
+  const margin = 0.03
+  const boxes = parts.map(partBounds)
+  const n = boxes.length
+  const parent = boxes.map((_, i) => i)
+  const find = (i: number): number => (parent[i] === i ? i : (parent[i] = find(parent[i]!)))
+  const touch = (a: Box, b: Box) => [0, 1, 2].every(i => a.min[i]! - margin <= b.max[i]! + margin && b.min[i]! - margin <= a.max[i]! + margin)
+  for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) if (touch(boxes[i]!, boxes[j]!)) parent[find(i)] = find(j)
+  const groups = new Map<number, number[]>()
+  for (let i = 0; i < n; i++) groups.set(find(i), [...(groups.get(find(i)) ?? []), i])
+  const list = [...groups.values()].sort((a, b) => b.length - a.length)
+  const floor = Math.min(...boxes.map(b => b.min[1])) + 0.05
+  const vol = (b: Box) => Math.max(1e-6, (b.max[0] - b.min[0]) * (b.max[1] - b.min[1]) * (b.max[2] - b.min[2]))
+  const total = boxes.reduce((s, b) => s + vol(b), 0)
+  const all = boundsOf(parts)!
+  const span = Math.max(...[0, 1, 2].map(k => all.max[k]! - all.min[k]!))
+  const attached = new Set<number>()
+  const floating: number[][] = []
+  for (const [gi, isl] of list.entries()) {
+    if (gi === 0 || isl.some(i => boxes[i]!.min[1] <= floor)) isl.forEach(i => attached.add(i))
+    else floating.push(isl)
+  }
+  const out = parts.slice() as (Part | null)[]
+  // Nearest islands first, so a chain (tooth → jaw rim) can attach through an already snapped one.
+  for (const isl of floating) {
+    const frac = isl.reduce((s, i) => s + vol(boxes[i]!), 0) / total
+    if (frac > maxFrac) {
+      res.core = false
+      continue
+    }
+    let best: Vec3 | null = null
+    let bestLen = Infinity
+    for (const i of isl) {
+      const a = boxes[i]!
+      for (const j of attached) {
+        const b = boxes[j]!
+        const t = [0, 1, 2].map(k => a.min[k]! > b.max[k]! ? b.max[k]! - a.min[k]! : b.min[k]! > a.max[k]! ? b.min[k]! - a.max[k]! : 0) as Vec3
+        const len = Math.hypot(...t)
+        if (len < bestLen) {
+          bestLen = len
+          best = t
+        }
+      }
+    }
+    if (!best || bestLen > maxMove * span) {
+      isl.forEach(i => (out[i] = null))
+      res.dropped += isl.length
+      continue
+    }
+    for (const i of isl) {
+      out[i] = transformPart(parts[i]!, 1, best)
+      const b = boxes[i]!
+      boxes[i] = { min: [b.min[0] + best[0], b.min[1] + best[1], b.min[2] + best[2]], max: [b.max[0] + best[0], b.max[1] + best[1], b.max[2] + best[2]] } as Box
+      attached.add(i)
+    }
+    res.snapped += isl.length
+  }
+  res.parts = out.filter((p): p is Part => !!p)
+  return res
+}
+
 // ---------- fitting to the draft ----------
 
 /** Uniform scale + translation of a part about the origin: at' = at·k + d; every length · k. */

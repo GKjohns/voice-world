@@ -5,7 +5,7 @@
  */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { HQ_MAX_PARTS, boundsOf, chooseTier, cleanPart, expandMirror, fitToDraft, hashParts, isBudgetError, islands, libKey, partBounds, partsToProgram, programParts, spendDecision } from '../shared/world/forge.ts'
+import { HQ_MAX_PARTS, boundsOf, chooseTier, cleanPart, expandMirror, fitToDraft, hashParts, isBudgetError, islands, libKey, partBounds, partsToProgram, programParts, snapFloating, spendDecision } from '../shared/world/forge.ts'
 import type { Part } from '../shared/world/ops.ts'
 import { applyBatch, createWorld, exportWorld, importWorld, upgradeKind } from '../shared/world/state.ts'
 import type { OpContext } from '../shared/world/types.ts'
@@ -152,4 +152,17 @@ test('upgradeKind: outside the undo history, survives later undos and reloads, r
   // A new define of the kind (different parts) drops the upgrade.
   const redefined = applyBatch(up.state, { ops: [{ op: 'define', kind: 'hut', tags: ['building'], parts: [DRAFT[0]!] }] }, ctx, 'a plainer hut', 0).state
   assert.equal(redefined.kinds.hut!.quality, 'draft')
+})
+
+test('snapFloating (Gen loop 5): small floating parts snap on or drop; a floating core is reported', () => {
+  const body: Part = { shape: 'box', size: [2, 2, 2], at: [0, 1, 0], color: '#00aa00' }
+  const tooth: Part = { shape: 'cone', size: [0.1, 0.2, 0.1], at: [0, 2.3, 0], color: '#ffffff' }
+  const far: Part = { shape: 'cone', size: [0.1, 0.2, 0.1], at: [0, 6, 0], color: '#ffffff' }
+  const r = snapFloating([body, tooth, far])
+  assert.equal(r.snapped, 1)
+  assert.equal(r.dropped, 1)
+  assert.equal(r.parts.length, 2)
+  assert.equal(islands(r.parts).floating, 0)
+  const core = snapFloating([body, { ...body, at: [0, 5, 0] }, tooth])
+  assert.equal(core.core, false)
 })

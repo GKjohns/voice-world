@@ -273,7 +273,8 @@ async function polish(job: Job, text: string, current: Part[], code: string | un
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ kind, text, parts: current, code, image, session, fresh: job.fresh, job: job.id }),
-    signal: job.ctrl.signal
+    // Gen loop 5: the server gives up at 28 s; the client never waits past 33 s either (no late swap).
+    signal: AbortSignal.any([job.ctrl.signal, AbortSignal.timeout(33_000)])
   }).then(res => res.json()).catch(() => null) as { ok?: boolean, parts?: Part[], usd?: number, reason?: string, budget?: boolean } | null
   if (job.ctrl.signal.aborted) return
   rec.usd += p?.usd ?? 0
@@ -288,7 +289,7 @@ async function polish(job: Job, text: string, current: Part[], code: string | un
   await sleep(200) // its programs compile in the background meanwhile
   const [a, b] = [await r.studioShot(focus2), await r.studioShot(focus2, candidate)]
   if (!a || !b) return finish('refined; polish not judged (no renders)')
-  const j = await fetch('/api/forge/judge', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text, current: a, polish: b, session, fresh: job.fresh, job: job.id }) })
+  const j = await fetch('/api/forge/judge', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text, current: a, polish: b, session, fresh: job.fresh, job: job.id }), signal: AbortSignal.any([job.ctrl.signal, AbortSignal.timeout(14_000)]) })
     .then(res => res.json()).catch(() => null) as { polishWins?: boolean, why?: string, usd?: number } | null
   rec.usd += j?.usd ?? 0
   spent.value += j?.usd ?? 0

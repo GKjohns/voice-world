@@ -1,0 +1,50 @@
+{
+ "loop0": {
+  "flytrap": 7,
+  "locomotive": 5,
+  "pagoda": 7,
+  "triceratops": 3,
+  "telescope": 5,
+  "teapot_house": 8
+ },
+ "loop1": {
+  "flytrap": 6,
+  "locomotive": 3,
+  "pagoda": 8,
+  "triceratops": 2,
+  "telescope": 5,
+  "teapot_house": 6
+ },
+ "loop2": {
+  "flytrap": 8,
+  "locomotive": 6,
+  "pagoda": 6,
+  "triceratops": 6,
+  "telescope": 7,
+  "teapot_house": 7
+ },
+ "loop3": {
+  "flytrap": 7,
+  "locomotive": 6,
+  "pagoda": 6,
+  "triceratops": 6,
+  "telescope": 6,
+  "teapot_house": 8
+ },
+ "loop4": {
+  "flytrap": 3,
+  "locomotive": 7,
+  "pagoda": 6,
+  "triceratops": 7,
+  "telescope": 7,
+  "teapot_house": 6
+ },
+ "loop5": {
+  "flytrap": 6,
+  "locomotive": 7,
+  "pagoda": 7,
+  "triceratops": 6,
+  "telescope": 5,
+  "teapot_house": 7
+ }
+}

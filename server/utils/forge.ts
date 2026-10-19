@@ -14,7 +14,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { generateText, streamText } from 'ai'
-import { boundsOf, fitToDraft, isBudgetError, islands, libKey, partsToProgram } from '../../shared/world/forge.ts'
+import { boundsOf, fitToDraft, isBudgetError, islands, libKey, partsToProgram, snapFloating } from '../../shared/world/forge.ts'
 import type { Tier } from '../../shared/world/forge.ts'
 import type { Part } from '../../shared/world/ops.ts'
 import { STYLE_IMAGE, STYLE_WITH_PALETTE } from '../../shared/world/style.ts'
@@ -38,7 +38,7 @@ const API = `Write the BODY of a JS function. Available functions (each adds one
 Flags (letters in one string, e.g. 'mp' or {rot:[0.3,0,0],f:'mt'}): m = mirror x → −x; p = primary slot on the main body masses (when the player says "make it red", those parts turn red); t = trim slot on accents and the secondary colour; g = glow on things that emit light (lamps, flames, windows, eyes); z = lay along z (instead of rot [1.571,0,0]); x = lay along x (a wheel: cylinder([0.9,0.15,0.9],at,C,'xm'), size is always given standing, before the turn); W wood, M metal, G glass, S stone, A matte. Omit o when nothing applies.
 Colours: declare the 3–6 colours once as single-letter consts on the first code line (const A='#402713',B='#c9a14a';) and pass the letter; that keeps the palette coherent and the lines short. Round numbers to 2 decimals.
 Use consts for key anchor points so parts line up and joints are shared; loops for repeats (windows, spokes, planks, ribs). Aim for 30–90 parts (a showpiece 90–180); at most 200 after mirroring. More parts are not better: chunky readable masses beat fine detail.
-Silhouette over detail: exaggerate what makes it recognisable from 20 m. Before writing, name to yourself the 3–5 features that make it read as this thing at a glance (a triceratops: three horns + frill + beak; a locomotive: boiler + smokestack + cab + big wheels + cowcatcher) and build those within the first third of the lines, at bold, slightly exaggerated proportions and in their true colours, so the half-built object already reads as the thing.
+Silhouette over detail: exaggerate what makes it recognisable from 20 m. Before writing, name to yourself the 3–5 features that make it read as this thing at a glance (a triceratops: three horns + frill + beak; a locomotive: boiler + smokestack + cab + big wheels + cowcatcher) and build those within the first third of the lines, at bold, slightly exaggerated proportions and in their true colours, so the half-built object already reads as the thing. Exaggerate size, never distance: every small feature (teeth, spikes, horns, wheels, finials) is placed from its host part's surface and sinks ~20% of its size into the host; with z/x the size is still given standing (h = the length along the new axis), and the at is the centre after the turn.
 Order statements: main masses, then the defining silhouette features, then limbs and structure, small details last — the player watches each line appear. One statement per line.
 Output ONLY the JavaScript body. First line: // name: <snake_case>. No JSON, no code fences, no prose.`
 
@@ -54,7 +54,7 @@ const refPrompt = (w: string) => `${STYLE_IMAGE}: ${w}, three-quarter view from 
 export type ForgeEvent
   = | { t: 'stage', stage: 'ref' | 'refine', ms: number }
     | { t: 'parts', parts: Part[], ms: number }
-    | { t: 'done', ok: boolean, ms: number, usd: number, parts?: Part[], code?: string, k?: number, floating?: number, draftFloating?: number, reason?: string, budget?: boolean, refMs?: number, firstPartMs?: number, cache?: { read: number, write: number, input: number }, model?: string }
+    | { t: 'done', ok: boolean, ms: number, usd: number, parts?: Part[], code?: string, k?: number, floating?: number, draftFloating?: number, snapped?: number, dropped?: number, reason?: string, budget?: boolean, refMs?: number, firstPartMs?: number, cache?: { read: number, write: number, input: number }, model?: string }
 
 export interface ForgeRequest {
   kind: string
@@ -263,9 +263,15 @@ Write the complete program. ${SPEED}`
   }
 
   const code = stripProgram(runner.text()).trim()
-  const { parts, run } = programToParts(code, { timeoutMs: 120 })
+  const raw = programToParts(code, { timeoutMs: 120 })
+  const run = raw.run
+  // Gen loop 5: small floating features (teeth, wheels, a finial) snap onto the body or drop; only a
+  // floating core (a big island) still fails the gate below.
+  const snap = snapFloating(raw.parts)
+  const parts = snap.parts
+  if (snap.snapped || snap.dropped) console.info(`[forge] refine ${req.kind}: snapped ${snap.snapped}, dropped ${snap.dropped} floating part(s)${snap.core ? '' : ' (core island still floats)'}`)
   const check = islands(parts)
-  const base = { ms: ms(), usd, refMs, firstPartMs, cache, model: refineModel, floating: check.floating, draftFloating: draftCheck.floating }
+  const base = { ms: ms(), usd, refMs, firstPartMs, cache, model: refineModel, floating: check.floating, draftFloating: draftCheck.floating, snapped: snap.snapped, dropped: snap.dropped }
   if (streamError && parts.length < 3) {
     yield { t: 'done', ok: false, ...base, reason: streamError, budget: isBudgetError(streamError) }
     return
@@ -298,11 +304,39 @@ export interface PolishRequest {
 }
 
 /** The polish model (Opus since Gen loop 3, was Sol) rebuilds the current object toward the reference ("the same thing getting better"). Non-streaming. */
-export async function forgePolish(req: PolishRequest): Promise<{ ok: boolean, parts?: Part[], code?: string, usd: number, ms: number, reason?: string, budget?: boolean }> {
+type PolishResult = { ok: boolean, parts?: Part[], code?: string, usd: number, ms: number, reason?: string, budget?: boolean }
+
+/**
+ * Gen loop 5: a hard deadline. The abort signal alone was ignored in loop 4 (a polish ran 538 s), and the
+ * reference image was awaited outside it; now the whole polish races a timer, and the timer also aborts
+ * the gateway call. A late answer is dropped: the refine the player has stays.
+ */
+export async function forgePolish(req: PolishRequest): Promise<PolishResult> {
   const t0 = Date.now()
+  const ctrl = new AbortController()
+  const onOuter = () => ctrl.abort(new Error('aborted'))
+  req.signal?.addEventListener('abort', onOuter, { once: true })
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const deadline = new Promise<PolishResult>((done) => {
+    timer = setTimeout(() => {
+      ctrl.abort(new Error(`polish over ${POLISH_BUDGET_MS / 1000} s`))
+      forgeRecord({ session: req.session, stage: 'polish', model: FORGE_MODELS.polish, usd: FORGE_ESTIMATE.polish * 0.5, ms: Date.now() - t0, kind: req.kind, ok: false })
+      done({ ok: false, usd: FORGE_ESTIMATE.polish * 0.5, ms: Date.now() - t0, reason: `deadline (${POLISH_BUDGET_MS / 1000} s)` })
+    }, POLISH_BUDGET_MS)
+  })
+  try {
+    return await Promise.race([polishOnce(req, t0, ctrl.signal), deadline])
+  } finally {
+    clearTimeout(timer)
+    req.signal?.removeEventListener('abort', onOuter)
+  }
+}
+
+async function polishOnce(req: PolishRequest, t0: number, signal: AbortSignal): Promise<PolishResult> {
   const gate = forgeCanSpend(req.session, FORGE_ESTIMATE.polish)
   if (!gate.ok) return { ok: false, usd: 0, ms: 0, reason: gate.why, budget: true }
   const ref = await referenceImage(req.text, req.session, req)
+  if (signal.aborted) return { ok: false, usd: 0, ms: Date.now() - t0, reason: 'deadline (reference image)' }
   const render = dataUrlPart(req.image)
   const program = req.code && req.code.length < 30_000 ? req.code : partsToProgram(req.parts)
   try {
@@ -312,8 +346,8 @@ export async function forgePolish(req: PolishRequest): Promise<{ ok: boolean, pa
       reasoning: 'none',
       maxOutputTokens: 8000,
       maxRetries: 0,
-      // Gen loop 3: a hard time budget, so the hero settles predictably (a late polish is dropped, not waited on).
-      abortSignal: req.signal ? AbortSignal.any([req.signal, AbortSignal.timeout(POLISH_BUDGET_MS)]) : AbortSignal.timeout(POLISH_BUDGET_MS),
+      // The deadline's signal (forgePolish): a late polish is dropped, not waited on.
+      abortSignal: signal,
       ...(FORGE_MODELS.polish.startsWith('anthropic/') ? { providerOptions: { gateway: { only: ['anthropic'] } } } : {}),
       messages: [{
         role: 'user',
@@ -333,6 +367,7 @@ export async function forgePolish(req: PolishRequest): Promise<{ ok: boolean, pa
     return { ok: true, parts: fit.parts, code, usd, ms: Date.now() - t0 }
   } catch (err) {
     const reason = why(err)
+    if (signal.aborted) return { ok: false, usd: 0, ms: Date.now() - t0, reason } // the deadline already recorded it
     forgeRecord({ session: req.session, stage: 'polish', model: FORGE_MODELS.polish, usd: FORGE_ESTIMATE.polish * 0.5, ms: Date.now() - t0, kind: req.kind, ok: false })
     return { ok: false, usd: FORGE_ESTIMATE.polish * 0.5, ms: Date.now() - t0, reason, budget: isBudgetError(reason) }
   }
@@ -359,7 +394,7 @@ export async function forgeJudge(req: { text: string, current: string, polish: s
       reasoning: 'none',
       maxOutputTokens: 200,
       maxRetries: 1,
-      abortSignal: AbortSignal.timeout(30_000),
+      abortSignal: AbortSignal.timeout(12_000),
       providerOptions: { gateway: { only: ['anthropic'] } },
       instructions: 'You judge chunky toy-diorama 3D objects built from simple shapes for a world built by talking. Prefer chunky, readable silhouettes and a cohesive muted palette over detail count. Be decisive.',
       messages: [{
