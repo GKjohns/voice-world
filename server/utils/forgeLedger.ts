@@ -14,7 +14,7 @@ import type { Part } from '../../shared/world/ops.ts'
 export const FORGE_CAP = 12
 export const SESSION_CAP = 1.5
 /** What a call may cost at most, checked before it starts. */
-export const FORGE_ESTIMATE = { good: 0.06, hero: 0.13, polish: 0.05, judge: 0.002 } as const
+export const FORGE_ESTIMATE = { good: 0.06, hero: 0.13, polish: 0.08, judge: 0.002 } as const
 
 const DIR = resolve(process.cwd(), '.data/forge')
 const LEDGER = resolve(DIR, 'ledger.jsonl')
@@ -35,6 +35,10 @@ export interface LedgerEntry {
   ok?: boolean
   in?: number
   out?: number
+  /** Gen loop 3: Anthropic prompt-cache tokens read / written, and ms to the first streamed part. */
+  cacheRead?: number
+  cacheWrite?: number
+  firstMs?: number
 }
 
 /** Totals from the ledger: everything, and one session's share. */

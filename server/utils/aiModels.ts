@@ -41,7 +41,9 @@ const PRICING: Record<string, { input: number, output: number, cacheRead?: numbe
 /** Models the forge uses (the winners of the conjure-progressive prototype's model matrix). */
 export const FORGE_MODELS = {
   refine: 'anthropic/claude-opus-5.5',
-  polish: 'openai/gpt-6.1-sol',
+  // Gen loop 3: Opus (reasoning none) instead of Sol (reasoning low): ~12 s instead of 40–65 s for the same
+  // ~2.5k-token program, so the hero settles predictably inside the polish budget.
+  polish: 'anthropic/claude-opus-5.5',
   judge: 'anthropic/claude-haiku-5.5',
   ref: 'google/gemini-3.1-flash-lite-image'
 } as const

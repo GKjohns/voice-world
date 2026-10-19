@@ -30,3 +30,10 @@ export function targetSize(kind: string, text: string, hint?: number): number {
   const adj = ADJ.find(([re]) => re.test(t))?.[1] ?? 1
   return Math.round(row[1] * adj * 10) / 10
 }
+
+// Gen loop 3: tall, roughly radially symmetric things gain nothing from a three-quarter turn (a pagoda turned
+// 37° is still a pagoda, just off-axis); they keep facing you square.
+const UPRIGHT = /(^|_)(pagoda|temple|tower|lighthouse|windmill|skyscraper|tree|flytrap|flower|plant|cactus|mushroom|fern|lamp|lantern_post|statue|vase|fountain|rocket|column|obelisk|totem)s?($|_)/
+export function isUpright(kind: string): boolean {
+  return UPRIGHT.test(kind.toLowerCase())
+}

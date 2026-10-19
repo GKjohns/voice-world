@@ -306,7 +306,7 @@ export function layout(state: WorldState, spec: LayoutSpec, ctx: OpContext, rand
     else rotY = faceToward(pos, ctx.player.pos)
     // Gen loop 2: a new thing shown alone turns a three-quarter view to you (a locomotive or a telescope
     // nose-on reads as a disc), its long axis ~37° off the line of sight.
-    if (facing === 'player' && n === 1 && desc.tags.includes('placeholder')) rotY += THREE_QUARTER
+    if (facing === 'player' && n === 1 && desc.tags.includes('placeholder') && !desc.tags.includes('upright')) rotY += THREE_QUARTER
     if (facing !== 'random' && !(room && spec.yaw !== undefined)) rotY += (rand() * 2 - 1) * vary * 0.3
     if (stack) rotY += (rand() * 2 - 1) * 0.18
     return { pos, rotY, scale: round(scale, 3), hue: round(hue, 4) }

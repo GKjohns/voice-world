@@ -43,16 +43,17 @@ Output ONLY the JavaScript body. First line: // name: <snake_case>. No JSON, no 
 
 const LIVE = `You are a toy-diorama 3D sculptor who writes tiny JavaScript programs that build charming, instantly recognisable objects for a world that is built by talking.\n${FRAME}\n${API}`
 const REFINE = `${LIVE}\nYou are REFINING a first draft. Look at its render, find the most important problems (floating or disconnected parts, wrong proportions, missing signature features, flat single colour) and rewrite the whole program much better. Keep what works: the same kind of thing, its colours and its overall size.`
-const REF_NOTE = 'A rough reference concept image of the target is attached. Match its silhouette, proportions, pose, signature features and colours with your shapes (ignore its background and fine texture). It is the goal; do not invent a different design.'
+const REFINE_ROLE = 'You are a toy-diorama 3D sculptor. Follow the brief in the first message part. Output only the JavaScript body.'
 const SPEED = 'SPEED MATTERS: the player watches each line appear, so the line right after the name line must already create the main body mass. Declare at most 2–3 key numbers, all on ONE line, then build immediately (use literal numbers where you can; no palette object, no long block of consts). Order: main masses first, then limbs and structure, small details last. No comments other than the name line.'
 
+const POLISH_BUDGET_MS = 28_000
 const REF_DIR = resolve(process.cwd(), '.data/forge/ref')
 const refPrompt = (w: string) => `${STYLE_IMAGE}: ${w}, three-quarter view from the front-right, whole object visible, on plain green ground, plain light blue background, no text.`
 
 export type ForgeEvent
   = | { t: 'stage', stage: 'ref' | 'refine', ms: number }
     | { t: 'parts', parts: Part[], ms: number }
-    | { t: 'done', ok: boolean, ms: number, usd: number, parts?: Part[], code?: string, k?: number, floating?: number, draftFloating?: number, reason?: string, budget?: boolean, refMs?: number, firstPartMs?: number }
+    | { t: 'done', ok: boolean, ms: number, usd: number, parts?: Part[], code?: string, k?: number, floating?: number, draftFloating?: number, reason?: string, budget?: boolean, refMs?: number, firstPartMs?: number, cache?: { read: number, write: number, input: number }, model?: string }
 
 export interface ForgeRequest {
   kind: string
@@ -176,15 +177,14 @@ export async function* forgeRefine(req: ForgeRequest): AsyncGenerator<ForgeEvent
   }
   let usd = 0
   let refMs: number | undefined
-  let ref: Awaited<ReturnType<typeof referenceImage>> = null
+  // Gen loop 3: the hero's reference image is drawn in parallel with the refine, never before it (it held
+  // Opus back ~6 s). The refine designs from the words; the polish and the judge use the reference (the
+  // in-flight draw is de-duped, so they pick up this one).
   if (req.tier === 'hero') {
     yield { t: 'stage', stage: 'ref', ms: ms() }
-    ref = await referenceImage(req.text, req.session, req)
-    refMs = ms()
-    if (req.signal?.aborted) {
-      yield { t: 'done', ok: false, ms: ms(), usd, reason: 'aborted', refMs }
-      return
-    }
+    void referenceImage(req.text, req.session, req).then(() => {
+      refMs = ms()
+    }).catch(() => {})
   }
   const draftCheck = islands(req.draft)
   const render = dataUrlPart(req.image)
@@ -197,10 +197,10 @@ The draft's envelope is ${envelope(req.draft)}. Keep the same overall size and f
 Current program (the draft):
 ${partsToProgram(req.draft)}
 
-${render ? 'Image 1 is its render (front-right view).' : '(No render available.)'}${ref ? ` Image ${render ? 2 : 1} is the reference target. ${REF_NOTE}` : ''}${issues}
+${render ? 'Image 1 is its render (front-right view).' : '(No render available.)'}${issues}
 Write the complete improved program. ${SPEED}`
     : `Make: "${req.text}" (it is a ${req.kind.replace(/_/g, ' ')}).
-Design it from scratch, resting on the ground.${req.size ? ` Its size is fixed: its largest dimension is ${Math.round(req.size * 10) / 10} m (fill that, don't exceed it).` : ' Real-world scale.'} If it is long (a vehicle, a creature, a telescope tube), its long axis runs along z.${ref ? ` Image 1 is the reference target. ${REF_NOTE}` : ''}
+Design it from scratch, resting on the ground.${req.size ? ` Its size is fixed: its largest dimension is ${Math.round(req.size * 10) / 10} m (fill that, don't exceed it).` : ' Real-world scale.'} If it is long (a vehicle, a creature, a telescope tube), its long axis runs along z.
 Write the complete program. ${SPEED}`
 
   yield { t: 'stage', stage: 'refine', ms: ms() }
@@ -211,12 +211,16 @@ Write the complete program. ${SPEED}`
   const runner = streamRunner()
   let streamError: string | undefined
   let firstPartMs: number | undefined
+  let cache: { read: number, write: number, input: number } | undefined
+  const refineModel = FORGE_MODELS.refine
   const t1 = Date.now()
   try {
     const r = streamText({
-      model: FORGE_MODELS.refine,
-      instructions: REFINE,
-      messages: [{ role: 'user', content: [{ type: 'text', text: prompt }, ...(render ? [render] : []), ...(ref ? [{ type: 'file' as const, data: ref.data, mediaType: ref.mediaType }] : [])] }],
+      model: refineModel,
+      instructions: REFINE_ROLE,
+      // Gen loop 3: the static sculptor brief + part vocabulary rides first, behind an Anthropic cache
+      // breakpoint (the gateway.ts pattern), so repeat refines read it from cache.
+      messages: [{ role: 'user', content: [{ type: 'text', text: REFINE, providerOptions: { anthropic: { cacheControl: { type: 'ephemeral' } } } }, { type: 'text', text: prompt }, ...(render ? [render] : [])] }],
       maxOutputTokens: 6000,
       reasoning: 'none',
       abortSignal: ctrl.signal,
@@ -237,19 +241,21 @@ Write the complete program. ${SPEED}`
     if (tail.length) yield { t: 'parts', parts: tail, ms: ms() }
     try {
       const u = await r.usage
-      const cost = costUsd(FORGE_MODELS.refine, { input: u?.inputTokens ?? 0, output: u?.outputTokens ?? 0, cacheRead: u?.inputTokenDetails?.cacheReadTokens ?? 0, cacheWrite: u?.inputTokenDetails?.cacheWriteTokens ?? 0 })
+      cache = { read: u?.inputTokenDetails?.cacheReadTokens ?? 0, write: u?.inputTokenDetails?.cacheWriteTokens ?? 0, input: u?.inputTokens ?? 0 }
+      const cost = costUsd(refineModel, { input: u?.inputTokens ?? 0, output: u?.outputTokens ?? 0, cacheRead: cache.read, cacheWrite: cache.write })
       usd += cost
-      forgeRecord({ session: req.session, stage: 'refine', model: FORGE_MODELS.refine, usd: cost, ms: Date.now() - t1, kind: req.kind, ok: !streamError, in: u?.inputTokens, out: u?.outputTokens })
+      console.info(`[forge] refine ${req.kind} ${refineModel}: first part ${firstPartMs ?? '-'} ms, in ${cache.input} (cache read ${cache.read}, write ${cache.write}), out ${u?.outputTokens ?? 0}`)
+      forgeRecord({ session: req.session, stage: 'refine', model: refineModel, usd: cost, ms: Date.now() - t1, kind: req.kind, ok: !streamError, in: u?.inputTokens, out: u?.outputTokens, cacheRead: cache.read, cacheWrite: cache.write, firstMs: firstPartMs })
     } catch {
       // usage is best-effort; record the estimate so the cap still bites
       usd += est
-      forgeRecord({ session: req.session, stage: 'refine', model: FORGE_MODELS.refine, usd: est, ms: Date.now() - t1, kind: req.kind, ok: false })
+      forgeRecord({ session: req.session, stage: 'refine', model: refineModel, usd: est, ms: Date.now() - t1, kind: req.kind, ok: false })
     }
   } catch (err) {
     streamError = why(ctrl.signal.aborted && ctrl.signal.reason instanceof Error ? ctrl.signal.reason : err)
     // An aborted or failed call may still have been billed: count the estimate.
     usd += est * 0.5
-    forgeRecord({ session: req.session, stage: 'refine', model: FORGE_MODELS.refine, usd: est * 0.5, ms: Date.now() - t1, kind: req.kind, ok: false })
+    forgeRecord({ session: req.session, stage: 'refine', model: refineModel, usd: est * 0.5, ms: Date.now() - t1, kind: req.kind, ok: false })
   } finally {
     clearTimeout(timer)
     req.signal?.removeEventListener('abort', onOuter)
@@ -258,7 +264,7 @@ Write the complete program. ${SPEED}`
   const code = stripProgram(runner.text()).trim()
   const { parts, run } = programToParts(code, { timeoutMs: 120 })
   const check = islands(parts)
-  const base = { ms: ms(), usd, refMs, firstPartMs, floating: check.floating, draftFloating: draftCheck.floating }
+  const base = { ms: ms(), usd, refMs, firstPartMs, cache, model: refineModel, floating: check.floating, draftFloating: draftCheck.floating }
   if (streamError && parts.length < 3) {
     yield { t: 'done', ok: false, ...base, reason: streamError, budget: isBudgetError(streamError) }
     return
@@ -290,7 +296,7 @@ export interface PolishRequest {
   job?: string
 }
 
-/** Sol rebuilds the current object toward the reference ("the same thing getting better"). Non-streaming. */
+/** The polish model (Opus since Gen loop 3, was Sol) rebuilds the current object toward the reference ("the same thing getting better"). Non-streaming. */
 export async function forgePolish(req: PolishRequest): Promise<{ ok: boolean, parts?: Part[], code?: string, usd: number, ms: number, reason?: string, budget?: boolean }> {
   const t0 = Date.now()
   const gate = forgeCanSpend(req.session, FORGE_ESTIMATE.polish)
@@ -302,10 +308,12 @@ export async function forgePolish(req: PolishRequest): Promise<{ ok: boolean, pa
     const r = await generateText({
       model: FORGE_MODELS.polish,
       instructions: LIVE,
-      reasoning: 'low',
-      maxOutputTokens: 32_000,
-      maxRetries: 1,
-      abortSignal: req.signal ? AbortSignal.any([req.signal, AbortSignal.timeout(170_000)]) : AbortSignal.timeout(170_000),
+      reasoning: 'none',
+      maxOutputTokens: 8000,
+      maxRetries: 0,
+      // Gen loop 3: a hard time budget, so the hero settles predictably (a late polish is dropped, not waited on).
+      abortSignal: req.signal ? AbortSignal.any([req.signal, AbortSignal.timeout(POLISH_BUDGET_MS)]) : AbortSignal.timeout(POLISH_BUDGET_MS),
+      ...(FORGE_MODELS.polish.startsWith('anthropic/') ? { providerOptions: { gateway: { only: ['anthropic'] } } } : {}),
       messages: [{
         role: 'user',
         content: [
@@ -315,8 +323,8 @@ export async function forgePolish(req: PolishRequest): Promise<{ ok: boolean, pa
         ]
       }]
     })
-    const usd = costUsd(FORGE_MODELS.polish, { input: r.usage?.inputTokens ?? 0, output: r.usage?.outputTokens ?? 0 })
-    forgeRecord({ session: req.session, stage: 'polish', model: FORGE_MODELS.polish, usd, ms: Date.now() - t0, kind: req.kind, ok: true, in: r.usage?.inputTokens, out: r.usage?.outputTokens })
+    const usd = costUsd(FORGE_MODELS.polish, { input: r.usage?.inputTokens ?? 0, output: r.usage?.outputTokens ?? 0, cacheRead: r.usage?.inputTokenDetails?.cacheReadTokens ?? 0, cacheWrite: r.usage?.inputTokenDetails?.cacheWriteTokens ?? 0 })
+    forgeRecord({ session: req.session, stage: 'polish', model: FORGE_MODELS.polish, usd, ms: Date.now() - t0, kind: req.kind, ok: true, in: r.usage?.inputTokens, out: r.usage?.outputTokens, cacheRead: r.usage?.inputTokenDetails?.cacheReadTokens ?? 0 })
     const code = stripProgram(r.text).trim()
     const { parts, run } = programToParts(code, { timeoutMs: 150 })
     if ((!run.ok && parts.length < 4) || parts.length < 4) return { ok: false, usd, ms: Date.now() - t0, reason: run.error ?? `only ${parts.length} parts` }

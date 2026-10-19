@@ -39,6 +39,8 @@ const WALL_GAP = 0.8
 export interface FrameOpts {
   /** Cap on the step back (default MAX_BACK). */
   maxBack?: number
+  /** Worst |NDC| allowed (default MARGIN). Gen loop 3: a newly landed design asks for more air (0.8). */
+  margin?: number
   /** Free distance from (x, z) along the unit direction (dx, dz), up to `max`: the renderer raycasts walls. */
   free?: (x: number, z: number, dx: number, dz: number, max: number) => number
 }
@@ -124,8 +126,9 @@ function aim(pts: THREE.Vector3[], x: number, z: number, y: number, centerYaw: n
 export function solveFrame(cam: THREE.PerspectiveCamera, cur: View, boxes: FrameBox[], eye: number, opts: FrameOpts = {}): View | null {
   if (!boxes.length) return null
   const pts = samples(boxes)
+  const margin = opts.margin ?? MARGIN
   place(cam, cur, eye)
-  if (worst(pts) <= MARGIN) return null
+  if (worst(pts) <= margin) return null
 
   let x0 = Infinity
   let x1 = -Infinity
@@ -156,7 +159,7 @@ export function solveFrame(cam: THREE.PerspectiveCamera, cur: View, boxes: Frame
     const view: View = { yaw: cur.yaw + wrap(yaw - cur.yaw), pitch, x, z, lift }
     place(cam, view, eye)
     const score = worst(pts)
-    if (score <= MARGIN) return view
+    if (score <= margin) return view
     stay ??= view
   }
   // Too big to frame from here: don't move, just turn and tilt toward it and let it be too big.

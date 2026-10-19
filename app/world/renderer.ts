@@ -71,6 +71,8 @@ const PARTS_PER_FRAME = 4
 const GROW_MS = 320
 const HANDOFF_PARTS = 3
 const CROSSFADE_MS = 350
+/** Gen loop 3: a newly landed design is framed with more air than a spawn (bottoms were clipping). */
+const LANDED_MARGIN = 0.8
 /** How many instances of a kind show its draft streaming in (the rest get it when the define lands). */
 const DRAFT_STREAM_MAX = 12
 
@@ -439,7 +441,7 @@ export class WorldRenderer {
       if (streamed) this.endDraft(kind)
       // Gen loop 2: once a new design lands (the draft's define, then its forged upgrade), frame it if any
       // of it (height, width or depth) is off-screen; solveFrame leaves the camera alone when it already fits.
-      if (list[0] && state.kinds[kind] && prev && !this.reveal && !this.userActive()) this.frameWish([wanted.get(list[0].entity.id) ?? list[0].entity])
+      if (list[0] && state.kinds[kind] && prev && !this.reveal && !this.userActive()) this.frameWish([wanted.get(list[0].entity.id) ?? list[0].entity], false, undefined, LANDED_MARGIN)
     }
 
     // Spawns, staggered tk-tk-tk. Big batches tick faster so a forest still lands in about two seconds.
@@ -590,7 +592,7 @@ export class WorldRenderer {
    * Turn, tilt, back away or rise so `entities` are all in shot. Never while you're dragging or walking,
    * and any input hands control straight back.
    */
-  frameWish(entities: Entity[], preferLift = false, base?: View): void {
+  frameWish(entities: Entity[], preferLift = false, base?: View, margin?: number): void {
     if (!this.state || (this.userActive() && !base)) return
     const boxes: FrameBox[] = entities.map((e) => {
       const d = this.desc(e)
@@ -603,7 +605,7 @@ export class WorldRenderer {
     // Inside a room (a ceiling over you), framing only turns and tilts: a step back would leave through a
     // wall that may not even have arrived yet (the room's own build backed players 6 m out of it).
     const indoors = !!ceilingOver(this.state, cur.x, cur.z)
-    const to = (preferLift && !indoors ? this.godView(boxes, cur) : solveFrame(this.camera, cur, boxes, this.eyeAt(cur.x, cur.z), { free, maxBack: indoors ? 0 : OUTDOOR_BACK })) ?? base ?? (indoors || preferLift ? null : this.approach(boxes, cur))
+    const to = (preferLift && !indoors ? this.godView(boxes, cur) : solveFrame(this.camera, cur, boxes, this.eyeAt(cur.x, cur.z), { free, maxBack: indoors ? 0 : OUTDOOR_BACK, margin })) ?? base ?? (indoors || preferLift ? null : this.approach(boxes, cur))
     if (!to) return
     if (base) {
       this.camMove = { from: now, to, start: performance.now(), dur: 1400 }

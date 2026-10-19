@@ -14,6 +14,7 @@ import type { DroppedOp, Op, Part, Placement, Props, Selector, SkyEvent, Vec3 } 
 import { entityHeight, entityRadius, kindOf, select } from './select.ts'
 import type { Batch, Effects, Entity, KindUpgrade, OpContext, WorldState } from './types.ts'
 import { QUALITY_RANK, cleanParts, hashParts } from './forge.ts'
+import { isUpright } from './size.ts'
 import { genderOfWords, personName, personTags, personWord } from '../npc/people.ts'
 
 export const WORLD_VERSION = 1
@@ -80,7 +81,9 @@ function step(state: WorldState, op0: Op, ctx: OpContext): StepResult {
       // Gen loop 2: a new kind's size is known at its spawn, so the spot is chosen for the real thing (far
       // enough off to see all of it), not for the 2 m placeholder that holds it.
       const desc0 = kindOf(state, op.kind)
-      const desc = !state.kinds[op.kind] && op.size ? { ...desc0, footprint: round3(op.size * 0.45), baseHeight: round3(op.size * 0.75) } : desc0
+      // Gen loop 3: laid out as if S were its height plus 15% headroom, so whichever way S runs it fills about
+      // 70% of the view instead of 86% (big things were framed tight and clipped at the bottom).
+      const desc = !state.kinds[op.kind] && op.size ? { ...desc0, footprint: round3(op.size * 0.5), baseHeight: round3(op.size * 1.15), tags: isUpright(op.kind) ? [...desc0.tags, 'upright'] : desc0.tags } : desc0
       if (!state.kinds[op.kind]) notes.push(`unknown kind "${op.kind}": holding its spot with a placeholder until it's defined`)
       const out = layout(state, { desc, count: op.count ?? 1, arrange: op.arrange, at: op.at, radius: op.radius, vary: op.vary, facing: op.facing, xz: op.xz, yaw: op.yaw, props: op.set }, ctx, rand)
       notes.push(...out.notes)
