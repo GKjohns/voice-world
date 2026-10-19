@@ -17,6 +17,7 @@ export type Reasoning = 'none' | 'minimal' | 'low' | 'medium' | 'high'
 
 export type OpStreamEvent
   = | { t: 'op', op: unknown, ms: number, i: number }
+    | { t: 'part', kind: string, part: unknown, ms: number }
     | { t: 'done', ms: number, count: number, usage: Usage, costUsd: number, finishReason?: string, provider?: string, error?: string, recovered?: boolean }
 
 /** Pull the ops out of a whole answer: an `{ ops }` envelope (maybe with ops stringified) or a bare array. */
@@ -48,6 +49,8 @@ export async function* streamOps(opts: {
   signal?: AbortSignal
   maxOutputTokens?: number
   timeoutMs?: number
+  /** Gen loop 1: also yield each part of a still-open `define` as it closes (`part` events). */
+  partParts?: boolean
 }): AsyncGenerator<OpStreamEvent> {
   const started = Date.now()
   const anthropic = opts.model.startsWith('anthropic/')
@@ -83,6 +86,10 @@ export async function* streamOps(opts: {
     })
     for await (const delta of r.textStream) {
       for (const op of scan.push(delta)) yield { t: 'op', op, ms: Date.now() - started, i: count++ }
+      if (opts.partParts) {
+        const p = scan.partials()
+        if (p.kind) for (const part of p.parts) yield { t: 'part', kind: p.kind, part, ms: Date.now() - started }
+      }
     }
     // Recovery: ops the scanner never saw (a stringified envelope, a malformed element it skipped).
     let recovered = false

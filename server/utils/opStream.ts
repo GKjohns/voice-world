@@ -14,6 +14,11 @@ export function opScanner() {
   let esc = false
   let elemStart = -1
   const closed: unknown[] = []
+  // partials(): which element it is reading, where its parts array starts, how many parts it has handed out.
+  let pElem = -1
+  let pFrom = -1
+  let pSeen = 0
+  let pKind: string | undefined
 
   return {
     /** Push a chunk; returns the ops that closed in it (already JSON.parsed; unparseable ones are skipped). */
@@ -60,6 +65,61 @@ export function opScanner() {
         }
       }
       return out
+    },
+    /**
+     * Gen loop 1: the parts of a `define` that is still open, each the moment its object closed. Call after
+     * each push; returns only the parts new since the last call (and the define's kind, once it has been
+     * written). Empty when no define is open or its `parts` array hasn't started.
+     */
+    partials(): { kind?: string, parts: unknown[] } {
+      if (done || elemStart < 0) return { parts: [] }
+      if (elemStart !== pElem) {
+        pElem = elemStart
+        pSeen = 0
+        pFrom = -1
+      }
+      const s = buf.slice(elemStart)
+      if (pFrom < 0) {
+        const m = /"parts"\s*:\s*\[/.exec(s)
+        if (!m || !/"op"\s*:\s*"define"/.test(s.slice(0, m.index))) return { parts: [] }
+        pFrom = m.index + m[0].length
+        pKind = /"kind"\s*:\s*"([^"]+)"/.exec(s.slice(0, m.index))?.[1]
+      }
+      const out: unknown[] = []
+      let d = 0
+      let str = false
+      let e = false
+      let start = -1
+      let n = 0
+      for (let i = pFrom; i < s.length; i++) {
+        const ch = s[i]!
+        if (str) {
+          if (e) e = false
+          else if (ch === '\\') e = true
+          else if (ch === '"') str = false
+          continue
+        }
+        if (ch === '"') str = true
+        else if (ch === '{' || ch === '[') {
+          if (d === 0 && ch === '{') start = i
+          d++
+        } else if (ch === '}' || ch === ']') {
+          d--
+          if (d < 0) break // the parts array closed
+          if (d === 0 && ch === '}' && start >= 0) {
+            if (n++ >= pSeen) {
+              try {
+                out.push(JSON.parse(s.slice(start, i + 1)) as unknown)
+              } catch {
+                // a malformed part: the define's own validation decides
+              }
+            }
+            start = -1
+          }
+        }
+      }
+      pSeen = Math.max(pSeen, n)
+      return { kind: pKind, parts: out }
     },
     /** Every op that closed so far, and the whole text (for the end-of-stream recovery). */
     closed,

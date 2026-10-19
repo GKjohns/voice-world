@@ -3,8 +3,9 @@
  * new kind, or asks to make an existing one better, `consider` decides the tier and runs:
  *
  *   library hit ($0) → upgradeKind, done
- *   else studio shot of the draft → ghost + swirl → /api/forge streams refined parts that grow through the
- *   ghost → accepted: upgradeKind (every instance sweeps in) → library save
+ *   else (Gen loop 1) the refine starts at the spawn, in parallel with the Haiku draft: /api/forge streams
+ *   refined parts at their final size; once a few are on screen the draft cross-fades out → accepted:
+ *   upgradeKind (exchanged in place; other instances cross-fade) → library save
  *   hero: then Sol polish in the background → gate (parts, floating) → Haiku judge both orders → swap
  *
  * The draft never waits on any of this, failures quietly keep the draft, a budget refusal stops forging
@@ -15,7 +16,7 @@
  * to use or keep its reference-image cache, so every forged thing is generated from scratch.
  */
 import { shallowRef, watch } from 'vue'
-import { HERO_WORDS, UPGRADE_WORDS, chooseTier, islands } from '#shared/world/forge'
+import { HERO_WORDS, UPGRADE_WORDS, chooseTier, islands, transformPart } from '#shared/world/forge'
 import type { Tier } from '#shared/world/forge'
 import type { Op, Part } from '#shared/world/ops'
 import { isKitKind } from '#shared/world/kinds'
@@ -75,6 +76,11 @@ function watchWorld() {
   watch(world.state, (s) => {
     for (const job of [...jobs.values()]) {
       const desc = s.kinds[job.kind]
+      if (!job.basis) {
+        // Started at the spawn (Gen loop 1): the kind gets its basis when the draft's define lands.
+        if (desc?.basis) job.basis = desc.basis
+        else if (s.entities.some(e => e.kind === job.kind)) continue
+      }
       if (!desc || desc.basis !== job.basis || !s.entities.some(e => e.kind === job.kind)) {
         job.ctrl.abort()
         jobs.delete(job.kind)
@@ -122,7 +128,34 @@ function consider(text: string, ops: Op[], marks: { t0: number, proxyMs?: number
   if (tier) void start(target.kind, wishOf(target.kind), tier, marks)
 }
 
-async function start(kind: string, text: string, tier: Tier, marks: { t0: number, proxyMs?: number }, draftAt?: number) {
+/**
+ * Gen loop 1: a sentence's spawn names a kind nobody has designed yet. Start the refine right now, in
+ * parallel with the Haiku draft (which streams in part by part meanwhile), instead of after it.
+ */
+function early(kind: string, text: string, count: number, t0: number) {
+  if (disabled.value || jobs.has(kind)) return
+  const tier = chooseTier({ text, kit: isKitKind(kind), person: kind === 'person', count })
+  if (!tier) return
+  watchWorld()
+  void start(kind, text, tier, { t0 }, undefined, true)
+}
+
+/** Wait until an early job's kind has its draft define (the upgrade replaces a defined kind), or give up. */
+async function defined(job: Job, ms = 20_000): Promise<boolean> {
+  const world = useWorld()
+  const until = performance.now() + ms
+  while (!job.ctrl.signal.aborted && performance.now() < until) {
+    const desc = world.state.value.kinds[job.kind]
+    if (desc?.basis && desc.parts) {
+      job.basis ||= desc.basis
+      return desc.basis === job.basis
+    }
+    await sleep(100)
+  }
+  return false
+}
+
+async function start(kind: string, text: string, tier: Tier, marks: { t0: number, proxyMs?: number }, draftAt?: number, atSpawn = false) {
   const world = useWorld()
   const existing = jobs.get(kind)
   if (existing) {
@@ -132,8 +165,8 @@ async function start(kind: string, text: string, tier: Tier, marks: { t0: number
     world.renderer()?.endRefine(kind, false)
   }
   const desc = world.state.value.kinds[kind]
-  if (!desc?.parts || !desc.basis) return
-  const basis = desc.basis
+  if (!atSpawn && (!desc?.parts || !desc.basis)) return
+  let basis = desc?.basis ?? ''
   const fresh = useFresh().fresh.value
   const rec: ForgeRecord = { kind, tier, text, t0: marks.t0, proxyMs: marks.proxyMs, draftMs: draftAt !== undefined ? Math.round(draftAt - marks.t0) : undefined, usd: 0, ...(fresh ? { fresh } : {}) }
   const job: Job = { kind, tier, ctrl: new AbortController(), basis, rec, fresh, id: `${session}-${++jobCount}` }
@@ -151,35 +184,36 @@ async function start(kind: string, text: string, tier: Tier, marks: { t0: number
     const lib = fresh ? null : await fetch(`/api/forge/lib?kind=${encodeURIComponent(kind)}&text=${encodeURIComponent(text)}&tier=${tier}`, { signal: job.ctrl.signal }).then(r => r.json()).catch(() => null) as { hit?: boolean, parts?: Part[], quality?: Tier, code?: string } | null
     if (job.ctrl.signal.aborted) return
     if (lib?.hit && lib.parts?.length) {
-      // Let the draft's own arrival finish first, so the upgrade reads as an upgrade.
-      await sleep(Math.max(0, 900 - (performance.now() - (draftAt ?? 0))))
+      if (atSpawn && !(await defined(job))) return finish('library hit, but the draft never landed')
+      basis = job.basis
       const ok = world.upgradeKind(kind, lib.parts, { basis, quality: lib.quality ?? tier })
       rec.library = true
       rec.refinedMs = since()
       rec.parts = lib.parts.length
       return finish(ok ? 'library hit' : 'library hit, but the kind changed')
     }
-    // 2. The draft's studio shot, once its morph has settled (it pops in over ~0.5 s).
-    await sleep(Math.max(0, 750 - (performance.now() - (draftAt ?? 0))))
+    // 2. Started at the spawn: no draft, no studio shot, no wait. Otherwise ("make it better" on an
+    //    existing kind) the current version's studio shot goes along.
     const r = world.renderer()
     const focus = r?.focusOf(kind)
     if (!r || !focus || job.ctrl.signal.aborted) return finish('no instance to refine')
-    const image = await r.studioShot(focus)
+    const image = atSpawn ? null : await r.studioShot(focus)
     if (job.ctrl.signal.aborted) return
-    const draft = world.state.value.kinds[kind]?.parts ?? desc.parts
+    const draft = atSpawn ? [] : world.state.value.kinds[kind]?.parts ?? desc?.parts ?? []
     rec.startMs = since()
     r.beginRefine(kind)
-    const hint = tier === 'hero' ? 'A moment… let me perfect it.' : '…let me perfect it.'
-    setTimeout(() => {
-      if (jobs.get(kind) === job) world.caption.value = { text: hint, at: Date.now() }
-    }, 1400)
+    if (tier === 'hero') {
+      setTimeout(() => {
+        if (jobs.get(kind) === job) world.caption.value = { text: 'A moment… let me perfect it.', at: Date.now() }
+      }, 1400)
+    }
 
     // 3. The refine stream.
     let done: Record<string, unknown> | null = null
     const res = await fetch('/api/forge', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ kind, text, tier, draft, image, session, fresh, job: job.id }),
+      body: JSON.stringify({ kind, text, tier, draft, ...(image ? { image } : {}), session, fresh, job: job.id }),
       signal: job.ctrl.signal
     })
     if (!res.ok || !res.body) throw new Error(`forge HTTP ${res.status}`)
@@ -199,9 +233,16 @@ async function start(kind: string, text: string, tier: Tier, marks: { t0: number
       world.renderer()?.endRefine(kind, false)
       return finish(`kept the draft (${d?.reason ?? 'no answer'})`)
     }
-    // Let the last queued parts grow before the sweep takes over.
-    await sleep(350)
+    // The upgrade replaces a defined kind: an early job may (rarely) finish before the draft's define.
+    if (atSpawn && !(await defined(job))) {
+      world.renderer()?.endRefine(kind, false)
+      return finish('refined, but the draft never landed')
+    }
+    basis = job.basis
     if (job.ctrl.signal.aborted) return
+    // The scale the stream was fixed at on screen (the hand-over), so the exchange is in place.
+    const k = world.renderer()?.refineScale(kind) ?? 1
+    if (k !== 1) d.parts = d.parts.map(p => transformPart(p, k, [0, 0, 0]))
     const ok = world.upgradeKind(kind, d.parts, { basis, quality: tier })
     world.renderer()?.endRefine(kind, ok)
     rec.refinedMs = since()
@@ -223,7 +264,7 @@ async function start(kind: string, text: string, tier: Tier, marks: { t0: number
 async function polish(job: Job, text: string, current: Part[], code: string | undefined, since: () => number) {
   const world = useWorld()
   const { kind, basis, rec } = job
-  await sleep(2200) // let the sweep finish before shooting the refined version
+  await sleep(500) // let the exchange settle before shooting the refined version
   const r = world.renderer()
   const focus = r?.focusOf(kind)
   if (!r || !focus || job.ctrl.signal.aborted) return finish('polish skipped')
@@ -292,5 +333,5 @@ function cancelAll() {
 }
 
 export function useForge() {
-  return { session, spent, disabled, log, consider, forgeKind, cancelAll, busy: () => jobs.size }
+  return { session, spent, disabled, log, consider, early, forgeKind, cancelAll, busy: () => jobs.size }
 }

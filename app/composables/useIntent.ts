@@ -7,7 +7,7 @@
 import { shallowRef } from 'vue'
 import { trimScene } from '#shared/world/context'
 import { honestSay } from '#shared/world/honesty'
-import type { DroppedOp, Op } from '#shared/world/ops'
+import type { DroppedOp, Op, Part } from '#shared/world/ops'
 import type { BatchResult } from '#shared/world/state'
 import type { OpContext } from '#shared/world/types'
 import { readNdjson } from '~/utils/ndjson'
@@ -34,6 +34,7 @@ export interface IntentOutcome {
 
 type IntentEvent
   = | { t: 'op', op: Op, ms: number, i: number }
+    | { t: 'part', kind: string, part: Part, ms: number }
     | { t: 'drop', dropped: DroppedOp }
     | { t: 'done', ms: number, model: string, count: number, firstOpMs?: number, error?: string }
 
@@ -60,9 +61,6 @@ function setPhase(p: IntentPhase) {
     }, 1400)
   }
 }
-
-/** How long an answer may take before a forming silhouette stands in for it. */
-const PLACEHOLDER_MS = 700
 
 /**
  * Freeze where the player is looking now, show the ghost there at once (no model needed), and start the
@@ -144,12 +142,10 @@ async function build(request: string, ctx: OpContext, source: 'text' | 'voice' =
     pendingText.value = pendingText.value.filter((_, j) => j !== i)
   }
   const started = performance.now()
-  // Still nothing after 700 ms (or a `define` arrived): something is being designed, so show it forming.
-  let landed = false
-  const formAt = () => {
-    if (!landed) world.renderer()?.placeholder(ctx.gaze.point)
-  }
-  const formTimer = setTimeout(formAt, PLACEHOLDER_MS)
+  // Gen loop 1: no fixed-timer "forming" silhouette. The soft glow below is the only cue until real data
+  // (an op, or the first streamed part of a new design) arrives.
+  /** Kinds whose draft parts streamed in before their define closed (the renderer's overlays to clear). */
+  const streaming = new Set<string>()
   // The glow holds (or starts, for a voice wish whose speech-start glow already let go) until something lands.
   world.renderer()?.anticipate(ctx.gaze.point)
 
@@ -201,8 +197,6 @@ async function build(request: string, ctx: OpContext, source: 'text' | 'voice' =
     // Spawn before define: a not-yet-designed kind's spawn holds the spot (a labelled blob, motes swirling
     // round it) and is not an arrival yet; its define is.
     const fresh = op.op === 'spawn' && !world.state.value.kinds[op.kind]
-    if (op.op === 'define' || fresh) formAt()
-    else if (op.op !== 'say') landed = true
     if (op.op === 'spawn') proxyMs ??= Math.round(performance.now() - started)
     if (op.op === 'say' && !target && !entries.length) {
       held.push(op)
@@ -223,7 +217,9 @@ async function build(request: string, ctx: OpContext, source: 'text' | 'voice' =
       open([...held, op], target || entries.length ? `${text} (cont.)` : text)
       held = []
     }
-    if (op.op === 'define') draftAt[op.kind] = performance.now()
+    if (op.op === 'define') draftAt[op.kind] ??= performance.now()
+    // Gen loop 1: a kind nobody has designed yet starts its refine now, in parallel with the draft.
+    if (fresh && world.state.value.entities.some(e => e.kind === op.kind)) useForge().early(op.kind, text, op.count ?? 1, started)
     if (spawned.size + modified.size + removed.size || other.length) {
       firstAppliedMs ??= Math.round(performance.now() - started)
       setPhase('building')
@@ -240,7 +236,14 @@ async function build(request: string, ctx: OpContext, source: 'text' | 'voice' =
     })
     if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}${res.statusText ? ` ${res.statusText}` : ''}`)
     await readNdjson<IntentEvent>(res, (ev) => {
-      if (ev.t === 'op') apply(ev.op)
+      if (ev.t === 'part') {
+        // One part of a new design, before its define closes: it grows in where the spawn stands.
+        if (world.state.value.entities.some(e => e.kind === ev.kind) && !world.state.value.kinds[ev.kind]?.learned) {
+          streaming.add(ev.kind)
+          draftAt[ev.kind] ??= performance.now()
+          world.renderer()?.draftPart(ev.kind, ev.part)
+        }
+      } else if (ev.t === 'op') apply(ev.op)
       else if (ev.t === 'drop') dropped.push(ev.dropped)
       else end = ev
     }, 'intent')
@@ -248,8 +251,8 @@ async function build(request: string, ctx: OpContext, source: 'text' | 'voice' =
     netError = (err as Error).message
   }
   done()
-  clearTimeout(formTimer)
-  if (!inflight.value) world.renderer()?.placeholder(null)
+  // A design that streamed parts but whose define never landed: show what the spot really holds.
+  for (const k of streaming) world.renderer()?.endDraft(k)
   if (held.length) open(held, text)
   release()
   const ms = end?.ms ?? Math.round(performance.now() - started)

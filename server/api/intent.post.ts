@@ -1,6 +1,7 @@
 /**
  * POST /api/intent { text, state, ctx } → NDJSON, one event per line as the model writes (Loop 1):
  *   {"t":"op","op":{...},"ms":805,"i":0}      a strict op, the moment its object closed in the stream
+ *   {"t":"part","kind":"x","part":{...},"ms":…}  Gen loop 1: one part of a define still being written
  *   {"t":"drop","dropped":{index,raw,reason}}  an op that failed validation
  *   {"t":"done","ms":998,"model":"haiku","count":2,"firstOpMs":805,"error"?:"..."}
  * `state` is the trimmed scene from `trimScene` (entities' kind/tags/pos/props/group plus learned kinds, no

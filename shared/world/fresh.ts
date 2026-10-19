@@ -111,6 +111,8 @@ export function freshRenamer<T extends { op: string, kind?: string }>(learned: I
       held.push(op)
       return []
     },
+    /** A redesign is being held (its parts must not show under the old name). */
+    holding: () => watch.size > 0,
     /** The answer ended: whatever is still held was a plain reuse; let it go as it was. */
     end(): T[] {
       watch.clear()

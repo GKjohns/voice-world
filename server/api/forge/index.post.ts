@@ -1,8 +1,8 @@
 /**
- * POST /api/forge { kind, text, tier: good|hero, draft: Part[], image?: data URL, session, fresh?, job? } → NDJSON:
+ * POST /api/forge { kind, text, tier: good|hero, draft?: Part[], image?: data URL, session, fresh?, job? } → NDJSON:
  *   {"t":"stage","stage":"ref"|"refine","ms":…}
  *   {"t":"parts","parts":[…],"ms":…}      new plain parts, the moment their program line closed
- *   {"t":"done","ok":true,"parts":[…],"usd":…,"ms":…}   final parts fitted to the draft (ok:false = keep the draft)
+ *   {"t":"done","ok":true,"parts":[…],"usd":…,"ms":…}   final parts, as streamed (ok:false = keep the draft)
  * The model's program runs on the server (forgeRun.ts); only part data is sent. Closing the request aborts.
  */
 import { forgeRefine } from '../../utils/forge'
@@ -14,7 +14,8 @@ export default defineEventHandler(async (event) => {
   const kind = bodyKind(body?.kind)
   const text = bodyStr(body?.text, 200)
   const draft = bodyParts(body?.draft)
-  if (!kind || !text || !draft.length) throw createError({ statusCode: 400, statusMessage: 'kind, text and draft are required' })
+  // Gen loop 1: the draft is optional (the refine usually starts at the spawn, before the draft exists).
+  if (!kind || !text) throw createError({ statusCode: 400, statusMessage: 'kind and text are required' })
   ensureKey(event)
   const tier = body.tier === 'hero' ? 'hero' : 'good'
   const session = bodySession(body.session)

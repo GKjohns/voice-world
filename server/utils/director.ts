@@ -216,6 +216,7 @@ export async function* directScene(req: DirectorRequest): AsyncGenerator<Directo
     signal: req.signal
   })) {
     if (ev.t === 'op') yield ev
+    else if (ev.t === 'part') continue
     else if (ev.error && !ev.count) yield { t: 'error', ms: ev.ms, error: ev.error }
     else yield { t: 'done', ms: ev.ms, count: ev.count, model: alias, usage: ev.usage, costUsd: ev.costUsd, finishReason: ev.finishReason }
   }

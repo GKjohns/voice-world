@@ -17,8 +17,8 @@ import type { AtmospherePreset } from './atmosphere'
 import { BUILD_READS_COLOR, KIT_BUILDERS, blob } from './kit'
 import { applyMaterialProps, gazeNdc, lookTargets } from './look'
 import { buildFromParts, buildFromPartsMerged, partMesh } from './parts'
-import { boundsOf } from '#shared/world/forge'
-import { ghost, meshesOf, popIn, sweep, unghost } from './fx/refine'
+import { boundsOf, fitToDraft, transformPart } from '#shared/world/forge'
+import { crossfade, ghost, growIn, meshesOf } from './fx/refine'
 import { Ambience } from './sound'
 import { Gathering } from './fx/anticipate'
 import { Placeholder } from './fx/placeholder'
@@ -65,11 +65,16 @@ const GLOW_TINT = new THREE.Color('#ffe2a8')
 const PARTICLE_BUDGET = 1600 // dissolve sparks per sync (a teleport dissolves the whole old world)
 // The forge (progressive generation): refined parts stream in at most this many new meshes per frame,
 // the swap sweep's length, and how faint the draft ghosts while it's refined (studio shots: studio.ts).
+// Gen loop 1 ("one honest build"): no ghost, no hold, no sweep. Parts grow in as they arrive; the draft
+// hands over to the refined version in one quick cross-fade once its first few (biggest) parts are on screen.
 const PARTS_PER_FRAME = 4
-const SWEEP_MS = 1800
-const GHOST_LEVEL = 0.55
+const GROW_MS = 320
+const HANDOFF_PARTS = 3
+const CROSSFADE_MS = 350
+/** How many instances of a kind show its draft streaming in (the rest get it when the define lands). */
+const DRAFT_STREAM_MAX = 12
 
-/** A kind being refined: the instance nearest the camera grows the new parts in an overlay; every instance ghosts. */
+/** A kind being refined: the instance nearest the camera grows the refined parts in an overlay. */
 interface RefineJob {
   kind: string
   focusId: string
@@ -77,8 +82,18 @@ interface RefineJob {
   queue: Part[]
   streamed: Part[]
   added: number
-  draftCount: number
+  /** The draft on the focused instance has faded out (the refined parts are the object now). */
+  handed: boolean
+  /** Kept for the gauntlet's timeline (was the ghost level): 1 = draft solid, 0 = handed over. */
   level: number
+  /** The refined version's scale, fixed once at the hand-over (its first masses fitted to the draft). */
+  k: number
+}
+
+/** A kind's draft streaming in part by part before its define closes: one overlay per instance. */
+interface DraftStream {
+  overlays: Map<string, THREE.Group>
+  parts: Part[]
 }
 
 /** Gauntlet loop 1 (track B): one item's physics-lite clocks (its flight, its tip, when it first appeared). */
@@ -228,6 +243,7 @@ export class WorldRenderer {
   private fresh: THREE.Object3D[] = []
   // The forge: kinds being refined, a gentle swirl round the focused one, and queued studio shots.
   private refining = new Map<string, RefineJob>()
+  private drafting = new Map<string, DraftStream>()
   private refineMotes = new Placeholder()
   private studio = new Studio()
   // Gauntlet loop 1 (track B): physics-lite clocks per item, followers, no-gravity, flight, the "take me to
@@ -407,11 +423,16 @@ export class WorldRenderer {
       const forged = (state.kinds[kind]?.quality ?? 'draft') !== 'draft'
       const list = [...this.items.values()].filter(i => i.entity.kind === kind && !i.leaving)
       list.sort((a, b) => a.holder.position.distanceTo(this.camera.position) - b.holder.position.distanceTo(this.camera.position))
+      const streamed = this.drafting.get(kind)
+      const job = this.refining.get(kind)
       list.forEach((item, i) => {
         const e = wanted.get(item.entity.id) ?? item.entity
         if (forged) this.refineSwap(item, e, now + i * 60)
-        else this.rebuild(item, e, now, true)
+        else this.rebuild(item, e, now, !streamed?.overlays.has(item.entity.id), undefined, !!streamed?.overlays.has(item.entity.id))
+        // The refined version already took over this instance: the late draft stays out of sight.
+        if (!forged && job?.handed && job.focusId === item.entity.id) item.body.visible = false
       })
+      if (streamed) this.endDraft(kind)
       // Camera restraint: only re-frame when what it became is much taller than what you saw (the labelled
       // blob a spawn-before-define held the spot with, or the draft before its forged upgrade).
       const beforeH = prev?.kinds[kind]?.baseHeight ?? 2.2
@@ -1231,7 +1252,7 @@ export class WorldRenderer {
    * Swap the body for a fresh build (floors changed, or a learned kind arrived). A floors change keeps the
    * old silhouette for a frame and springs into the new one; a morph pops in with a puff.
    */
-  private rebuild(item: Item, e: Entity, at: number, morph: boolean, fromStretch = item.stretch.scale.y): void {
+  private rebuild(item: Item, e: Entity, at: number, morph: boolean, fromStretch = item.stretch.scale.y, still = false): void {
     this.settleHolder(item, e, at)
     const oldH = boxHeight(item.body)
     const { body, key } = this.build(e)
@@ -1245,7 +1266,10 @@ export class WorldRenderer {
     this.applyLook(item, e, false)
     const newH = boxHeight(body)
     const h1 = e.props.height ?? 1
-    if (morph) {
+    if (still) {
+      // Its parts already streamed in at their final size (draftPart): exchange in place, no animation.
+      item.stretch.scale.y = h1
+    } else if (morph) {
       const s = e.props.scale ?? 1
       item.stretch.scale.y = h1
       this.tween(at, 520, (t) => {
@@ -1279,8 +1303,66 @@ export class WorldRenderer {
   }
 
   /**
-   * A kind starts being perfected: every instance turns into a gold ghost, the nearest one gets an overlay
-   * the refined parts will grow in, and a dim swirl of motes sized to it. Returns the focused id.
+   * Gen loop 1: one part of a kind's draft, the moment Haiku closed it (before the whole define has).
+   * It grows in on each instance (up to DRAFT_STREAM_MAX), replacing the labelled stand-in, at the size
+   * the define will have, so the define's landing is an exchange in place, not a morph.
+   */
+  draftPart(kind: string, part: Part): void {
+    let d = this.drafting.get(kind)
+    if (!d) {
+      d = { overlays: new Map(), parts: [] }
+      this.drafting.set(kind, d)
+    }
+    d.parts.push(part)
+    const job = this.refining.get(kind)
+    const now = performance.now()
+    let n = 0
+    for (const it of this.items.values()) {
+      if (it.entity.kind !== kind || it.leaving) continue
+      if (n++ >= DRAFT_STREAM_MAX) break
+      if (job?.handed && job.focusId === it.entity.id) continue
+      let g = d.overlays.get(it.entity.id)
+      if (!g) {
+        g = new THREE.Group()
+        it.stretch.add(g)
+        d.overlays.set(it.entity.id, g)
+        it.body.visible = false
+      }
+      const m = partMesh(part)
+      if (!m) continue
+      this.tintPart(m, it.entity)
+      g.add(m)
+      this.tween(now, GROW_MS, growIn(m))
+    }
+  }
+
+  /** The draft stream is over (its define landed, or never will): drop the overlays, show what's built. */
+  endDraft(kind: string): void {
+    const d = this.drafting.get(kind)
+    if (!d) return
+    this.drafting.delete(kind)
+    const job = this.refining.get(kind)
+    for (const [id, g] of d.overlays) {
+      g.removeFromParent()
+      disposeObject(g)
+      const it = this.items.get(id)
+      if (it && !(job?.handed && job.focusId === id)) it.body.visible = true
+    }
+  }
+
+  private tintPart(m: THREE.Mesh, e: Entity): void {
+    const slot = m.userData.slot as string | undefined
+    const hex = slot === 'primary' && e.props.color ? e.props.color : slot === 'trim' && e.props.trim ? e.props.trim : null
+    if (hex) {
+      const mat = m.material as THREE.MeshStandardMaterial
+      mat.color.set(hex)
+      if (slot === 'glow') mat.emissive.set(hex)
+    }
+  }
+
+  /**
+   * A kind starts being refined: the instance nearest the camera gets an overlay the refined parts will
+   * grow in. Nothing else changes on screen until real parts arrive. Returns the focused id.
    */
   beginRefine(kind: string): string | null {
     const focusId = this.focusOf(kind)
@@ -1290,17 +1372,16 @@ export class WorldRenderer {
     const overlay = new THREE.Group()
     overlay.userData.refineOverlay = true
     focus.stretch.add(overlay)
-    for (const it of this.items.values()) if (it.entity.kind === kind && !it.leaving) ghost(it.body, GHOST_LEVEL)
-    const desc = this.desc(focus.entity)
-    const s = focus.entity.props.scale ?? 1
-    this.refineMotes.shape(Math.max(1, kindHeight(desc, focus.entity.props)) * 1.05, Math.max(0.7, desc.footprint * s) * 1.1, 0.35)
-    this.refineMotes.set(new THREE.Vector3(focus.holder.position.x, 0, focus.holder.position.z))
-    this.refineMotes.obj.position.y = focus.entity.pos[1]
-    this.refining.set(kind, { kind, focusId: focus.entity.id, overlay, queue: [], streamed: [], added: 0, draftCount: meshesOf(focus.body).length, level: GHOST_LEVEL })
+    this.refining.set(kind, { kind, focusId: focus.entity.id, overlay, queue: [], streamed: [], added: 0, handed: false, level: 1, k: 1 })
     return focus.entity.id
   }
 
-  /** Refined parts arrived (in the kind's own coordinates): queue them to grow in, a few per frame. */
+  /** The scale factor the refined version was fixed at during the hand-over (1 if it never handed over). */
+  refineScale(kind: string): number {
+    return this.refining.get(kind)?.k ?? 1
+  }
+
+  /** Refined parts arrived (in the kind's own coordinates, at their final size): queue them to grow in. */
   refineParts(kind: string, parts: Part[]): void {
     const job = this.refining.get(kind)
     if (!job) return
@@ -1309,33 +1390,33 @@ export class WorldRenderer {
   }
 
   /**
-   * The refine is over. Accepted: the upgrade's sync already swept it in (refineSwap took the overlay), so
-   * only the swirl goes. Discarded: the half-grown parts shrink away and the draft comes back solid.
+   * The refine is over. Accepted: the upgrade's sync already exchanged the overlay for the merged body,
+   * so there is nothing left to do. Discarded: the half-grown parts shrink away and the draft fades back.
    */
   endRefine(kind: string, accepted: boolean): void {
     const job = this.refining.get(kind)
     if (!job) return
     this.refining.delete(kind)
-    this.refineMotes.set(null)
     if (accepted && !job.overlay.parent) return
     const now = performance.now()
     const overlay = job.overlay
     const meshes = meshesOf(overlay)
     const bases = meshes.map(m => m.scale.clone())
     this.tween(now, 380, (t) => {
-      meshes.forEach((m, i) => m.scale.copy(bases[i]!).multiplyScalar(Math.max(0.001, 1 - ease.out(t))))
+      meshes.forEach((m, i) => m.scale.copy(bases[i]!).multiplyScalar(Math.max(0.001, 1 - t)))
     }, () => {
       overlay.removeFromParent()
       disposeObject(overlay)
     })
-    for (const it of this.items.values()) {
-      if (it.entity.kind !== kind) continue
-      const from = job.level / GHOST_LEVEL * GHOST_LEVEL
-      this.tween(now, 520, t => unghost(it.body, t, from))
+    const item = this.items.get(job.focusId)
+    if (job.handed && item && !item.leaving) {
+      item.body.visible = true
+      const fx = crossfade(item.body)
+      this.playFx(fx, now, CROSSFADE_MS)
     }
   }
 
-  /** Per frame: grow up to PARTS_PER_FRAME queued refined parts, with a gold pop and a spark every third. */
+  /** Per frame: grow up to PARTS_PER_FRAME queued refined parts; hand over from the draft once a few are in. */
   private growRefined(now: number): void {
     for (const job of this.refining.values()) {
       const item = this.items.get(job.focusId)
@@ -1349,35 +1430,44 @@ export class WorldRenderer {
         const m = partMesh(p)
         n++
         if (!m) continue
-        const e = item.entity
-        const slot = m.userData.slot as string | undefined
-        const hex = slot === 'primary' && e.props.color ? e.props.color : slot === 'trim' && e.props.trim ? e.props.trim : null
-        if (hex) {
-          const mat = m.material as THREE.MeshStandardMaterial
-          mat.color.set(hex)
-          if (slot === 'glow') mat.emissive.set(hex)
-        }
+        this.tintPart(m, item.entity)
         job.overlay.add(m)
-        this.tween(now, 520, popIn(m))
+        this.tween(now, GROW_MS, growIn(m))
         job.added++
-        if (job.added % 3 === 1) {
-          const wp = m.getWorldPosition(new THREE.Vector3())
-          this.playFx(sparkle(wp, Math.max(0.3, Math.min(1.2, Math.max(...p.size) * 0.6)), '#ffd98a', 8), now, 650)
-        }
       }
-      if (n) {
-        // The ghost thins as the new version fills in, but never quite vanishes until the swap.
-        job.level = Math.max(0.12, GHOST_LEVEL * (1 - job.added / Math.max(10, job.draftCount * 1.6)))
-        for (const it of this.items.values()) if (it.entity.kind === job.kind && !it.leaving) ghost(it.body, job.level)
-      }
+      if (!job.handed && job.added >= HANDOFF_PARTS) this.handOff(job, item, now)
     }
   }
 
+  /** The refined version's main masses are on screen: the draft (or its stand-in) fades out once, quickly. */
+  private handOff(job: RefineJob, item: Item, now: number): void {
+    job.handed = true
+    job.level = 0
+    // Fix the scale up front: the first (biggest) refined masses are fitted to the draft once, here, and
+    // everything after streams in at that scale; the final parts get the same factor (refineScale).
+    const desc = this.state?.kinds[job.kind]
+    const target = desc?.learned && desc.parts?.length ? desc.parts : this.drafting.get(job.kind)?.parts
+    if (target?.length) {
+      job.k = fitToDraft(job.streamed, target).k
+      job.overlay.scale.setScalar(job.k)
+    }
+    const body = item.body
+    const draft = this.drafting.get(job.kind)?.overlays.get(item.entity.id)
+    if (draft) this.drafting.get(job.kind)!.overlays.delete(item.entity.id)
+    const fx = crossfade(null, draft ? [body, draft] : [body])
+    this.tween(now, CROSSFADE_MS, t => fx.update(t, this.camera, this.dt), () => {
+      if (this.refining.get(job.kind) === job && item.body === body) body.visible = false
+      if (draft) {
+        draft.removeFromParent()
+        disposeObject(draft)
+      }
+    })
+  }
+
   /**
-   * A forged upgrade lands on one instance: build the merged body, then sweep a band of light up through
-   * it, the old (ghosted) body fading out below the band and the new one fading in above it. On the
-   * focused instance the overlay already shows the new version, so it stays solid and is exchanged for
-   * the identical merged body at the end (or cross-faded, if the fit moved it).
+   * A forged upgrade lands on one instance. On the focused instance the overlay already IS the new
+   * version (the refine is no longer fitted after the fact), so it is exchanged for the identical merged
+   * body in one frame. Other instances, and anything that doesn't match, cross-fade quickly.
    */
   private refineSwap(item: Item, e: Entity, at: number): void {
     this.settleHolder(item, e, at)
@@ -1396,36 +1486,27 @@ export class WorldRenderer {
     if (job && job.focusId === e.id && job.overlay.parent === item.stretch) {
       overlay = job.overlay
       job.queue.length = 0
-      // Did the fit to the draft move or rescale it? If not, the overlay IS the new body.
-      const a = boundsOf(job.streamed)
+      const a = boundsOf(job.k === 1 ? job.streamed : job.streamed.map(p => transformPart(p, job.k, [0, 0, 0])))
       const b = boundsOf(desc.parts!)
       if (a && b) {
         const size = Math.max(...[0, 1, 2].map(i => b.max[i]! - b.min[i]!), 0.1)
         same = [0, 1, 2].every(i => Math.abs(a.min[i]! - b.min[i]!) < size * 0.03 && Math.abs(a.max[i]! - b.max[i]!) < size * 0.03)
       }
     }
-    item.holder.updateWorldMatrix(true, true)
-    const box = new THREE.Box3().setFromObject(next)
-    if (overlay) box.union(new THREE.Box3().setFromObject(overlay))
-    const c = box.getCenter(new THREE.Vector3())
-    const radius = Math.max(0.5, Math.hypot(box.max.x - box.min.x, box.max.z - box.min.z) / 2)
-    const color = e.props.color ?? '#ffe2a8'
-    const fx = overlay && same
-      ? sweep(c, radius, box.min.y, box.max.y, color, null, [old])
-      : sweep(c, radius, box.min.y, box.max.y, color, next, overlay ? [old, overlay] : [old])
-    if (overlay && same) next.visible = false
-    this.tween(at, SWEEP_MS, t => fx.update(t, this.camera, this.dt), () => {
-      this.scene.remove(fx.obj)
-      fx.dispose()
-      next.visible = true
+    const drop = () => {
       old.removeFromParent()
       disposeObject(old)
       if (overlay) {
         overlay.removeFromParent()
         disposeObject(overlay)
       }
-    }, () => this.scene.add(fx.obj))
-    if (item.entity.id === job?.focusId || !job) this.sound.sfxWhoosh(true, at - performance.now(), false)
+    }
+    if (overlay && same && job?.handed) {
+      drop()
+      return
+    }
+    const fx = crossfade(next, overlay ? [old, overlay] : [old])
+    this.tween(at, CROSSFADE_MS, t => fx.update(t, this.camera, this.dt), drop)
   }
 
   /**
@@ -1570,7 +1651,7 @@ export class WorldRenderer {
     const o = new THREE.Vector3(0, -50, 0)
     const fx = [beam(o, 1, '#ffffff'), shockwave(o, 1), sparkle(o, 1, '#ffffff', 4), shimmer(o, 1, 1, '#ffffff'), dissolve(o, 1, 1, '#ffffff', 4)]
     const dust = new THREE.Points(new THREE.BufferGeometry(), new THREE.PointsMaterial({ color: 0xd8d0c0, size: 0.3, transparent: true, opacity: 0.7, depthWrite: false, alphaMap: radialTexture() }))
-    // The forge's ghost and sweep fade standard materials (transparent, no depth write): warm those variants.
+    // The forge's cross-fades fade standard materials (transparent, no depth write): warm those variants.
     const ghostBody = buildFromParts([{ shape: 'box', size: [1, 1, 1], at: [0, 0, 0], color: '#ffffff' }, { shape: 'sphere', size: [1, 1, 1], at: [0, 0, 0], color: '#ffffff', slot: 'glow' }])
     ghost(ghostBody, 0.5)
     return [...fx.map(f => f.obj), dust, blob({ text: 'warm' }), contactShadow(1), ghostBody]

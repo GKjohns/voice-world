@@ -1,0 +1,471 @@
+{
+ "loop": "loop1_scalefix",
+ "url": "http://localhost:3091/",
+ "startedAt": "2026-10-19T03:12:19.355Z",
+ "minutes": 0.6,
+ "cost": {
+  "trackedUsd": 0.0329,
+  "forgeLedgerDeltaUsd": 0.0299,
+  "forgeLedgerTotalUsd": 3.24,
+  "gatewayUsedDeltaUsd": 0.0307,
+  "gatewayBalanceUsd": 93.172628223,
+  "note": "gatewayUsedDelta is account-wide (any other use of the account in the window counts too) and can lag a few minutes."
+ },
+ "results": [
+  {
+   "id": "triceratops",
+   "axis": "creature",
+   "text": "a friendly triceratops right in front of me",
+   "fresh": true,
+   "kind": "triceratops",
+   "tier": "good",
+   "outcome": "refined",
+   "draftParts": 14,
+   "finalParts": 37,
+   "timings": {
+    "firstOp": 1737,
+    "standIn": 1737,
+    "draft": 2134,
+    "draftDefine": 4725,
+    "intentDone": 4867,
+    "refineStart": 2142,
+    "firstPart": 4908,
+    "recognizable": 10141,
+    "streamEnd": 12789,
+    "swap": 12799,
+    "polishVerdict": null,
+    "settled": 13149
+   },
+   "usd": {
+    "forge": 0.0299,
+    "intentEst": 0.003,
+    "total": 0.0329
+   },
+   "fps": {
+    "avg": 60,
+    "worstGapMs": 17
+   },
+   "census": [
+    "triceratops(good)"
+   ],
+   "stills": {
+    "1_draft": "stills/triceratops_1_draft.jpg",
+    "2_refining": "stills/triceratops_2_refining.jpg",
+    "3_final": "stills/triceratops_3_final.jpg"
+   },
+   "video": null,
+   "videoMB": null,
+   "videoLeadS": 2,
+   "errors": [],
+   "timeline": [
+    {
+     "t": 1723,
+     "type": "req",
+     "path": "/api/intent"
+    },
+    {
+     "t": 1737,
+     "type": "op",
+     "op": "spawn",
+     "kind": "triceratops"
+    },
+    {
+     "t": 1746,
+     "type": "req",
+     "path": "/api/forge"
+    },
+    {
+     "t": 1746,
+     "type": "forge_stage",
+     "stage": "refine"
+    },
+    {
+     "t": 2134,
+     "type": "draft_part",
+     "kind": "triceratops"
+    },
+    {
+     "t": 4725,
+     "type": "op",
+     "op": "define",
+     "kind": "triceratops",
+     "parts": 14
+    },
+    {
+     "t": 4863,
+     "type": "op",
+     "op": "say"
+    },
+    {
+     "t": 4867,
+     "type": "intent_done",
+     "ms": 4858,
+     "firstOpMs": 1710,
+     "model": "haiku"
+    },
+    {
+     "t": 4879,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 5387,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 6598,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 7260,
+     "type": "forge_parts",
+     "n": 7
+    },
+    {
+     "t": 7802,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 7802,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 8370,
+     "type": "forge_parts",
+     "n": 2
+    },
+    {
+     "t": 8926,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 9584,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 9584,
+     "type": "forge_parts",
+     "n": 2
+    },
+    {
+     "t": 10119,
+     "type": "forge_parts",
+     "n": 2
+    },
+    {
+     "t": 10667,
+     "type": "forge_parts",
+     "n": 2
+    },
+    {
+     "t": 10674,
+     "type": "forge_parts",
+     "n": 2
+    },
+    {
+     "t": 11219,
+     "type": "forge_parts",
+     "n": 4
+    },
+    {
+     "t": 11751,
+     "type": "forge_parts",
+     "n": 2
+    },
+    {
+     "t": 11751,
+     "type": "forge_parts",
+     "n": 2
+    },
+    {
+     "t": 12257,
+     "type": "forge_parts",
+     "n": 2
+    },
+    {
+     "t": 12506,
+     "type": "forge_parts",
+     "n": 2
+    },
+    {
+     "t": 12789,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 12789,
+     "type": "forge_done",
+     "ok": true,
+     "n": 37,
+     "usd": 0.029876,
+     "firstPartMs": 3139,
+     "ms": 11048
+    }
+   ],
+   "samples": [
+    {
+     "t": 8,
+     "forming": false,
+     "refining": false,
+     "added": 0,
+     "queue": 0,
+     "ghost": null
+    },
+    {
+     "t": 2142,
+     "forming": false,
+     "refining": true,
+     "added": 0,
+     "queue": 0,
+     "ghost": 1
+    },
+    {
+     "t": 4891,
+     "forming": false,
+     "refining": true,
+     "added": 0,
+     "queue": 1,
+     "ghost": 1
+    },
+    {
+     "t": 4908,
+     "forming": false,
+     "refining": true,
+     "added": 1,
+     "queue": 0,
+     "ghost": 1
+    },
+    {
+     "t": 5391,
+     "forming": false,
+     "refining": true,
+     "added": 1,
+     "queue": 1,
+     "ghost": 1
+    },
+    {
+     "t": 5408,
+     "forming": false,
+     "refining": true,
+     "added": 2,
+     "queue": 0,
+     "ghost": 1
+    },
+    {
+     "t": 6608,
+     "forming": false,
+     "refining": true,
+     "added": 2,
+     "queue": 1,
+     "ghost": 1
+    },
+    {
+     "t": 6625,
+     "forming": false,
+     "refining": true,
+     "added": 3,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 7275,
+     "forming": false,
+     "refining": true,
+     "added": 3,
+     "queue": 7,
+     "ghost": 0
+    },
+    {
+     "t": 7291,
+     "forming": false,
+     "refining": true,
+     "added": 7,
+     "queue": 3,
+     "ghost": 0
+    },
+    {
+     "t": 7308,
+     "forming": false,
+     "refining": true,
+     "added": 10,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 7808,
+     "forming": false,
+     "refining": true,
+     "added": 10,
+     "queue": 2,
+     "ghost": 0
+    },
+    {
+     "t": 7825,
+     "forming": false,
+     "refining": true,
+     "added": 12,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 8375,
+     "forming": false,
+     "refining": true,
+     "added": 12,
+     "queue": 2,
+     "ghost": 0
+    },
+    {
+     "t": 8391,
+     "forming": false,
+     "refining": true,
+     "added": 14,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 8942,
+     "forming": false,
+     "refining": true,
+     "added": 14,
+     "queue": 1,
+     "ghost": 0
+    },
+    {
+     "t": 8958,
+     "forming": false,
+     "refining": true,
+     "added": 15,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 9591,
+     "forming": false,
+     "refining": true,
+     "added": 15,
+     "queue": 3,
+     "ghost": 0
+    },
+    {
+     "t": 9608,
+     "forming": false,
+     "refining": true,
+     "added": 18,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 10124,
+     "forming": false,
+     "refining": true,
+     "added": 18,
+     "queue": 2,
+     "ghost": 0
+    },
+    {
+     "t": 10141,
+     "forming": false,
+     "refining": true,
+     "added": 20,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 10675,
+     "forming": false,
+     "refining": true,
+     "added": 20,
+     "queue": 4,
+     "ghost": 0
+    },
+    {
+     "t": 10691,
+     "forming": false,
+     "refining": true,
+     "added": 24,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 11224,
+     "forming": false,
+     "refining": true,
+     "added": 24,
+     "queue": 4,
+     "ghost": 0
+    },
+    {
+     "t": 11241,
+     "forming": false,
+     "refining": true,
+     "added": 28,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 11757,
+     "forming": false,
+     "refining": true,
+     "added": 28,
+     "queue": 4,
+     "ghost": 0
+    },
+    {
+     "t": 11774,
+     "forming": false,
+     "refining": true,
+     "added": 32,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 12258,
+     "forming": false,
+     "refining": true,
+     "added": 32,
+     "queue": 2,
+     "ghost": 0
+    },
+    {
+     "t": 12274,
+     "forming": false,
+     "refining": true,
+     "added": 34,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 12508,
+     "forming": false,
+     "refining": true,
+     "added": 34,
+     "queue": 2,
+     "ghost": 0
+    },
+    {
+     "t": 12524,
+     "forming": false,
+     "refining": true,
+     "added": 36,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 12803,
+     "forming": false,
+     "refining": false,
+     "added": 0,
+     "queue": 0,
+     "ghost": null
+    }
+   ]
+  }
+ ]
+}

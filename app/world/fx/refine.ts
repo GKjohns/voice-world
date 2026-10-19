@@ -204,3 +204,52 @@ export function sweep(center: THREE.Vector3, radius: number, y0: number, y1: num
     }
   }
 }
+
+/**
+ * Gen loop 1 ("one honest build"): a plain cross-fade, no band, no glints. `next` (if given) fades in
+ * while `old` fades out, uniformly. At t = 1 `next` is exactly solid and `old`'s materials are put back
+ * the way they were (the caller hides or removes it), so a faded body can be shown again later.
+ */
+export function crossfade(next: THREE.Object3D | null, old: THREE.Object3D[] = []): Fx {
+  const obj = new THREE.Group()
+  const fresh = next ? fadeable(next) : []
+  const gone = old.flatMap(o => fadeable(o))
+  for (const f of fresh) {
+    f.mat.opacity = 0
+    f.mat.depthWrite = false
+  }
+  for (const f of gone) f.mat.depthWrite = false
+  const restore = (f: Fade, opacity: number) => {
+    f.mat.opacity = opacity
+    f.mat.depthWrite = f.depthWrite
+    if (f.mat.transparent !== f.transparent) {
+      f.mat.transparent = f.transparent
+      f.mat.needsUpdate = true
+    }
+  }
+  let done = false
+  return {
+    obj,
+    update: (t) => {
+      const k = smoothstep(0, 1, t)
+      for (const f of fresh) f.mat.opacity = f.target * k
+      for (const f of gone) f.mat.opacity = f.start * (1 - k)
+      if (t >= 1 && !done) {
+        done = true
+        for (const f of fresh) restore(f, f.target)
+        for (const f of gone) restore(f, f.start)
+      }
+    },
+    dispose: () => {}
+  }
+}
+
+/** A streamed part grows in: a quick ease-out scale from nothing, no flash. Returns the per-frame update. */
+export function growIn(m: THREE.Mesh): (t: number) => void {
+  const base = m.scale.clone()
+  m.scale.setScalar(0.001)
+  return (t) => {
+    const k = 1 - (1 - Math.min(1, t)) ** 3
+    m.scale.copy(base).multiplyScalar(Math.max(0.001, k))
+  }
+}

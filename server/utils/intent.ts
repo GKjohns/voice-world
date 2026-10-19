@@ -9,7 +9,7 @@ import { KIT } from '../../shared/world/kinds.ts'
 import { FRESH_INTENT, freshRenamer } from '../../shared/world/fresh.ts'
 import { STYLE_WITH_PALETTE } from '../../shared/world/style.ts'
 import { parseOps } from '../../shared/world/ops.ts'
-import type { DroppedOp, Op } from '../../shared/world/ops.ts'
+import type { DroppedOp, Op, Part } from '../../shared/world/ops.ts'
 import type { OpContext } from '../../shared/world/types.ts'
 import { resolveModel } from './aiModels.ts'
 import type { Usage } from './aiModels.ts'
@@ -41,8 +41,15 @@ export interface IntentResult {
 
 export type IntentEvent
   = | { t: 'op', op: Op, ms: number, i: number }
+    | { t: 'part', kind: string, part: Part, ms: number }
     | { t: 'drop', dropped: DroppedOp }
     | { t: 'done', ms: number, model: string, count: number, firstOpMs?: number, error?: string, usage: Usage, costUsd: number, recovered?: boolean, provider?: string }
+
+/** One streamed define part, validated exactly the way the whole define will be (or null). */
+function draftPart(kind: string, raw: unknown): { kind: string, part: Part } | null {
+  const op = parseOps([{ op: 'define', kind, parts: [raw] }]).ops[0] as { kind?: string, parts?: Part[] } | undefined
+  return op?.kind && op.parts?.[0] ? { kind: op.kind, part: op.parts[0] } : null
+}
 
 /** A first op normally lands in 0.9–1.6 s; past this the call is stuck and one retry is cheaper than waiting. */
 const FIRST_OP_MS = 6000
@@ -480,9 +487,16 @@ export async function* streamIntent(req: IntentRequest): AsyncGenerator<IntentEv
         reasoning: alias === 'haiku' ? 'none' : 'minimal',
         maxOutputTokens: 2600, // a 20-part define plus its spawn is ~1,500 tokens
         timeoutMs: 25_000,
-        signal: ctrl.signal
+        signal: ctrl.signal,
+        partParts: true
       })) {
         const ms = Date.now() - t0
+        if (ev.t === 'part') {
+          // A redesign Fresh mode is renaming is held until its define closes: no early parts for it.
+          const p = draftPart(ev.kind, ev.part)
+          if (p && !fresh?.holding()) yield { t: 'part', kind: p.kind, part: p.part, ms }
+          continue
+        }
         if (ev.t === 'op') {
           const parsed = parseOps([ev.op])
           for (const op0 of parsed.ops) {
@@ -517,6 +531,7 @@ export async function interpret(req: IntentRequest): Promise<IntentResult & { pr
   for await (const ev of streamIntent(req)) {
     if (ev.t === 'op') ops.push(ev.op)
     else if (ev.t === 'drop') dropped.push(ev.dropped)
+    else if (ev.t === 'part') continue
     else return { ops, dropped, ms: ev.ms, model: ev.model, error: ev.error, usage: ev.usage, costUsd: ev.costUsd, recovered: ev.recovered, firstOpMs: ev.firstOpMs, provider: ev.provider, prompt }
   }
   return { ops, dropped, ms: 0, model: resolveModel(req.model).alias, error: 'stream ended without done', prompt }

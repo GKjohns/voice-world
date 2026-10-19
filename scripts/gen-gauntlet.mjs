@@ -10,12 +10,12 @@
 // Timings are ms from pressing Enter:
 //   firstOp     the intent model's first op reaches the client
 //   standIn     the new kind's spawn lands (a labelled blob holds the spot; motes swirl round it)
-//   draft       the Haiku `define` lands: the first pixels of the actual object (it morphs in over ~0.5 s)
-//   refineStart the forge starts: the draft turns into the translucent gold ghost
+//   draft       the first Haiku draft part grows in (loop 1 streams the define part by part; loop 0: the define landing)
+//   refineStart the forge starts (loop 1: at the spawn, nothing changes on screen; loop 0: the gold ghost)
 //   firstPart   the first refined part is grown on screen
 //   recognizable  half of the final object's parts are on screen (the program is written biggest-first)
-//   swap        the refined object is accepted and the light-band sweep starts
-//   settled     the sweep has finished (swap + 1.8 s); for hero, the polish verdict if later (polish swap + 1.8 s)
+//   swap        the refined object is accepted (loop 1: exchanged in place; loop 0: the light-band sweep starts)
+//   settled     swap + SWEEP_MS (loop 1: 0.35 s cross-fade; loop 0: 1.8 s sweep); for hero, the polish verdict if later (polish swap + 1.8 s)
 // Cost: forge $ is exact (per call, from the ledger via window.__forge); intent $ is an estimate (the client never
 // sees it); the gateway's account-wide credits are read before and after the run as a cross-check.
 import { chromium } from 'playwright'
@@ -34,7 +34,7 @@ const only = opt('--only', '').split(',').map(s => s.trim()).filter(Boolean)
 const outDir = resolve(ROOT, 'internal_docs/20261018_gen_gauntlet', loop)
 const W = 1280
 const H = 720
-const SWEEP_MS = 1800 // app/world/renderer.ts SWEEP_MS
+const SWEEP_MS = 350 // app/world/renderer.ts CROSSFADE_MS (loop 0: the 1.8 s light sweep)
 const LEAD_S = 2 // seconds of video kept before Enter
 const INTENT_USD_EST = 0.003 // Haiku define + spawn, cached digest
 
@@ -128,7 +128,14 @@ function instrument() {
     if (path === '/api/intent' || path === '/api/forge') {
       lines(b, (ev) => {
         if (path === '/api/intent') {
-          if (ev.t === 'op') {
+          if (ev.t === 'part') {
+            // Gen loop 1: a define's parts stream in before it closes; the first one is the first object pixel.
+            if (!gg.kind) gg.kind = ev.kind
+            if (!gg.parted) {
+              gg.parted = true
+              push({ type: 'draft_part', kind: ev.kind })
+            }
+          } else if (ev.t === 'op') {
             push({ type: 'op', op: ev.op.op, kind: ev.op.kind, parts: ev.op.parts?.length })
             if (ev.op.op === 'define' && !gg.kind) gg.kind = ev.op.kind
           } else if (ev.t === 'done') {
@@ -175,13 +182,13 @@ function instrument() {
     if (ev.some(e => e.type === 'polish_done') && !ev.some(e => e.type === 'judge_done')) return 'judging polish'
     if (ev.some(e => e.type === 'judge_done')) return 'polish judged'
     if (ev.some(e => e.type === 'req' && e.path === '/api/forge/polish')) return 'refined · polishing (background)'
-    if (fd) return now() - fd.t < SWEEP + 400 ? 'swap sweep' : 'settled'
+    if (fd) return now() - fd.t < SWEEP + 400 ? 'exchange' : 'settled'
     if (lastS?.refining) return `refining · ${lastS.added} parts on screen`
     if (ev.some(e => e.type === 'op' && e.op === 'define')) return has('intent_done') ? 'draft · forge starting' : 'draft'
     if (ev.some(e => e.type === 'op' && e.op === 'spawn')) return 'stand-in blob'
     return lastS?.forming ? 'thinking · motes' : 'thinking'
   }
-  const SWEEP = 1800
+  const SWEEP = 350
 }
 
 async function runPrompt(browser, p) {
@@ -300,7 +307,8 @@ async function runPrompt(browser, p) {
   const timings = {
     firstOp: rel(first(e => e.type === 'op')),
     standIn: rel(first(e => e.type === 'op' && e.op === 'spawn' && e.kind === tl.kind)),
-    draft: rel(first(e => e.type === 'op' && e.op === 'define')),
+    draft: rel(first(e => e.type === 'draft_part') ?? first(e => e.type === 'op' && e.op === 'define')),
+    draftDefine: rel(first(e => e.type === 'op' && e.op === 'define')),
     intentDone: rel(first(e => e.type === 'intent_done')),
     refineStart: rel(tl.samples.find(s => s.refining)?.t),
     firstPart: rel(tl.samples.find(s => s.added > 0)?.t),
@@ -407,7 +415,7 @@ function writeIndex(data) {
     const v = rows.map(r => r.timings?.[k]).filter(x => typeof x === 'number')
     return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null
   }
-  const KEYS = [['draft', 'draft (first object px)'], ['refineStart', 'ghost starts'], ['firstPart', 'first refined part'], ['recognizable', '50% of final parts'], ['swap', 'swap'], ['settled', 'settled']]
+  const KEYS = [['draft', 'draft (first object px)'], ['refineStart', 'refine starts'], ['firstPart', 'first refined part'], ['recognizable', '50% of final parts'], ['swap', 'swap'], ['settled', 'settled']]
   const cards = data.results.map((r) => {
     if (r.error) return `<article class="card"><h2>${esc(r.id)}</h2><p class="err">${esc(r.error)}</p></article>`
     const t = r.timings

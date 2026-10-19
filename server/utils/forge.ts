@@ -187,13 +187,19 @@ export async function* forgeRefine(req: ForgeRequest): AsyncGenerator<ForgeEvent
   const draftCheck = islands(req.draft)
   const render = dataUrlPart(req.image)
   const issues = draftCheck.notes.length ? `\nThe engine's structural check found:\n- ${draftCheck.notes.join('\n- ')}` : ''
-  const prompt = `Make: "${req.text}" (it is a ${req.kind.replace(/_/g, ' ')}).
+  // Gen loop 1: the refine starts at the spawn, in parallel with the Haiku draft, so usually there is no
+  // draft to show it: it designs from the words at real-world scale, and its parts stream at final size.
+  const prompt = req.draft.length
+    ? `Make: "${req.text}" (it is a ${req.kind.replace(/_/g, ' ')}).
 The draft's envelope is ${envelope(req.draft)}. Keep the same overall size and footprint, resting where the draft rests.
 Current program (the draft):
 ${partsToProgram(req.draft)}
 
 ${render ? 'Image 1 is its render (front-right view).' : '(No render available.)'}${ref ? ` Image ${render ? 2 : 1} is the reference target. ${REF_NOTE}` : ''}${issues}
 Write the complete improved program. ${SPEED}`
+    : `Make: "${req.text}" (it is a ${req.kind.replace(/_/g, ' ')}).
+Design it from scratch at real-world scale, resting on the ground.${ref ? ` Image 1 is the reference target. ${REF_NOTE}` : ''}
+Write the complete program. ${SPEED}`
 
   yield { t: 'stage', stage: 'refine', ms: ms() }
   const ctrl = new AbortController()
@@ -262,8 +268,9 @@ Write the complete improved program. ${SPEED}`
     yield { t: 'done', ok: false, ...base, reason: !okRun ? `program failed: ${run.error}` : parts.length < 3 ? 'too few parts' : `${check.floating} floating parts: ${check.notes.slice(0, 2).join('; ')}` }
     return
   }
-  const fit = fitToDraft(parts, req.draft)
-  yield { t: 'done', ok: true, ...base, parts: fit.parts, code, k: fit.k }
+  // No fit to the draft after the fact (Gen loop 1): the parts the player watched stream in are the
+  // final parts, so the hand-over is an exchange in place, never a resize jump.
+  yield { t: 'done', ok: true, ...base, parts, code, k: 1 }
 }
 
 // ---------- polish (hero, background) ----------
