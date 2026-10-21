@@ -33,7 +33,20 @@ Every change is a global chunk patch or a uniform. There are no new program vari
 
 There were no new program variants (60) and no new lights, and 60 fps held.
 
-## Next (loops 8+), in impact order
+## What loop 8 implemented
+
+| Piece | Where | How (cost) |
+|---|---|---|
+| `roof` primitive | `shared/world/shapes.ts`, `parts.ts`, `ops.ts` | A unit hip roof (four crisp hips) with a concave pitch that flattens toward the eaves and flicked-up tips; scaled by `size` like a box. Haiku drafts and the forge both get it (a new enum value, no new optional fields). Pagoda tiers, temples, gazebos, lanterns, cottages |
+| `shell` primitive | same | A cupped, rounded plate (open side +z, `d` = cup depth, 30% of it is thickness). Frills, petals, ears, trap lobes, shields, bowls |
+| Classic-form guidance | `server/utils/forge.ts` API, `intent.ts`, `director.ts` | Roofs are `roof()`, frills a tilted `shell()`, windows and doors thin panels on the surface, curved bodies lathe or sphere, with a pagoda and a frill line as examples |
+| Poke-through trim | `shared/world/forge.ts` `fixPierce` / `fixPiercing` | A small unrotated part that comes out of both sides of a much bigger host keeps only its front (or leaning) side. Applied per streamed part and again on the final list (same answer). CPU only |
+| Far-field cool hue | `style/ground.ts` `FAR_GLSL` (ground + grass) | Past ~9 m the meadow leans toward the sky hue (zenith/sky fill mix, luminance kept, slightly desaturated), up to 40% at 26 m. Two uniforms, no new programs |
+| Fair judge render | `renderer.candidate(parts, id)` | The polish candidate gets the instance's look (palette snap, slots, jitter) like the current build; before, it showed raw model colours |
+
+No new lights and no new material programs (the harness logged 60), 60 fps held.
+
+## Next (loops 9+), in impact order
 
 1. **Distance hue over the meadow.** Far grass (15–24 m) still reads warm-yellow under `golden`, from the warm fog plus the shadow-lift grade. Cool the far field toward the sky colour (see item 5) rather than adding more warmth.
 2. **Grass under low sun.** Loop 7 fixed the near and mid field (see above). Check `dusk` and `day` from the gauntlet camera too; the probes used `golden`.

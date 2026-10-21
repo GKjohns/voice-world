@@ -285,7 +285,7 @@ async function polish(job: Job, text: string, current: Part[], code: string | un
   if (islands(p.parts).floating > islands(current).floating) return finish('refined; polish kept out (more floating parts)')
   const focus2 = r.focusOf(kind)
   if (!focus2) return finish('polish skipped')
-  const candidate = r.candidate(p.parts)
+  const candidate = r.candidate(p.parts, focus2)
   await sleep(200) // its programs compile in the background meanwhile
   const [a, b] = [await r.studioShot(focus2), await r.studioShot(focus2, candidate)]
   if (!a || !b) return finish('refined; polish not judged (no renders)')

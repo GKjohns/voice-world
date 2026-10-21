@@ -187,3 +187,31 @@ test('silhouettePoints (Gen loop 6): framing points hug the parts, not one box r
   // Capped to the biggest parts.
   assert.equal(silhouettePoints(parts, 1).length, 16)
 })
+
+test('gen loop 8: a window through the body keeps only its front side; spanning bands and rotated parts are left alone', async () => {
+  const { fixPierce, fixPiercing } = await import('../shared/world/forge.ts')
+  const body: Part = { shape: 'sphere', size: [2, 2, 2], at: [0, 1, 0], color: '#cc9' }
+  const window: Part = { shape: 'box', size: [0.4, 0.5, 2.3], at: [0.3, 1.2, 0.1], color: '#ffd', slot: 'glow' }
+  const fixed = fixPierce(window, [body])
+  const b = partBounds(fixed)
+  assert.ok(b.min[2] > 0.4 && b.min[2] < 0.6, `starts a quarter in: ${b.min[2]}`)
+  assert.ok(b.max[2] > 1 && b.max[2] <= 1.09, `just past the face: ${b.max[2]}`)
+  assert.deepEqual([fixed.size[0], fixed.size[1]], [0.4, 0.5])
+  // Leaning back: it keeps the back side.
+  const back = partBounds(fixPierce({ ...window, size: [0.4, 0.5, 2.6], at: [0.3, 1.2, -0.15] }, [body]))
+  assert.ok(back.max[2] < -0.4 && back.min[2] < -1)
+  // A belt as wide as the body, a rotated axle, a part not much smaller than its host: untouched.
+  const belt: Part = { shape: 'box', size: [2.1, 0.2, 2.1], at: [0, 1, 0], color: '#333' }
+  assert.equal(fixPierce(belt, [body]), belt)
+  const axle: Part = { shape: 'cylinder', size: [0.2, 2.3, 0.2], at: [0, 1, 0], rot: [1.571, 0, 0], color: '#333' }
+  assert.equal(fixPierce(axle, [body]), axle)
+  const twin: Part = { shape: 'box', size: [1.5, 1.5, 2.2], at: [0, 1, 0], color: '#333' }
+  assert.equal(fixPierce(twin, [body]), twin)
+  // A door that only sits on the front face is fine already.
+  const door: Part = { shape: 'box', size: [0.5, 0.9, 0.1], at: [0, 0.6, 1], color: '#642' }
+  assert.equal(fixPierce(door, [body]), door)
+  // The list pass is the same as fixing each against the ones before it.
+  const list = fixPiercing([body, window, belt, door])
+  assert.equal(list.fixed, 1)
+  assert.deepEqual(list.parts[1], fixed)
+})

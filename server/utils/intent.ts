@@ -139,8 +139,9 @@ Learned kinds (made earlier with define) are listed in the context; reuse them b
 ## New things (define)
 ${STYLE_WITH_PALETTE}
 Parts are primitives in metres. Origin = the object's centre on the ground; y is up; +z is the object's FRONT (it faces the player).
-- part: { shape: box | cylinder | cone | sphere | torus | capsule, size: [w, h, d] (bounding box), at: [x, y, z] (CENTRE of the part, so a part resting on the ground has y = h/2), rot?: [x, y, z] radians, color: hex, slot?: primary | trim | glow, material? }
+- part: { shape: box | cylinder | cone | sphere | torus | capsule | roof | shell, size: [w, h, d] (bounding box), at: [x, y, z] (CENTRE of the part, so a part resting on the ground has y = h/2), rot?: [x, y, z] radians, color: hex, slot?: primary | trim | glow, material? }
 - Cylinders and cones stand along y; rot [1.571, 0, 0] turns a disc to face the front. Torus lies in the x–y plane (a ring facing the front).
+- roof: a hip roof with curved, upswept eaves filling its box; use it for every roof and pagoda tier (eaves overhang the walls ~30%), never a flat disc. shell: a cupped plate whose open side faces +z (d = cup depth); frills, petals, ears, leaves, a bowl (rot [-1.571, 0, 0]).
 - Real-world scale: a person is 1.8 m, a chair seat 0.45 m, a door 2 m, a car 4.5 × 1.5 × 1.8 m.
 - Give the main body slot primary (so "make it red" works), accents slot trim, lamps/windows/flames slot glow. 4–14 parts is usually right; keep parts touching so it reads as one object.
 - tags: 2–4 lowercase words including a general category (furniture, decoration, vehicle, animal, structure, light, sign, plant, toy, food) so "the furniture" finds it.

@@ -10,7 +10,7 @@
  */
 import * as THREE from 'three'
 import { styleShader, STYLE_UNIFORMS } from './toon'
-import { GROUND_UNIFORMS, MEADOW_GLSL, sunFixGlsl } from './ground'
+import { FAR_GLSL, GROUND_UNIFORMS, MEADOW_GLSL, sunFixGlsl } from './ground'
 
 const STEP = 0.34
 const RADIUS = 24
@@ -120,7 +120,8 @@ ${MEADOW_GLSL}`)
     vGrassTip = aTip;
   }`)
       sh.fragmentShader = sh.fragmentShader
-        .replace('#include <common>', '#include <common>\nuniform vec3 uGrassBase;\nuniform vec3 uGroundAlt;\nvarying float vGrassTip;\nvarying float vGrassPatch;\nvarying float vGrassGust;\nvarying vec3 vGrassMeadow;')
+        .replace('#include <fog_fragment>', FAR_GLSL)
+        .replace('#include <common>', '#include <common>\nuniform vec3 uGroundFar;\nuniform float uGroundFarK;\nuniform vec3 uGrassBase;\nuniform vec3 uGroundAlt;\nvarying float vGrassTip;\nvarying float vGrassPatch;\nvarying float vGrassGust;\nvarying vec3 vGrassMeadow;')
         // Both faces of a blade keep the upward normal (a flipped back face would catch the ground's
         // brown fill and the rim): grass lights like the meadow it grows from.
         .replace('#include <normal_fragment_begin>', '#include <normal_fragment_begin>\nnormal = normalize( vNormal );\nnonPerturbedNormal = normal;')

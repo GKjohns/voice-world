@@ -14,7 +14,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { generateText, streamText } from 'ai'
-import { boundsOf, fitToDraft, isBudgetError, islands, libKey, partsToProgram, snapFloating } from '../../shared/world/forge.ts'
+import { boundsOf, fitToDraft, fixPierce, fixPiercing, isBudgetError, islands, libKey, partsToProgram, snapFloating } from '../../shared/world/forge.ts'
 import type { Tier } from '../../shared/world/forge.ts'
 import type { Part } from '../../shared/world/ops.ts'
 import { STYLE_IMAGE, STYLE_WITH_PALETTE } from '../../shared/world/style.ts'
@@ -31,6 +31,8 @@ ${STYLE_WITH_PALETTE}`
 const API = `Write the BODY of a JS function. Available functions (each adds one part; o = optional flags string or {rot:[x,y,z], f:'flags'}):
   box(size,at,color,o) sphere(size,at,color,o) cylinder(size,at,color,o) cone(size,at,color,o) capsule(size,at,color,o) torus(size,at,color,o)
      size [w,h,d] bounding box, at = centre. Cylinders/cones/capsules stand along y; rot [1.571,0,0] lays one along z. Torus lies in the x–y plane.
+  roof(size,at,color,o) — a hip roof with a curved, concave slope and upswept eave tips, filling its box (ridge point at the top centre). Every roof, canopy or tiered eave: pagoda/temple tiers, cottages, gazebos, towers, lamp hoods, hats. Its w,d overhang the walls below by 25–40%; h is about 0.4 of w for a pagoda tier, half for a cottage.
+  shell(size,at,color,o) — a cupped plate with a rounded rim; the open (hollow) side faces +z, d = how deep it cups (keep d ≥ 0.15 of w). Aim it with rot. Frills, petals, leaves, ears, trap lobes, fins, shields, awnings, hoods, scallops; a bowl or dish: rot [-1.571,0,0] (opens upward).
   tube(points, radii, color, o) — smooth swept tapered body through [[x,y,z],...] (2–8 points) with a radius per point. Bodies, necks, tails, legs, horns, branches, pipes, rope.
   lathe(profile, at, color, o) — [[r,y],...] bottom→top turned around y (r=0 closes an end). Towers, vases, domes, columns, bottles, tree crowns.
   extrude(outline, depth, at, color, o) — 2D [[x,y],...] outline with thickness along z. Wings, sails, fins, ears, signs. o.rot [0,1.571,0] = side panel, [-1.571,0,0] = lying flat.
@@ -39,6 +41,11 @@ Flags (letters in one string, e.g. 'mp' or {rot:[0.3,0,0],f:'mt'}): m = mirror x
 Colours: declare the 3–6 colours once as single-letter consts on the first code line (const A='#402713',B='#c9a14a';) and pass the letter; that keeps the palette coherent and the lines short. Round numbers to 2 decimals.
 Use consts for key anchor points so parts line up and joints are shared; loops for repeats (windows, spokes, planks, ribs). Aim for 30–90 parts (a showpiece 90–180); at most 200 after mirroring. More parts are not better: chunky readable masses beat fine detail.
 Silhouette over detail: exaggerate what makes it recognisable from 20 m. Before writing, name to yourself the 3–5 features that make it read as this thing at a glance (a triceratops: three horns + frill + beak; a locomotive: boiler + smokestack + cab + big wheels + cowcatcher) and build those within the first third of the lines, at bold, slightly exaggerated proportions and in their true colours, so the half-built object already reads as the thing. Exaggerate size, never distance: every small feature (teeth, spikes, horns, wheels, finials) is placed from its host part's surface and sinks ~20% of its size into the host; with z/x the size is still given standing (h = the length along the new axis), and the at is the centre after the turn.
+Classic forms, done right:
+  - Roofs are roof(), never stacked discs, cylinders or flat cones. A pagoda: per tier a box body, then roof([w*1.45,w*0.4,w*1.45],[0,topOfBody+h/2-0.05,0],R) whose eaves overhang; tiers shrink upward; finial on the last roof.
+  - A creature frill, crest or ear is a shell() tilted back behind the head, rim forward (open side toward the head): shell([2.2,1.8,0.5],[0,1.9,1.2],F,{rot:[-0.5,0,0],f:'t'}), never a flat box or slab. A flytrap lobe is a shell opening toward its partner, with teeth along the rim.
+  - Windows, doors, portholes and panels sit ON the surface: thin (depth 0.04–0.08) and centred just outside the wall's outer face (at z = wall front + depth/2), never a box running through the body (it shows out the back). On a round body put them at its surface on the front side.
+  - Curved bodies (pots, domes, bellies, vases, boilers) are lathe or sphere, not boxes; boxes are for walls, plinths and crates.
 Order statements: main masses, then the defining silhouette features, then limbs and structure, small details last — the player watches each line appear. One statement per line.
 Output ONLY the JavaScript body. First line: // name: <snake_case>. No JSON, no code fences, no prose.`
 
@@ -231,14 +238,22 @@ Write the complete program. ${SPEED}`
         streamError = why(error)
       }
     })
+    // Gen loop 8: each streamed part is trimmed against the ones before it if it pokes through its host
+    // (the final pass below gives the same parts, so the hand-over doesn't change what the player saw).
+    const seen: Part[] = []
+    const trim = (ps: Part[]) => ps.map((p) => {
+      const q = fixPierce(p, seen)
+      seen.push(q)
+      return q
+    })
     for await (const delta of r.textStream) {
-      const fresh = runner.push(delta)
+      const fresh = trim(runner.push(delta))
       if (fresh.length) {
         firstPartMs ??= ms()
         yield { t: 'parts', parts: fresh, ms: ms() }
       }
     }
-    const tail = runner.end()
+    const tail = trim(runner.end())
     if (tail.length) yield { t: 'parts', parts: tail, ms: ms() }
     try {
       const u = await r.usage
@@ -267,8 +282,10 @@ Write the complete program. ${SPEED}`
   const run = raw.run
   // Gen loop 5: small floating features (teeth, wheels, a finial) snap onto the body or drop; only a
   // floating core (a big island) still fails the gate below.
-  const snap = snapFloating(raw.parts)
+  const pierce = fixPiercing(raw.parts)
+  const snap = snapFloating(pierce.parts)
   const parts = snap.parts
+  if (pierce.fixed) console.info(`[forge] refine ${req.kind}: trimmed ${pierce.fixed} part(s) poking through their host`)
   if (snap.snapped || snap.dropped) console.info(`[forge] refine ${req.kind}: snapped ${snap.snapped}, dropped ${snap.dropped} floating part(s)${snap.core ? '' : ' (core island still floats)'}`)
   const check = islands(parts)
   const base = { ms: ms(), usd, refMs, firstPartMs, cache, model: refineModel, floating: check.floating, draftFloating: draftCheck.floating, snapped: snap.snapped, dropped: snap.dropped }
@@ -361,7 +378,9 @@ async function polishOnce(req: PolishRequest, t0: number, signal: AbortSignal): 
     const usd = costUsd(FORGE_MODELS.polish, { input: r.usage?.inputTokens ?? 0, output: r.usage?.outputTokens ?? 0, cacheRead: r.usage?.inputTokenDetails?.cacheReadTokens ?? 0, cacheWrite: r.usage?.inputTokenDetails?.cacheWriteTokens ?? 0 })
     forgeRecord({ session: req.session, stage: 'polish', model: FORGE_MODELS.polish, usd, ms: Date.now() - t0, kind: req.kind, ok: true, in: r.usage?.inputTokens, out: r.usage?.outputTokens, cacheRead: r.usage?.inputTokenDetails?.cacheReadTokens ?? 0 })
     const code = stripProgram(r.text).trim()
-    const { parts, run } = programToParts(code, { timeoutMs: 150 })
+    const out = programToParts(code, { timeoutMs: 150 })
+    const run = out.run
+    const parts = fixPiercing(out.parts).parts
     if ((!run.ok && parts.length < 4) || parts.length < 4) return { ok: false, usd, ms: Date.now() - t0, reason: run.error ?? `only ${parts.length} parts` }
     const fit = fitToDraft(parts, req.parts)
     return { ok: true, parts: fit.parts, code, usd, ms: Date.now() - t0 }
@@ -418,7 +437,9 @@ export async function forgeJudge(req: { text: string, current: string, polish: s
     const runs = await Promise.all([ask(true), ask(false)])
     const usd = runs.reduce((s, r) => s + r.usd, 0)
     const polishWins = runs.every(r => r.won === true)
-    return { polishWins, why: (runs.find(r => r.won === polishWins) ?? runs[0]!).why.slice(0, 80), usd, ms: Date.now() - t0 }
+    // Gen loop 8: the vote count rides along (1/2 = the two orders disagreed: position bias or a toss-up).
+    const votes = runs.filter(r => r.won === true).length
+    return { polishWins, why: `${(runs.find(r => r.won === polishWins) ?? runs[0]!).why.slice(0, 80)}; polish ${votes}/2`, usd, ms: Date.now() - t0 }
   } catch (err) {
     return { polishWins: false, why: 'judge failed', usd: 0, ms: Date.now() - t0, error: why(err) }
   }

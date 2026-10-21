@@ -8,8 +8,26 @@ import { styleShader } from './toon'
 
 export const GROUND_UNIFORMS = {
   uGroundAlt: { value: new THREE.Color('#7f8a52') },
-  uGroundPatch: { value: 0.55 } // how strong the patches are (interiors calmer)
+  uGroundPatch: { value: 0.55 }, // how strong the patches are (interiors calmer)
+  uGroundFar: { value: new THREE.Color(1, 1, 1) }, // gen loop 8: the far field's cool tint (sky hue, luminance 1)
+  uGroundFarK: { value: 0 }
 }
+
+/**
+ * Gen loop 8: distance hue for the meadow. Past ~10 m the ground and the grass lean toward the sky's cool
+ * hue (luminance kept, a little desaturated), so the 15–24 m field reads as air-filled distance instead of
+ * warm straw under a low sun (the fog only starts near 24 m). Ground and grass programs only, before fog.
+ */
+export const FAR_GLSL = /* glsl */`
+#ifdef USE_FOG
+  {
+    float cjFar = smoothstep( 9.0, 26.0, vFogDepth ) * uGroundFarK;
+    float cjL = dot( gl_FragColor.rgb, vec3( 0.2126, 0.7152, 0.0722 ) );
+    vec3 cjCool = mix( gl_FragColor.rgb, vec3( cjL ), 0.3 ) * uGroundFar;
+    gl_FragColor.rgb = mix( gl_FragColor.rgb, cjCool, cjFar );
+  }
+#endif
+#include <fog_fragment>`
 
 /**
  * Gen loop 7 (art_direction_botw.md): painted meadow variation, shared by the ground and the grass so the
@@ -58,10 +76,13 @@ export function groundMaterial(): THREE.MeshStandardMaterial {
       .replace('#include <project_vertex>', '#include <project_vertex>\nvGroundXZ = (modelMatrix * vec4(transformed, 1.0)).xz;')
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <lights_fragment_end>', sunFixGlsl('0.4 * min( 1.0, uGroundPatch * 1.8 )'))
+      .replace('#include <fog_fragment>', FAR_GLSL)
       .replace('#include <common>', /* glsl */`#include <common>
 varying vec2 vGroundXZ;
 uniform vec3 uGroundAlt;
 uniform float uGroundPatch;
+uniform vec3 uGroundFar;
+uniform float uGroundFarK;
 float gHash( vec2 p ) { p = fract( p * vec2( 127.1, 311.7 ) ); p += dot( p, p + 34.5 ); return fract( p.x * p.y ); }
 float gNoise( vec2 p ) {
   vec2 i = floor( p ); vec2 f = fract( p ); vec2 u = f * f * ( 3.0 - 2.0 * f );

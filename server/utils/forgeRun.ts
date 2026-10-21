@@ -53,7 +53,7 @@ const __flags = (f, o) => {
 };
 const __o = o => typeof o === 'string' ? __flags(o, {}) : (o && typeof o === 'object') ? __flags(o.f, Object.assign({}, o)) : {};
 const __mk = s => (size, at, color, o) => part(Object.assign({}, __o(o), { shape: s, size, at, color }));
-const box = __mk('box'), sphere = __mk('sphere'), cylinder = __mk('cylinder'), cone = __mk('cone'), capsule = __mk('capsule'), torus = __mk('torus');
+const box = __mk('box'), sphere = __mk('sphere'), cylinder = __mk('cylinder'), cone = __mk('cone'), capsule = __mk('capsule'), torus = __mk('torus'), roof = __mk('roof'), shell = __mk('shell');
 const tube = (points, radii, color, o) => part(Object.assign({}, __o(o), { shape: 'tube', points, radii, color }));
 const lathe = (profile, at, color, o) => part(Object.assign({}, __o(o), { shape: 'lathe', profile, at, color }));
 const extrude = (outline, depth, at, color, o) => part(Object.assign({}, __o(o), { shape: 'extrude', outline, depth, at, color }));

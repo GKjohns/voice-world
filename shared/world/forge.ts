@@ -10,6 +10,7 @@
  */
 import { FORGE_SHAPES, MATERIALS, SHAPES, SLOTS } from './ops.ts'
 import type { Material, Part, Slot, Vec3 } from './ops.ts'
+import { ROOF_SILHOUETTE, SHELL_SILHOUETTE } from './shapes.ts'
 
 export const HQ_MAX_PARTS = 240
 const MAX_POINTS = 12
@@ -193,6 +194,11 @@ export function silhouettePoints(parts: Part[], max = 64): Vec3[] {
       })
       continue
     }
+    if (p.shape === 'roof' || p.shape === 'shell') {
+      // Gen loop 8: the eave corners and ridge (roof), the rim and the back of the cup (shell).
+      for (const v of p.shape === 'roof' ? ROOF_SILHOUETTE : SHELL_SILHOUETTE) put(p, [v[0] * p.size[0], v[1] * p.size[1], v[2] * p.size[2]])
+      continue
+    }
     const b = localBox(p)
     const round = p.shape === 'sphere' || p.shape === 'cylinder' || p.shape === 'cone' || p.shape === 'capsule' || p.shape === 'torus'
     if (!round) {
@@ -338,6 +344,68 @@ export function snapFloating(parts: Part[], maxFrac = 0.2, maxMove = 0.35): { pa
   }
   res.parts = out.filter((p): p is Part => !!p)
   return res
+}
+
+/**
+ * Gen loop 8: parts poking through their host. A model's window or door is often a box deeper than the
+ * wall (or the round body) it sits on, so it shows out of the back too (loop 7's teapot cottage). For each
+ * small, unrotated box-like part whose centre is inside an earlier, much bigger, solid part and which pokes
+ * out of BOTH sides of it along one axis (by no more than half the host again, and narrower than the host
+ * across that axis, so bands, belts and axles that are meant to span are left alone), keep only the side its
+ * centre leans to (the front, +z or +x, when centred): it now runs from a quarter into the host to just past
+ * its face. Order-dependent on purpose: the streamed refine fixes each part against the ones before it, and
+ * the final pass (`fixPiercing`) gives the same answer.
+ */
+const PIERCE_SMALL = new Set(['box', 'cylinder', 'capsule', 'sphere'])
+const PIERCE_HOST = new Set(['box', 'cylinder', 'capsule', 'sphere', 'lathe', 'extrude', 'cone'])
+const axisAligned = (r?: Vec3) => !r || r.every(a => Math.abs(Math.sin(a * 2)) < 0.02)
+
+export function fixPierce(p: Part, prior: Part[]): Part {
+  if (!PIERCE_SMALL.has(p.shape) || p.rot?.some(a => Math.abs(a) > 1e-3)) return p
+  const pb = partBounds(p)
+  const pv = boxVol(pb)
+  const c = [0, 1, 2].map(k => (pb.min[k]! + pb.max[k]!) / 2)
+  for (let j = prior.length - 1; j >= 0; j--) {
+    const h = prior[j]!
+    if (!PIERCE_HOST.has(h.shape) || !axisAligned(h.rot)) continue
+    const hb = partBounds(h)
+    if (boxVol(hb) < pv * 4) continue
+    if (![0, 1, 2].every(k => c[k]! > hb.min[k]! && c[k]! < hb.max[k]!)) continue
+    for (let k = 0; k < 3; k++) {
+      const H = hb.max[k]! - hb.min[k]!
+      const L = pb.max[k]! - pb.min[k]!
+      const e = 0.02 * H
+      if (!(pb.min[k]! < hb.min[k]! - e && pb.max[k]! > hb.max[k]! + e) || L > H * 1.5) continue
+      const others = [0, 1, 2].filter(i => i !== k)
+      if (others.some(i => pb.max[i]! - pb.min[i]! > 0.7 * (hb.max[i]! - hb.min[i]!))) continue
+      const hc = (hb.min[k]! + hb.max[k]!) / 2
+      const side = c[k]! < hc - 0.05 * H ? -1 : 1
+      const out = Math.min(0.06 * H, (L - H) / 2, 0.08)
+      const lo = side > 0 ? hc + 0.25 * H : hb.min[k]! - out
+      const hi = side > 0 ? hb.max[k]! + out : hc - 0.25 * H
+      const q: Part = { ...p, at: [...p.at] as Vec3, size: [...p.size] as Vec3 }
+      q.at[k] = r4((lo + hi) / 2)
+      q.size[k] = r4(hi - lo)
+      return q
+    }
+  }
+  return p
+}
+
+/** `fixPierce` over a whole list, in order. Returns the parts and how many were trimmed. */
+export function fixPiercing(parts: Part[]): { parts: Part[], fixed: number } {
+  const out: Part[] = []
+  let fixed = 0
+  for (const p of parts) {
+    const q = fixPierce(p, out)
+    if (q !== p) fixed++
+    out.push(q)
+  }
+  return { parts: out, fixed }
+}
+
+function boxVol(b: Box): number {
+  return Math.max(1e-9, (b.max[0] - b.min[0]) * (b.max[1] - b.min[1]) * (b.max[2] - b.min[2]))
 }
 
 // ---------- fitting to the draft ----------

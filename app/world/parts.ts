@@ -16,6 +16,8 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
 import type { Part, Shape, Slot } from '#shared/world/ops'
 import { hashParts } from '#shared/world/forge'
 import { stylize } from '#shared/world/palette'
+import { roofMesh, shellMesh } from '#shared/world/shapes'
+import type { MeshData } from '#shared/world/shapes'
 import { glowMat, group, mat, mesh } from './kit/helpers'
 import { materialLook } from './look'
 import { bevelBox } from './style/bevel'
@@ -28,7 +30,19 @@ const GEOMETRY: Record<Shape, () => THREE.BufferGeometry> = {
   cone: () => new THREE.ConeGeometry(0.5, 1, 16),
   sphere: () => new THREE.SphereGeometry(0.5, 16, 12),
   torus: () => new THREE.TorusGeometry(0.375, 0.125, 12, 28),
-  capsule: () => new THREE.CapsuleGeometry(0.5, 1, 6, 16).scale(1, 0.5, 1)
+  capsule: () => new THREE.CapsuleGeometry(0.5, 1, 6, 16).scale(1, 0.5, 1),
+  // Gen loop 8: curved hip roof and cupped shell (shared/world/shapes.ts), unit-sized like the rest.
+  roof: () => meshGeometry(roofMesh()),
+  shell: () => meshGeometry(shellMesh())
+}
+
+/** Plain vertex data → an indexed geometry; normals smooth within each region (regions own their vertices). */
+function meshGeometry(m: MeshData): THREE.BufferGeometry {
+  const g = new THREE.BufferGeometry()
+  g.setAttribute('position', new THREE.Float32BufferAttribute(m.position, 3))
+  g.setIndex(m.index)
+  g.computeVertexNormals()
+  return g
 }
 const cache = new Map<Shape, THREE.BufferGeometry>()
 

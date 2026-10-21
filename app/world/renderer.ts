@@ -1580,9 +1580,23 @@ export class WorldRenderer {
     })
   }
 
-  /** Build a candidate body from parts (merged), compiled ahead, for a judge's studio shot. */
-  candidate(parts: Part[]): THREE.Group {
-    return buildFromPartsMerged(parts)
+  /**
+   * Build a candidate body from parts (merged), compiled ahead, for a judge's studio shot. Gen loop 8: with
+   * the instance's id it gets that instance's look (palette snap, slot colours, glow, jitter), exactly as an
+   * accepted upgrade would; before, the candidate showed the model's raw colours against a snapped current.
+   */
+  candidate(parts: Part[], id?: string): THREE.Group {
+    const body = buildFromPartsMerged(parts)
+    const e = id ? this.items.get(id)?.entity : undefined
+    if (e) {
+      applyMaterialProps(body, e.props, !!this.desc(e).learned)
+      for (const { mesh, color } of lookTargets(body, e.props, e.hue)) {
+        const m = mesh.material as THREE.MeshStandardMaterial
+        m.color.copy(color)
+        if (mesh.userData.slot === 'glow') m.emissive.copy(color)
+      }
+    }
+    return body
   }
 
   /** Lamps cast the colour they glow: "make the lamps blue" turns their light pools blue. */
@@ -1800,6 +1814,9 @@ export class WorldRenderer {
     STYLE_UNIFORMS.uCjBrush.value = a.brush
     GROUND_UNIFORMS.uGroundAlt.value.set(a.groundAlt)
     GROUND_UNIFORMS.uGroundPatch.value = a.groundPatch
+    // Gen loop 8: the far meadow leans toward the sky's cool hue (between the zenith and the sky fill).
+    setHue(GROUND_UNIFORMS.uGroundFar.value, '#' + new THREE.Color(a.skyTop).lerp(new THREE.Color(a.hemiSky), 0.5).getHexString())
+    GROUND_UNIFORMS.uGroundFarK.value = 0.4 * Math.min(1, a.groundPatch * 1.8)
     this.grass.setColor(a.ground)
     // Gen loop 7: the gaze rings take the sky's colour (pale), so they glow like part of the painted world.
     const ringTint = new THREE.Color(a.hemiSky).lerp(new THREE.Color(a.skyHorizon), 0.35).lerp(new THREE.Color(0xffffff), 0.45)
@@ -2032,16 +2049,24 @@ export class WorldRenderer {
     const g = this.gaze()
     this.gazeNow = g
     const hovered = g.info.kind === 'entity' && g.entity ? this.items.get(g.entity) : undefined
-    this.highlight.visible = !!hovered
+    // Gen loop 8: no highlight on a thing that is still being refined (it would ring every landing); when
+    // the refine ends it comes back already settled to its faint glow, not a fresh flash.
+    const forging = !!hovered && this.refining.has(hovered.entity.kind)
+    if (forging && hovered) {
+      this.hoverId = hovered.entity.id
+      this.hoverSince = now - 3000
+      this.hoverSeen = now
+    }
+    this.highlight.visible = !!hovered && !forging
     this.reticle.visible = !hovered
     // A gaze that flickers off the thing (its edge, a gap between tripod legs) doesn't restart the fade.
     const hid = hovered?.entity.id ?? null
-    if (hid) {
+    if (hid && !forging) {
       if (hid !== this.hoverId || now - this.hoverSeen > 4000) this.hoverSince = now
       this.hoverId = hid
       this.hoverSeen = now
     }
-    if (hovered) {
+    if (hovered && !forging) {
       // Gen loop 7: in quickly, then once you've looked for a second it settles to a faint glow.
       const held = (now - this.hoverSince) / 1000
       const fade = Math.min(1, held / 0.2) * (0.22 + 0.78 * (1 - smoothstep01((held - 1.0) / 0.9)))

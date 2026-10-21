@@ -10,7 +10,8 @@ import { balancedJson } from '../json.ts'
 export type Vec3 = [number, number, number]
 
 export const MATERIALS = ['matte', 'wood', 'metal', 'glass', 'stone'] as const
-export const SHAPES = ['box', 'cylinder', 'cone', 'sphere', 'torus', 'capsule'] as const
+// Gen loop 8: roof (hip roof, curved upswept eaves) and shell (a cupped plate) give real silhouettes (shapes.ts).
+export const SHAPES = ['box', 'cylinder', 'cone', 'sphere', 'torus', 'capsule', 'roof', 'shell'] as const
 /**
  * The forge's extra shapes (progressive generation): a swept tapered tube, a lathe profile and an extruded
  * outline. Only forged (high-quality) kinds use them; Haiku's `define` keeps the six primitives above.
