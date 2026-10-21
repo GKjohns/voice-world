@@ -1,0 +1,3595 @@
+{
+ "loop": "loop9",
+ "url": "http://localhost:3091/",
+ "startedAt": "2026-10-21T14:20:04.731Z",
+ "minutes": 2.4,
+ "cost": {
+  "trackedUsd": 0.2289,
+  "forgeLedgerDeltaUsd": 0.245,
+  "forgeLedgerTotalUsd": 6.41,
+  "gatewayUsedDeltaUsd": 0.2493,
+  "gatewayBalanceUsd": 82.692316943,
+  "note": "gatewayUsedDelta is account-wide (any other use of the account in the window counts too) and can lag a few minutes."
+ },
+ "results": [
+  {
+   "id": "flytrap",
+   "axis": "organic",
+   "text": "a giant venus flytrap right in front of me",
+   "fresh": true,
+   "kind": "venus_flytrap",
+   "tier": "good",
+   "outcome": "refined",
+   "draftParts": 8,
+   "finalParts": 39,
+   "timings": {
+    "firstOp": 1424,
+    "standIn": 1424,
+    "draft": 1816,
+    "draftDefine": 3339,
+    "intentDone": 3567,
+    "refineStart": 1830,
+    "firstPart": 5497,
+    "recognizable": 9813,
+    "streamEnd": 13393,
+    "swap": 13399,
+    "polishVerdict": null,
+    "settled": 13749
+   },
+   "usd": {
+    "forge": 0.0342,
+    "intentEst": 0.003,
+    "total": 0.0372
+   },
+   "fps": {
+    "avg": 60,
+    "worstGapMs": 17
+   },
+   "census": [
+    "venus_flytrap(good)"
+   ],
+   "stills": {
+    "1_draft": "stills/flytrap_1_draft.jpg",
+    "2_refining": "stills/flytrap_2_refining.jpg",
+    "3_final": "stills/flytrap_3_final.jpg"
+   },
+   "video": "videos/flytrap.mp4",
+   "videoMB": 0.2,
+   "videoLeadS": 2,
+   "errors": [],
+   "timeline": [
+    {
+     "t": 1416,
+     "type": "req",
+     "path": "/api/intent"
+    },
+    {
+     "t": 1424,
+     "type": "op",
+     "op": "spawn",
+     "kind": "venus_flytrap"
+    },
+    {
+     "t": 1440,
+     "type": "req",
+     "path": "/api/forge"
+    },
+    {
+     "t": 1440,
+     "type": "forge_stage",
+     "stage": "refine"
+    },
+    {
+     "t": 1816,
+     "type": "draft_part",
+     "kind": "venus_flytrap"
+    },
+    {
+     "t": 3339,
+     "type": "op",
+     "op": "define",
+     "kind": "venus_flytrap",
+     "parts": 8
+    },
+    {
+     "t": 3501,
+     "type": "op",
+     "op": "say"
+    },
+    {
+     "t": 3567,
+     "type": "intent_done",
+     "ms": 3543,
+     "firstOpMs": 1391,
+     "model": "haiku"
+    },
+    {
+     "t": 5472,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 6034,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 6651,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 7727,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 7739,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 7915,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 8512,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 8512,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 9751,
+     "type": "forge_parts",
+     "n": 12
+    },
+    {
+     "t": 10307,
+     "type": "forge_parts",
+     "n": 2
+    },
+    {
+     "t": 10829,
+     "type": "forge_parts",
+     "n": 2
+    },
+    {
+     "t": 11506,
+     "type": "forge_parts",
+     "n": 2
+    },
+    {
+     "t": 11510,
+     "type": "forge_parts",
+     "n": 2
+    },
+    {
+     "t": 12043,
+     "type": "forge_parts",
+     "n": 2
+    },
+    {
+     "t": 12106,
+     "type": "forge_parts",
+     "n": 2
+    },
+    {
+     "t": 12964,
+     "type": "forge_parts",
+     "n": 6
+    },
+    {
+     "t": 13393,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 13393,
+     "type": "forge_done",
+     "ok": true,
+     "n": 39,
+     "usd": 0.034245,
+     "firstPartMs": 4041,
+     "ms": 11961
+    }
+   ],
+   "samples": [
+    {
+     "t": 14,
+     "forming": false,
+     "refining": false,
+     "added": 0,
+     "queue": 0,
+     "ghost": null
+    },
+    {
+     "t": 1830,
+     "forming": false,
+     "refining": true,
+     "added": 0,
+     "queue": 0,
+     "ghost": 1
+    },
+    {
+     "t": 5480,
+     "forming": false,
+     "refining": true,
+     "added": 0,
+     "queue": 1,
+     "ghost": 1
+    },
+    {
+     "t": 5497,
+     "forming": false,
+     "refining": true,
+     "added": 1,
+     "queue": 0,
+     "ghost": 1
+    },
+    {
+     "t": 6046,
+     "forming": false,
+     "refining": true,
+     "added": 1,
+     "queue": 1,
+     "ghost": 1
+    },
+    {
+     "t": 6063,
+     "forming": false,
+     "refining": true,
+     "added": 2,
+     "queue": 0,
+     "ghost": 1
+    },
+    {
+     "t": 6662,
+     "forming": false,
+     "refining": true,
+     "added": 2,
+     "queue": 1,
+     "ghost": 1
+    },
+    {
+     "t": 6679,
+     "forming": false,
+     "refining": true,
+     "added": 3,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 7730,
+     "forming": false,
+     "refining": true,
+     "added": 3,
+     "queue": 1,
+     "ghost": 0
+    },
+    {
+     "t": 7746,
+     "forming": false,
+     "refining": true,
+     "added": 4,
+     "queue": 1,
+     "ghost": 0
+    },
+    {
+     "t": 7763,
+     "forming": false,
+     "refining": true,
+     "added": 5,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 7930,
+     "forming": false,
+     "refining": true,
+     "added": 5,
+     "queue": 1,
+     "ghost": 0
+    },
+    {
+     "t": 7946,
+     "forming": false,
+     "refining": true,
+     "added": 6,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 8513,
+     "forming": false,
+     "refining": true,
+     "added": 6,
+     "queue": 2,
+     "ghost": 0
+    },
+    {
+     "t": 8530,
+     "forming": false,
+     "refining": true,
+     "added": 8,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 9763,
+     "forming": false,
+     "refining": true,
+     "added": 8,
+     "queue": 12,
+     "ghost": 0
+    },
+    {
+     "t": 9780,
+     "forming": false,
+     "refining": true,
+     "added": 12,
+     "queue": 8,
+     "ghost": 0
+    },
+    {
+     "t": 9796,
+     "forming": false,
+     "refining": true,
+     "added": 16,
+     "queue": 4,
+     "ghost": 0
+    },
+    {
+     "t": 9813,
+     "forming": false,
+     "refining": true,
+     "added": 20,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 10312,
+     "forming": false,
+     "refining": true,
+     "added": 20,
+     "queue": 2,
+     "ghost": 0
+    },
+    {
+     "t": 10329,
+     "forming": false,
+     "refining": true,
+     "added": 22,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 10829,
+     "forming": false,
+     "refining": true,
+     "added": 22,
+     "queue": 2,
+     "ghost": 0
+    },
+    {
+     "t": 10846,
+     "forming": false,
+     "refining": true,
+     "added": 24,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 11513,
+     "forming": false,
+     "refining": true,
+     "added": 24,
+     "queue": 4,
+     "ghost": 0
+    },
+    {
+     "t": 11529,
+     "forming": false,
+     "refining": true,
+     "added": 28,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 12046,
+     "forming": false,
+     "refining": true,
+     "added": 28,
+     "queue": 2,
+     "ghost": 0
+    },
+    {
+     "t": 12062,
+     "forming": false,
+     "refining": true,
+     "added": 30,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 12112,
+     "forming": false,
+     "refining": true,
+     "added": 30,
+     "queue": 2,
+     "ghost": 0
+    },
+    {
+     "t": 12130,
+     "forming": false,
+     "refining": true,
+     "added": 32,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 12980,
+     "forming": false,
+     "refining": true,
+     "added": 32,
+     "queue": 6,
+     "ghost": 0
+    },
+    {
+     "t": 12996,
+     "forming": false,
+     "refining": true,
+     "added": 36,
+     "queue": 2,
+     "ghost": 0
+    },
+    {
+     "t": 13012,
+     "forming": false,
+     "refining": true,
+     "added": 38,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 13402,
+     "forming": false,
+     "refining": false,
+     "added": 0,
+     "queue": 0,
+     "ghost": null
+    }
+   ]
+  },
+  {
+   "id": "locomotive",
+   "axis": "mechanical",
+   "text": "a vintage steam locomotive over there",
+   "fresh": true,
+   "kind": "steam_locomotive",
+   "tier": "good",
+   "outcome": "refined",
+   "draftParts": 13,
+   "finalParts": 44,
+   "timings": {
+    "firstOp": 1528,
+    "standIn": 1528,
+    "draft": 1855,
+    "draftDefine": 4669,
+    "intentDone": 4744,
+    "refineStart": 1858,
+    "firstPart": 5908,
+    "recognizable": 10459,
+    "streamEnd": 15333,
+    "swap": 15338,
+    "polishVerdict": null,
+    "settled": 15688
+   },
+   "usd": {
+    "forge": 0.024,
+    "intentEst": 0.003,
+    "total": 0.027
+   },
+   "fps": {
+    "avg": 60,
+    "worstGapMs": 17
+   },
+   "census": [
+    "steam_locomotive(good)"
+   ],
+   "stills": {
+    "1_draft": "stills/locomotive_1_draft.jpg",
+    "2_refining": "stills/locomotive_2_refining.jpg",
+    "3_final": "stills/locomotive_3_final.jpg"
+   },
+   "video": "videos/locomotive.mp4",
+   "videoMB": 0.3,
+   "videoLeadS": 2,
+   "errors": [],
+   "timeline": [
+    {
+     "t": 1521,
+     "type": "req",
+     "path": "/api/intent"
+    },
+    {
+     "t": 1528,
+     "type": "op",
+     "op": "spawn",
+     "kind": "steam_locomotive"
+    },
+    {
+     "t": 1541,
+     "type": "req",
+     "path": "/api/forge"
+    },
+    {
+     "t": 1542,
+     "type": "forge_stage",
+     "stage": "refine"
+    },
+    {
+     "t": 1855,
+     "type": "draft_part",
+     "kind": "steam_locomotive"
+    },
+    {
+     "t": 4669,
+     "type": "op",
+     "op": "define",
+     "kind": "steam_locomotive",
+     "parts": 13
+    },
+    {
+     "t": 4728,
+     "type": "op",
+     "op": "say"
+    },
+    {
+     "t": 4744,
+     "type": "intent_done",
+     "ms": 4737,
+     "firstOpMs": 1512,
+     "model": "haiku"
+    },
+    {
+     "t": 5885,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 6434,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 6460,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 7018,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 7569,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 7581,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 8230,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 8233,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 8694,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 8882,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 9250,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 9403,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 9909,
+     "type": "forge_parts",
+     "n": 6
+    },
+    {
+     "t": 10435,
+     "type": "forge_parts",
+     "n": 6
+    },
+    {
+     "t": 10969,
+     "type": "forge_parts",
+     "n": 2
+    },
+    {
+     "t": 11106,
+     "type": "forge_parts",
+     "n": 2
+    },
+    {
+     "t": 11603,
+     "type": "forge_parts",
+     "n": 2
+    },
+    {
+     "t": 11712,
+     "type": "forge_parts",
+     "n": 2
+    },
+    {
+     "t": 12134,
+     "type": "forge_parts",
+     "n": 2
+    },
+    {
+     "t": 12728,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 12868,
+     "type": "forge_parts",
+     "n": 2
+    },
+    {
+     "t": 13308,
+     "type": "forge_parts",
+     "n": 2
+    },
+    {
+     "t": 13407,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 14131,
+     "type": "forge_parts",
+     "n": 2
+    },
+    {
+     "t": 14511,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 15333,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 15333,
+     "type": "forge_done",
+     "ok": true,
+     "n": 44,
+     "usd": 0.0240442,
+     "firstPartMs": 4351,
+     "ms": 13795
+    }
+   ],
+   "samples": [
+    {
+     "t": 10,
+     "forming": false,
+     "refining": false,
+     "added": 0,
+     "queue": 0,
+     "ghost": null
+    },
+    {
+     "t": 1858,
+     "forming": false,
+     "refining": true,
+     "added": 0,
+     "queue": 0,
+     "ghost": 1
+    },
+    {
+     "t": 5892,
+     "forming": false,
+     "refining": true,
+     "added": 0,
+     "queue": 1,
+     "ghost": 1
+    },
+    {
+     "t": 5908,
+     "forming": false,
+     "refining": true,
+     "added": 1,
+     "queue": 0,
+     "ghost": 1
+    },
+    {
+     "t": 6442,
+     "forming": false,
+     "refining": true,
+     "added": 1,
+     "queue": 1,
+     "ghost": 1
+    },
+    {
+     "t": 6458,
+     "forming": false,
+     "refining": true,
+     "added": 2,
+     "queue": 0,
+     "ghost": 1
+    },
+    {
+     "t": 6476,
+     "forming": false,
+     "refining": true,
+     "added": 2,
+     "queue": 1,
+     "ghost": 1
+    },
+    {
+     "t": 6492,
+     "forming": false,
+     "refining": true,
+     "added": 3,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 7025,
+     "forming": false,
+     "refining": true,
+     "added": 3,
+     "queue": 1,
+     "ghost": 0
+    },
+    {
+     "t": 7042,
+     "forming": false,
+     "refining": true,
+     "added": 4,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 7576,
+     "forming": false,
+     "refining": true,
+     "added": 4,
+     "queue": 1,
+     "ghost": 0
+    },
+    {
+     "t": 7592,
+     "forming": false,
+     "refining": true,
+     "added": 5,
+     "queue": 1,
+     "ghost": 0
+    },
+    {
+     "t": 7609,
+     "forming": false,
+     "refining": true,
+     "added": 6,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 8242,
+     "forming": false,
+     "refining": true,
+     "added": 6,
+     "queue": 2,
+     "ghost": 0
+    },
+    {
+     "t": 8259,
+     "forming": false,
+     "refining": true,
+     "added": 8,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 8708,
+     "forming": false,
+     "refining": true,
+     "added": 8,
+     "queue": 1,
+     "ghost": 0
+    },
+    {
+     "t": 8726,
+     "forming": false,
+     "refining": true,
+     "added": 9,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 8892,
+     "forming": false,
+     "refining": true,
+     "added": 9,
+     "queue": 1,
+     "ghost": 0
+    },
+    {
+     "t": 8908,
+     "forming": false,
+     "refining": true,
+     "added": 10,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 9259,
+     "forming": false,
+     "refining": true,
+     "added": 10,
+     "queue": 1,
+     "ghost": 0
+    },
+    {
+     "t": 9276,
+     "forming": false,
+     "refining": true,
+     "added": 11,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 9408,
+     "forming": false,
+     "refining": true,
+     "added": 11,
+     "queue": 1,
+     "ghost": 0
+    },
+    {
+     "t": 9426,
+     "forming": false,
+     "refining": true,
+     "added": 12,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 9925,
+     "forming": false,
+     "refining": true,
+     "added": 12,
+     "queue": 6,
+     "ghost": 0
+    },
+    {
+     "t": 9942,
+     "forming": false,
+     "refining": true,
+     "added": 16,
+     "queue": 2,
+     "ghost": 0
+    },
+    {
+     "t": 9959,
+     "forming": false,
+     "refining": true,
+     "added": 18,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 10442,
+     "forming": false,
+     "refining": true,
+     "added": 18,
+     "queue": 6,
+     "ghost": 0
+    },
+    {
+     "t": 10459,
+     "forming": false,
+     "refining": true,
+     "added": 22,
+     "queue": 2,
+     "ghost": 0
+    },
+    {
+     "t": 10476,
+     "forming": false,
+     "refining": true,
+     "added": 24,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 10975,
+     "forming": false,
+     "refining": true,
+     "added": 24,
+     "queue": 2,
+     "ghost": 0
+    },
+    {
+     "t": 10992,
+     "forming": false,
+     "refining": true,
+     "added": 26,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 11108,
+     "forming": false,
+     "refining": true,
+     "added": 26,
+     "queue": 2,
+     "ghost": 0
+    },
+    {
+     "t": 11125,
+     "forming": false,
+     "refining": true,
+     "added": 28,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 11608,
+     "forming": false,
+     "refining": true,
+     "added": 28,
+     "queue": 2,
+     "ghost": 0
+    },
+    {
+     "t": 11625,
+     "forming": false,
+     "refining": true,
+     "added": 30,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 11726,
+     "forming": false,
+     "refining": true,
+     "added": 30,
+     "queue": 2,
+     "ghost": 0
+    },
+    {
+     "t": 11742,
+     "forming": false,
+     "refining": true,
+     "added": 32,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 12142,
+     "forming": false,
+     "refining": true,
+     "added": 32,
+     "queue": 2,
+     "ghost": 0
+    },
+    {
+     "t": 12159,
+     "forming": false,
+     "refining": true,
+     "added": 34,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 12742,
+     "forming": false,
+     "refining": true,
+     "added": 34,
+     "queue": 1,
+     "ghost": 0
+    },
+    {
+     "t": 12759,
+     "forming": false,
+     "refining": true,
+     "added": 35,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 12875,
+     "forming": false,
+     "refining": true,
+     "added": 35,
+     "queue": 2,
+     "ghost": 0
+    },
+    {
+     "t": 12892,
+     "forming": false,
+     "refining": true,
+     "added": 37,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 13309,
+     "forming": false,
+     "refining": true,
+     "added": 37,
+     "queue": 2,
+     "ghost": 0
+    },
+    {
+     "t": 13326,
+     "forming": false,
+     "refining": true,
+     "added": 39,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 13408,
+     "forming": false,
+     "refining": true,
+     "added": 39,
+     "queue": 1,
+     "ghost": 0
+    },
+    {
+     "t": 13425,
+     "forming": false,
+     "refining": true,
+     "added": 40,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 14142,
+     "forming": false,
+     "refining": true,
+     "added": 40,
+     "queue": 2,
+     "ghost": 0
+    },
+    {
+     "t": 14158,
+     "forming": false,
+     "refining": true,
+     "added": 42,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 14525,
+     "forming": false,
+     "refining": true,
+     "added": 42,
+     "queue": 1,
+     "ghost": 0
+    },
+    {
+     "t": 14542,
+     "forming": false,
+     "refining": true,
+     "added": 43,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 15341,
+     "forming": false,
+     "refining": false,
+     "added": 0,
+     "queue": 0,
+     "ghost": null
+    }
+   ]
+  },
+  {
+   "id": "pagoda",
+   "axis": "building",
+   "text": "a japanese pagoda over there",
+   "fresh": true,
+   "kind": "pagoda",
+   "tier": "good",
+   "outcome": "refined",
+   "draftParts": 9,
+   "finalParts": 46,
+   "timings": {
+    "firstOp": 1225,
+    "standIn": 1225,
+    "draft": 1602,
+    "draftDefine": 3081,
+    "intentDone": 3188,
+    "refineStart": 1614,
+    "firstPart": 3481,
+    "recognizable": 7930,
+    "streamEnd": 12134,
+    "swap": 12137,
+    "polishVerdict": null,
+    "settled": 12487
+   },
+   "usd": {
+    "forge": 0.0234,
+    "intentEst": 0.003,
+    "total": 0.0264
+   },
+   "fps": {
+    "avg": 60,
+    "worstGapMs": 17
+   },
+   "census": [
+    "pagoda(good)"
+   ],
+   "stills": {
+    "1_draft": "stills/pagoda_1_draft.jpg",
+    "2_refining": "stills/pagoda_2_refining.jpg",
+    "3_final": "stills/pagoda_3_final.jpg"
+   },
+   "video": "videos/pagoda.mp4",
+   "videoMB": 0.2,
+   "videoLeadS": 2,
+   "errors": [],
+   "timeline": [
+    {
+     "t": 1219,
+     "type": "req",
+     "path": "/api/intent"
+    },
+    {
+     "t": 1225,
+     "type": "op",
+     "op": "spawn",
+     "kind": "pagoda"
+    },
+    {
+     "t": 1239,
+     "type": "req",
+     "path": "/api/forge"
+    },
+    {
+     "t": 1239,
+     "type": "forge_stage",
+     "stage": "refine"
+    },
+    {
+     "t": 1602,
+     "type": "draft_part",
+     "kind": "pagoda"
+    },
+    {
+     "t": 3081,
+     "type": "op",
+     "op": "define",
+     "kind": "pagoda",
+     "parts": 9
+    },
+    {
+     "t": 3183,
+     "type": "op",
+     "op": "say"
+    },
+    {
+     "t": 3188,
+     "type": "intent_done",
+     "ms": 3180,
+     "firstOpMs": 1212,
+     "model": "haiku"
+    },
+    {
+     "t": 3462,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 3465,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 3900,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 3958,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 4222,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 4363,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 4562,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 4782,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 4969,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 5295,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 5958,
+     "type": "forge_parts",
+     "n": 5
+    },
+    {
+     "t": 6215,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 6506,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 6856,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 7152,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 7408,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 7665,
+     "type": "forge_parts",
+     "n": 2
+    },
+    {
+     "t": 7909,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 8158,
+     "type": "forge_parts",
+     "n": 2
+    },
+    {
+     "t": 8418,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 8561,
+     "type": "forge_parts",
+     "n": 2
+    },
+    {
+     "t": 8815,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 9019,
+     "type": "forge_parts",
+     "n": 2
+    },
+    {
+     "t": 9708,
+     "type": "forge_parts",
+     "n": 5
+    },
+    {
+     "t": 9993,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 10256,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 10516,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 10655,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 11039,
+     "type": "forge_parts",
+     "n": 2
+    },
+    {
+     "t": 11326,
+     "type": "forge_parts",
+     "n": 2
+    },
+    {
+     "t": 12134,
+     "type": "forge_parts",
+     "n": 2
+    },
+    {
+     "t": 12134,
+     "type": "forge_done",
+     "ok": true,
+     "n": 46,
+     "usd": 0.0233882,
+     "firstPartMs": 2229,
+     "ms": 10900
+    }
+   ],
+   "samples": [
+    {
+     "t": 14,
+     "forming": false,
+     "refining": false,
+     "added": 0,
+     "queue": 0,
+     "ghost": null
+    },
+    {
+     "t": 1614,
+     "forming": false,
+     "refining": true,
+     "added": 0,
+     "queue": 0,
+     "ghost": 1
+    },
+    {
+     "t": 3464,
+     "forming": false,
+     "refining": true,
+     "added": 0,
+     "queue": 1,
+     "ghost": 1
+    },
+    {
+     "t": 3481,
+     "forming": false,
+     "refining": true,
+     "added": 1,
+     "queue": 1,
+     "ghost": 1
+    },
+    {
+     "t": 3498,
+     "forming": false,
+     "refining": true,
+     "added": 2,
+     "queue": 0,
+     "ghost": 1
+    },
+    {
+     "t": 3915,
+     "forming": false,
+     "refining": true,
+     "added": 2,
+     "queue": 1,
+     "ghost": 1
+    },
+    {
+     "t": 3931,
+     "forming": false,
+     "refining": true,
+     "added": 3,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 3964,
+     "forming": false,
+     "refining": true,
+     "added": 3,
+     "queue": 1,
+     "ghost": 0
+    },
+    {
+     "t": 3980,
+     "forming": false,
+     "refining": true,
+     "added": 4,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 4230,
+     "forming": false,
+     "refining": true,
+     "added": 4,
+     "queue": 1,
+     "ghost": 0
+    },
+    {
+     "t": 4247,
+     "forming": false,
+     "refining": true,
+     "added": 5,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 4364,
+     "forming": false,
+     "refining": true,
+     "added": 5,
+     "queue": 1,
+     "ghost": 0
+    },
+    {
+     "t": 4381,
+     "forming": false,
+     "refining": true,
+     "added": 6,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 4564,
+     "forming": false,
+     "refining": true,
+     "added": 6,
+     "queue": 1,
+     "ghost": 0
+    },
+    {
+     "t": 4581,
+     "forming": false,
+     "refining": true,
+     "added": 7,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 4797,
+     "forming": false,
+     "refining": true,
+     "added": 7,
+     "queue": 1,
+     "ghost": 0
+    },
+    {
+     "t": 4814,
+     "forming": false,
+     "refining": true,
+     "added": 8,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 4981,
+     "forming": false,
+     "refining": true,
+     "added": 8,
+     "queue": 1,
+     "ghost": 0
+    },
+    {
+     "t": 4997,
+     "forming": false,
+     "refining": true,
+     "added": 9,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 5297,
+     "forming": false,
+     "refining": true,
+     "added": 9,
+     "queue": 1,
+     "ghost": 0
+    },
+    {
+     "t": 5315,
+     "forming": false,
+     "refining": true,
+     "added": 10,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 5964,
+     "forming": false,
+     "refining": true,
+     "added": 10,
+     "queue": 5,
+     "ghost": 0
+    },
+    {
+     "t": 5981,
+     "forming": false,
+     "refining": true,
+     "added": 14,
+     "queue": 1,
+     "ghost": 0
+    },
+    {
+     "t": 5997,
+     "forming": false,
+     "refining": true,
+     "added": 15,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 6231,
+     "forming": false,
+     "refining": true,
+     "added": 15,
+     "queue": 1,
+     "ghost": 0
+    },
+    {
+     "t": 6248,
+     "forming": false,
+     "refining": true,
+     "added": 16,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 6514,
+     "forming": false,
+     "refining": true,
+     "added": 16,
+     "queue": 1,
+     "ghost": 0
+    },
+    {
+     "t": 6530,
+     "forming": false,
+     "refining": true,
+     "added": 17,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 6864,
+     "forming": false,
+     "refining": true,
+     "added": 17,
+     "queue": 1,
+     "ghost": 0
+    },
+    {
+     "t": 6881,
+     "forming": false,
+     "refining": true,
+     "added": 18,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 7164,
+     "forming": false,
+     "refining": true,
+     "added": 18,
+     "queue": 1,
+     "ghost": 0
+    },
+    {
+     "t": 7181,
+     "forming": false,
+     "refining": true,
+     "added": 19,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 7414,
+     "forming": false,
+     "refining": true,
+     "added": 19,
+     "queue": 1,
+     "ghost": 0
+    },
+    {
+     "t": 7430,
+     "forming": false,
+     "refining": true,
+     "added": 20,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 7681,
+     "forming": false,
+     "refining": true,
+     "added": 20,
+     "queue": 2,
+     "ghost": 0
+    },
+    {
+     "t": 7697,
+     "forming": false,
+     "refining": true,
+     "added": 22,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 7915,
+     "forming": false,
+     "refining": true,
+     "added": 22,
+     "queue": 1,
+     "ghost": 0
+    },
+    {
+     "t": 7930,
+     "forming": false,
+     "refining": true,
+     "added": 23,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 8164,
+     "forming": false,
+     "refining": true,
+     "added": 23,
+     "queue": 2,
+     "ghost": 0
+    },
+    {
+     "t": 8181,
+     "forming": false,
+     "refining": true,
+     "added": 25,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 8431,
+     "forming": false,
+     "refining": true,
+     "added": 25,
+     "queue": 1,
+     "ghost": 0
+    },
+    {
+     "t": 8448,
+     "forming": false,
+     "refining": true,
+     "added": 26,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 8564,
+     "forming": false,
+     "refining": true,
+     "added": 26,
+     "queue": 2,
+     "ghost": 0
+    },
+    {
+     "t": 8580,
+     "forming": false,
+     "refining": true,
+     "added": 28,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 8831,
+     "forming": false,
+     "refining": true,
+     "added": 28,
+     "queue": 1,
+     "ghost": 0
+    },
+    {
+     "t": 8847,
+     "forming": false,
+     "refining": true,
+     "added": 29,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 9030,
+     "forming": false,
+     "refining": true,
+     "added": 29,
+     "queue": 2,
+     "ghost": 0
+    },
+    {
+     "t": 9048,
+     "forming": false,
+     "refining": true,
+     "added": 31,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 9714,
+     "forming": false,
+     "refining": true,
+     "added": 31,
+     "queue": 5,
+     "ghost": 0
+    },
+    {
+     "t": 9731,
+     "forming": false,
+     "refining": true,
+     "added": 35,
+     "queue": 1,
+     "ghost": 0
+    },
+    {
+     "t": 9748,
+     "forming": false,
+     "refining": true,
+     "added": 36,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 9997,
+     "forming": false,
+     "refining": true,
+     "added": 36,
+     "queue": 1,
+     "ghost": 0
+    },
+    {
+     "t": 10014,
+     "forming": false,
+     "refining": true,
+     "added": 37,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 10264,
+     "forming": false,
+     "refining": true,
+     "added": 37,
+     "queue": 1,
+     "ghost": 0
+    },
+    {
+     "t": 10281,
+     "forming": false,
+     "refining": true,
+     "added": 38,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 10530,
+     "forming": false,
+     "refining": true,
+     "added": 38,
+     "queue": 1,
+     "ghost": 0
+    },
+    {
+     "t": 10547,
+     "forming": false,
+     "refining": true,
+     "added": 39,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 10664,
+     "forming": false,
+     "refining": true,
+     "added": 39,
+     "queue": 1,
+     "ghost": 0
+    },
+    {
+     "t": 10681,
+     "forming": false,
+     "refining": true,
+     "added": 40,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 11047,
+     "forming": false,
+     "refining": true,
+     "added": 40,
+     "queue": 2,
+     "ghost": 0
+    },
+    {
+     "t": 11064,
+     "forming": false,
+     "refining": true,
+     "added": 42,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 11331,
+     "forming": false,
+     "refining": true,
+     "added": 42,
+     "queue": 2,
+     "ghost": 0
+    },
+    {
+     "t": 11348,
+     "forming": false,
+     "refining": true,
+     "added": 44,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 12147,
+     "forming": false,
+     "refining": false,
+     "added": 0,
+     "queue": 0,
+     "ghost": null
+    }
+   ]
+  },
+  {
+   "id": "triceratops",
+   "axis": "creature",
+   "text": "a friendly triceratops right in front of me",
+   "fresh": true,
+   "kind": "triceratops",
+   "tier": "good",
+   "outcome": "refined",
+   "draftParts": 14,
+   "finalParts": 52,
+   "timings": {
+    "firstOp": 1628,
+    "standIn": 1628,
+    "draft": 1854,
+    "draftDefine": 4770,
+    "intentDone": 4894,
+    "refineStart": 1866,
+    "firstPart": 4666,
+    "recognizable": 10416,
+    "streamEnd": 13294,
+    "swap": 13304,
+    "polishVerdict": null,
+    "settled": 13654
+   },
+   "usd": {
+    "forge": 0.0246,
+    "intentEst": 0.003,
+    "total": 0.0276
+   },
+   "fps": {
+    "avg": 60,
+    "worstGapMs": 17
+   },
+   "census": [
+    "triceratops(good)"
+   ],
+   "stills": {
+    "1_draft": "stills/triceratops_1_draft.jpg",
+    "2_refining": "stills/triceratops_2_refining.jpg",
+    "3_final": "stills/triceratops_3_final.jpg"
+   },
+   "video": "videos/triceratops.mp4",
+   "videoMB": 0.2,
+   "videoLeadS": 2,
+   "errors": [],
+   "timeline": [
+    {
+     "t": 1621,
+     "type": "req",
+     "path": "/api/intent"
+    },
+    {
+     "t": 1628,
+     "type": "op",
+     "op": "spawn",
+     "kind": "triceratops"
+    },
+    {
+     "t": 1638,
+     "type": "req",
+     "path": "/api/forge"
+    },
+    {
+     "t": 1638,
+     "type": "forge_stage",
+     "stage": "refine"
+    },
+    {
+     "t": 1854,
+     "type": "draft_part",
+     "kind": "triceratops"
+    },
+    {
+     "t": 4642,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 4642,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 4770,
+     "type": "op",
+     "op": "define",
+     "kind": "triceratops",
+     "parts": 14
+    },
+    {
+     "t": 4882,
+     "type": "op",
+     "op": "say"
+    },
+    {
+     "t": 4894,
+     "type": "intent_done",
+     "ms": 4886,
+     "firstOpMs": 1614,
+     "model": "haiku"
+    },
+    {
+     "t": 5421,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 5972,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 5972,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 6644,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 7118,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 7133,
+     "type": "forge_parts",
+     "n": 2
+    },
+    {
+     "t": 7133,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 7693,
+     "type": "forge_parts",
+     "n": 2
+    },
+    {
+     "t": 8237,
+     "type": "forge_parts",
+     "n": 2
+    },
+    {
+     "t": 8237,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 8761,
+     "type": "forge_parts",
+     "n": 2
+    },
+    {
+     "t": 8761,
+     "type": "forge_parts",
+     "n": 2
+    },
+    {
+     "t": 9295,
+     "type": "forge_parts",
+     "n": 2
+    },
+    {
+     "t": 9307,
+     "type": "forge_parts",
+     "n": 2
+    },
+    {
+     "t": 9891,
+     "type": "forge_parts",
+     "n": 2
+    },
+    {
+     "t": 10385,
+     "type": "forge_parts",
+     "n": 2
+    },
+    {
+     "t": 10645,
+     "type": "forge_parts",
+     "n": 2
+    },
+    {
+     "t": 10850,
+     "type": "forge_parts",
+     "n": 2
+    },
+    {
+     "t": 11351,
+     "type": "forge_parts",
+     "n": 6
+    },
+    {
+     "t": 11691,
+     "type": "forge_parts",
+     "n": 6
+    },
+    {
+     "t": 12306,
+     "type": "forge_parts",
+     "n": 4
+    },
+    {
+     "t": 12601,
+     "type": "forge_parts",
+     "n": 2
+    },
+    {
+     "t": 12947,
+     "type": "forge_parts",
+     "n": 2
+    },
+    {
+     "t": 13294,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 13294,
+     "type": "forge_done",
+     "ok": true,
+     "n": 52,
+     "usd": 0.0245602,
+     "firstPartMs": 3008,
+     "ms": 11660
+    }
+   ],
+   "samples": [
+    {
+     "t": 16,
+     "forming": false,
+     "refining": false,
+     "added": 0,
+     "queue": 0,
+     "ghost": null
+    },
+    {
+     "t": 1866,
+     "forming": false,
+     "refining": true,
+     "added": 0,
+     "queue": 0,
+     "ghost": 1
+    },
+    {
+     "t": 4649,
+     "forming": false,
+     "refining": true,
+     "added": 0,
+     "queue": 2,
+     "ghost": 1
+    },
+    {
+     "t": 4666,
+     "forming": false,
+     "refining": true,
+     "added": 2,
+     "queue": 0,
+     "ghost": 1
+    },
+    {
+     "t": 5432,
+     "forming": false,
+     "refining": true,
+     "added": 2,
+     "queue": 1,
+     "ghost": 1
+    },
+    {
+     "t": 5449,
+     "forming": false,
+     "refining": true,
+     "added": 3,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 5982,
+     "forming": false,
+     "refining": true,
+     "added": 3,
+     "queue": 2,
+     "ghost": 0
+    },
+    {
+     "t": 5999,
+     "forming": false,
+     "refining": true,
+     "added": 5,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 6649,
+     "forming": false,
+     "refining": true,
+     "added": 5,
+     "queue": 1,
+     "ghost": 0
+    },
+    {
+     "t": 6666,
+     "forming": false,
+     "refining": true,
+     "added": 6,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 7132,
+     "forming": false,
+     "refining": true,
+     "added": 6,
+     "queue": 1,
+     "ghost": 0
+    },
+    {
+     "t": 7149,
+     "forming": false,
+     "refining": true,
+     "added": 7,
+     "queue": 3,
+     "ghost": 0
+    },
+    {
+     "t": 7165,
+     "forming": false,
+     "refining": true,
+     "added": 10,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 7699,
+     "forming": false,
+     "refining": true,
+     "added": 10,
+     "queue": 2,
+     "ghost": 0
+    },
+    {
+     "t": 7716,
+     "forming": false,
+     "refining": true,
+     "added": 12,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 8249,
+     "forming": false,
+     "refining": true,
+     "added": 12,
+     "queue": 3,
+     "ghost": 0
+    },
+    {
+     "t": 8266,
+     "forming": false,
+     "refining": true,
+     "added": 15,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 8766,
+     "forming": false,
+     "refining": true,
+     "added": 15,
+     "queue": 4,
+     "ghost": 0
+    },
+    {
+     "t": 8783,
+     "forming": false,
+     "refining": true,
+     "added": 19,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 9299,
+     "forming": false,
+     "refining": true,
+     "added": 19,
+     "queue": 2,
+     "ghost": 0
+    },
+    {
+     "t": 9316,
+     "forming": false,
+     "refining": true,
+     "added": 21,
+     "queue": 2,
+     "ghost": 0
+    },
+    {
+     "t": 9332,
+     "forming": false,
+     "refining": true,
+     "added": 23,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 9899,
+     "forming": false,
+     "refining": true,
+     "added": 23,
+     "queue": 2,
+     "ghost": 0
+    },
+    {
+     "t": 9916,
+     "forming": false,
+     "refining": true,
+     "added": 25,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 10399,
+     "forming": false,
+     "refining": true,
+     "added": 25,
+     "queue": 2,
+     "ghost": 0
+    },
+    {
+     "t": 10416,
+     "forming": false,
+     "refining": true,
+     "added": 27,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 10649,
+     "forming": false,
+     "refining": true,
+     "added": 27,
+     "queue": 2,
+     "ghost": 0
+    },
+    {
+     "t": 10665,
+     "forming": false,
+     "refining": true,
+     "added": 29,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 10866,
+     "forming": false,
+     "refining": true,
+     "added": 29,
+     "queue": 2,
+     "ghost": 0
+    },
+    {
+     "t": 10882,
+     "forming": false,
+     "refining": true,
+     "added": 31,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 11365,
+     "forming": false,
+     "refining": true,
+     "added": 31,
+     "queue": 6,
+     "ghost": 0
+    },
+    {
+     "t": 11382,
+     "forming": false,
+     "refining": true,
+     "added": 35,
+     "queue": 2,
+     "ghost": 0
+    },
+    {
+     "t": 11399,
+     "forming": false,
+     "refining": true,
+     "added": 37,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 11699,
+     "forming": false,
+     "refining": true,
+     "added": 37,
+     "queue": 6,
+     "ghost": 0
+    },
+    {
+     "t": 11715,
+     "forming": false,
+     "refining": true,
+     "added": 41,
+     "queue": 2,
+     "ghost": 0
+    },
+    {
+     "t": 11732,
+     "forming": false,
+     "refining": true,
+     "added": 43,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 12316,
+     "forming": false,
+     "refining": true,
+     "added": 43,
+     "queue": 4,
+     "ghost": 0
+    },
+    {
+     "t": 12332,
+     "forming": false,
+     "refining": true,
+     "added": 47,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 12616,
+     "forming": false,
+     "refining": true,
+     "added": 47,
+     "queue": 2,
+     "ghost": 0
+    },
+    {
+     "t": 12632,
+     "forming": false,
+     "refining": true,
+     "added": 49,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 12949,
+     "forming": false,
+     "refining": true,
+     "added": 49,
+     "queue": 2,
+     "ghost": 0
+    },
+    {
+     "t": 12966,
+     "forming": false,
+     "refining": true,
+     "added": 51,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 13306,
+     "forming": false,
+     "refining": false,
+     "added": 0,
+     "queue": 0,
+     "ghost": null
+    }
+   ]
+  },
+  {
+   "id": "telescope",
+   "axis": "small prop",
+   "text": "an old brass telescope on a tripod right in front of me",
+   "fresh": true,
+   "kind": "brass_telescope",
+   "tier": "good",
+   "outcome": "refined",
+   "draftParts": 8,
+   "finalParts": 25,
+   "timings": {
+    "firstOp": 1280,
+    "standIn": 1280,
+    "draft": 1686,
+    "draftDefine": 3314,
+    "intentDone": 3449,
+    "refineStart": 1694,
+    "firstPart": 4278,
+    "recognizable": 8061,
+    "streamEnd": 11260,
+    "swap": 11263,
+    "polishVerdict": null,
+    "settled": 11613
+   },
+   "usd": {
+    "forge": 0.0233,
+    "intentEst": 0.003,
+    "total": 0.0263
+   },
+   "fps": {
+    "avg": 60,
+    "worstGapMs": 17
+   },
+   "census": [
+    "brass_telescope(good)"
+   ],
+   "stills": {
+    "1_draft": "stills/telescope_1_draft.jpg",
+    "2_refining": "stills/telescope_2_refining.jpg",
+    "3_final": "stills/telescope_3_final.jpg"
+   },
+   "video": "videos/telescope.mp4",
+   "videoMB": 0.2,
+   "videoLeadS": 2,
+   "errors": [],
+   "timeline": [
+    {
+     "t": 1273,
+     "type": "req",
+     "path": "/api/intent"
+    },
+    {
+     "t": 1280,
+     "type": "op",
+     "op": "spawn",
+     "kind": "brass_telescope"
+    },
+    {
+     "t": 1289,
+     "type": "req",
+     "path": "/api/forge"
+    },
+    {
+     "t": 1290,
+     "type": "forge_stage",
+     "stage": "refine"
+    },
+    {
+     "t": 1686,
+     "type": "draft_part",
+     "kind": "brass_telescope"
+    },
+    {
+     "t": 3314,
+     "type": "op",
+     "op": "define",
+     "kind": "brass_telescope",
+     "parts": 8
+    },
+    {
+     "t": 3426,
+     "type": "op",
+     "op": "say"
+    },
+    {
+     "t": 3449,
+     "type": "intent_done",
+     "ms": 3441,
+     "firstOpMs": 1266,
+     "model": "haiku"
+    },
+    {
+     "t": 4258,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 4780,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 4830,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 5306,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 5528,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 5884,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 6346,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 6530,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 7027,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 7233,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 7579,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 7777,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 8035,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 8472,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 8832,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 9079,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 9326,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 9628,
+     "type": "forge_parts",
+     "n": 2
+    },
+    {
+     "t": 9907,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 10181,
+     "type": "forge_parts",
+     "n": 2
+    },
+    {
+     "t": 10379,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 10890,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 11260,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 11260,
+     "type": "forge_done",
+     "ok": true,
+     "n": 25,
+     "usd": 0.0233482,
+     "firstPartMs": 2974,
+     "ms": 9975
+    }
+   ],
+   "samples": [
+    {
+     "t": 11,
+     "forming": false,
+     "refining": false,
+     "added": 0,
+     "queue": 0,
+     "ghost": null
+    },
+    {
+     "t": 1694,
+     "forming": false,
+     "refining": true,
+     "added": 0,
+     "queue": 0,
+     "ghost": 1
+    },
+    {
+     "t": 4261,
+     "forming": false,
+     "refining": true,
+     "added": 0,
+     "queue": 1,
+     "ghost": 1
+    },
+    {
+     "t": 4278,
+     "forming": false,
+     "refining": true,
+     "added": 1,
+     "queue": 0,
+     "ghost": 1
+    },
+    {
+     "t": 4794,
+     "forming": false,
+     "refining": true,
+     "added": 1,
+     "queue": 1,
+     "ghost": 1
+    },
+    {
+     "t": 4811,
+     "forming": false,
+     "refining": true,
+     "added": 2,
+     "queue": 0,
+     "ghost": 1
+    },
+    {
+     "t": 4844,
+     "forming": false,
+     "refining": true,
+     "added": 2,
+     "queue": 1,
+     "ghost": 1
+    },
+    {
+     "t": 4861,
+     "forming": false,
+     "refining": true,
+     "added": 3,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 5311,
+     "forming": false,
+     "refining": true,
+     "added": 3,
+     "queue": 1,
+     "ghost": 0
+    },
+    {
+     "t": 5328,
+     "forming": false,
+     "refining": true,
+     "added": 4,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 5528,
+     "forming": false,
+     "refining": true,
+     "added": 4,
+     "queue": 1,
+     "ghost": 0
+    },
+    {
+     "t": 5544,
+     "forming": false,
+     "refining": true,
+     "added": 5,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 5894,
+     "forming": false,
+     "refining": true,
+     "added": 5,
+     "queue": 1,
+     "ghost": 0
+    },
+    {
+     "t": 5911,
+     "forming": false,
+     "refining": true,
+     "added": 6,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 6361,
+     "forming": false,
+     "refining": true,
+     "added": 6,
+     "queue": 1,
+     "ghost": 0
+    },
+    {
+     "t": 6378,
+     "forming": false,
+     "refining": true,
+     "added": 7,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 6544,
+     "forming": false,
+     "refining": true,
+     "added": 7,
+     "queue": 1,
+     "ghost": 0
+    },
+    {
+     "t": 6561,
+     "forming": false,
+     "refining": true,
+     "added": 8,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 7028,
+     "forming": false,
+     "refining": true,
+     "added": 8,
+     "queue": 1,
+     "ghost": 0
+    },
+    {
+     "t": 7044,
+     "forming": false,
+     "refining": true,
+     "added": 9,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 7244,
+     "forming": false,
+     "refining": true,
+     "added": 9,
+     "queue": 1,
+     "ghost": 0
+    },
+    {
+     "t": 7261,
+     "forming": false,
+     "refining": true,
+     "added": 10,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 7594,
+     "forming": false,
+     "refining": true,
+     "added": 10,
+     "queue": 1,
+     "ghost": 0
+    },
+    {
+     "t": 7611,
+     "forming": false,
+     "refining": true,
+     "added": 11,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 7778,
+     "forming": false,
+     "refining": true,
+     "added": 11,
+     "queue": 1,
+     "ghost": 0
+    },
+    {
+     "t": 7794,
+     "forming": false,
+     "refining": true,
+     "added": 12,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 8044,
+     "forming": false,
+     "refining": true,
+     "added": 12,
+     "queue": 1,
+     "ghost": 0
+    },
+    {
+     "t": 8061,
+     "forming": false,
+     "refining": true,
+     "added": 13,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 8478,
+     "forming": false,
+     "refining": true,
+     "added": 13,
+     "queue": 1,
+     "ghost": 0
+    },
+    {
+     "t": 8494,
+     "forming": false,
+     "refining": true,
+     "added": 14,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 8844,
+     "forming": false,
+     "refining": true,
+     "added": 14,
+     "queue": 1,
+     "ghost": 0
+    },
+    {
+     "t": 8861,
+     "forming": false,
+     "refining": true,
+     "added": 15,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 9094,
+     "forming": false,
+     "refining": true,
+     "added": 15,
+     "queue": 1,
+     "ghost": 0
+    },
+    {
+     "t": 9111,
+     "forming": false,
+     "refining": true,
+     "added": 16,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 9328,
+     "forming": false,
+     "refining": true,
+     "added": 16,
+     "queue": 1,
+     "ghost": 0
+    },
+    {
+     "t": 9344,
+     "forming": false,
+     "refining": true,
+     "added": 17,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 9628,
+     "forming": false,
+     "refining": true,
+     "added": 17,
+     "queue": 2,
+     "ghost": 0
+    },
+    {
+     "t": 9644,
+     "forming": false,
+     "refining": true,
+     "added": 19,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 9911,
+     "forming": false,
+     "refining": true,
+     "added": 19,
+     "queue": 1,
+     "ghost": 0
+    },
+    {
+     "t": 9928,
+     "forming": false,
+     "refining": true,
+     "added": 20,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 10194,
+     "forming": false,
+     "refining": true,
+     "added": 20,
+     "queue": 2,
+     "ghost": 0
+    },
+    {
+     "t": 10211,
+     "forming": false,
+     "refining": true,
+     "added": 22,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 10394,
+     "forming": false,
+     "refining": true,
+     "added": 22,
+     "queue": 1,
+     "ghost": 0
+    },
+    {
+     "t": 10410,
+     "forming": false,
+     "refining": true,
+     "added": 23,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 10894,
+     "forming": false,
+     "refining": true,
+     "added": 23,
+     "queue": 1,
+     "ghost": 0
+    },
+    {
+     "t": 10911,
+     "forming": false,
+     "refining": true,
+     "added": 24,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 11265,
+     "forming": false,
+     "refining": false,
+     "added": 0,
+     "queue": 0,
+     "ghost": null
+    }
+   ]
+  },
+  {
+   "id": "teapot_house",
+   "axis": "whimsical (hero tier: 'intricate')",
+   "text": "an intricate little cottage shaped like a teapot",
+   "fresh": true,
+   "kind": "teapot_cottage",
+   "tier": "hero",
+   "outcome": "polished (Green body, orange roof, and door read closer to the reference's cottage-teapot ; polish 2/2)",
+   "draftParts": 8,
+   "finalParts": 57,
+   "timings": {
+    "firstOp": 1254,
+    "standIn": 1254,
+    "draft": 1586,
+    "draftDefine": 3052,
+    "intentDone": 3175,
+    "refineStart": 1600,
+    "firstPart": 4849,
+    "recognizable": 9733,
+    "streamEnd": 12182,
+    "swap": 12187,
+    "polishVerdict": 30564,
+    "settled": 30914
+   },
+   "usd": {
+    "forge": 0.0814,
+    "intentEst": 0.003,
+    "total": 0.0844
+   },
+   "fps": {
+    "avg": 60,
+    "worstGapMs": 17
+   },
+   "census": [
+    "teapot_cottage(hero)"
+   ],
+   "stills": {
+    "1_draft": "stills/teapot_house_1_draft.jpg",
+    "2_refining": "stills/teapot_house_2_refining.jpg",
+    "3_final": "stills/teapot_house_3_final.jpg"
+   },
+   "video": "videos/teapot_house.mp4",
+   "videoMB": 0.4,
+   "videoLeadS": 2,
+   "errors": [],
+   "timeline": [
+    {
+     "t": 1248,
+     "type": "req",
+     "path": "/api/intent"
+    },
+    {
+     "t": 1254,
+     "type": "op",
+     "op": "spawn",
+     "kind": "teapot_cottage"
+    },
+    {
+     "t": 1271,
+     "type": "req",
+     "path": "/api/forge"
+    },
+    {
+     "t": 1271,
+     "type": "forge_stage",
+     "stage": "ref"
+    },
+    {
+     "t": 1271,
+     "type": "forge_stage",
+     "stage": "refine"
+    },
+    {
+     "t": 1586,
+     "type": "draft_part",
+     "kind": "teapot_cottage"
+    },
+    {
+     "t": 3052,
+     "type": "op",
+     "op": "define",
+     "kind": "teapot_cottage",
+     "parts": 8
+    },
+    {
+     "t": 3169,
+     "type": "op",
+     "op": "say"
+    },
+    {
+     "t": 3175,
+     "type": "intent_done",
+     "ms": 3167,
+     "firstOpMs": 1241,
+     "model": "haiku"
+    },
+    {
+     "t": 4832,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 4852,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 5399,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 6003,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 6173,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 6689,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 6692,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 7262,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 7870,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 8483,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 8483,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 9178,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 9178,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 9712,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 9712,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 10405,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 10883,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 10888,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 11403,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 11603,
+     "type": "forge_parts",
+     "n": 8
+    },
+    {
+     "t": 11938,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 12182,
+     "type": "forge_parts",
+     "n": 1
+    },
+    {
+     "t": 12182,
+     "type": "forge_done",
+     "ok": true,
+     "n": 29,
+     "usd": 0.023788200000000002,
+     "firstPartMs": 3571,
+     "ms": 10922,
+     "refMs": 3398
+    },
+    {
+     "t": 28954,
+     "type": "req",
+     "path": "/api/forge/polish"
+    },
+    {
+     "t": 28959,
+     "type": "polish_done",
+     "ok": true,
+     "usd": 0.057092,
+     "n": 57
+    },
+    {
+     "t": 30566,
+     "type": "req",
+     "path": "/api/forge/judge"
+    },
+    {
+     "t": 30569,
+     "type": "judge_done",
+     "polishWins": true,
+     "usd": 0.0005327000000000001,
+     "why": "Green body, orange roof, and door read closer to the reference's cottage-teapot ; polish 2/2"
+    }
+   ],
+   "samples": [
+    {
+     "t": 16,
+     "forming": false,
+     "refining": false,
+     "added": 0,
+     "queue": 0,
+     "ghost": null
+    },
+    {
+     "t": 1600,
+     "forming": false,
+     "refining": true,
+     "added": 0,
+     "queue": 0,
+     "ghost": 1
+    },
+    {
+     "t": 4833,
+     "forming": false,
+     "refining": true,
+     "added": 0,
+     "queue": 1,
+     "ghost": 1
+    },
+    {
+     "t": 4849,
+     "forming": false,
+     "refining": true,
+     "added": 1,
+     "queue": 0,
+     "ghost": 1
+    },
+    {
+     "t": 4866,
+     "forming": false,
+     "refining": true,
+     "added": 1,
+     "queue": 1,
+     "ghost": 1
+    },
+    {
+     "t": 4883,
+     "forming": false,
+     "refining": true,
+     "added": 2,
+     "queue": 0,
+     "ghost": 1
+    },
+    {
+     "t": 5399,
+     "forming": false,
+     "refining": true,
+     "added": 2,
+     "queue": 1,
+     "ghost": 1
+    },
+    {
+     "t": 5416,
+     "forming": false,
+     "refining": true,
+     "added": 3,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 6016,
+     "forming": false,
+     "refining": true,
+     "added": 3,
+     "queue": 1,
+     "ghost": 0
+    },
+    {
+     "t": 6033,
+     "forming": false,
+     "refining": true,
+     "added": 4,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 6183,
+     "forming": false,
+     "refining": true,
+     "added": 4,
+     "queue": 1,
+     "ghost": 0
+    },
+    {
+     "t": 6199,
+     "forming": false,
+     "refining": true,
+     "added": 5,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 6699,
+     "forming": false,
+     "refining": true,
+     "added": 5,
+     "queue": 2,
+     "ghost": 0
+    },
+    {
+     "t": 6716,
+     "forming": false,
+     "refining": true,
+     "added": 7,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 7266,
+     "forming": false,
+     "refining": true,
+     "added": 7,
+     "queue": 1,
+     "ghost": 0
+    },
+    {
+     "t": 7283,
+     "forming": false,
+     "refining": true,
+     "added": 8,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 7883,
+     "forming": false,
+     "refining": true,
+     "added": 8,
+     "queue": 1,
+     "ghost": 0
+    },
+    {
+     "t": 7898,
+     "forming": false,
+     "refining": true,
+     "added": 9,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 8499,
+     "forming": false,
+     "refining": true,
+     "added": 9,
+     "queue": 2,
+     "ghost": 0
+    },
+    {
+     "t": 8516,
+     "forming": false,
+     "refining": true,
+     "added": 11,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 9183,
+     "forming": false,
+     "refining": true,
+     "added": 11,
+     "queue": 2,
+     "ghost": 0
+    },
+    {
+     "t": 9199,
+     "forming": false,
+     "refining": true,
+     "added": 13,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 9716,
+     "forming": false,
+     "refining": true,
+     "added": 13,
+     "queue": 2,
+     "ghost": 0
+    },
+    {
+     "t": 9733,
+     "forming": false,
+     "refining": true,
+     "added": 15,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 10416,
+     "forming": false,
+     "refining": true,
+     "added": 15,
+     "queue": 1,
+     "ghost": 0
+    },
+    {
+     "t": 10433,
+     "forming": false,
+     "refining": true,
+     "added": 16,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 10899,
+     "forming": false,
+     "refining": true,
+     "added": 16,
+     "queue": 2,
+     "ghost": 0
+    },
+    {
+     "t": 10916,
+     "forming": false,
+     "refining": true,
+     "added": 18,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 11416,
+     "forming": false,
+     "refining": true,
+     "added": 18,
+     "queue": 1,
+     "ghost": 0
+    },
+    {
+     "t": 11432,
+     "forming": false,
+     "refining": true,
+     "added": 19,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 11616,
+     "forming": false,
+     "refining": true,
+     "added": 19,
+     "queue": 8,
+     "ghost": 0
+    },
+    {
+     "t": 11632,
+     "forming": false,
+     "refining": true,
+     "added": 23,
+     "queue": 4,
+     "ghost": 0
+    },
+    {
+     "t": 11648,
+     "forming": false,
+     "refining": true,
+     "added": 27,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 11949,
+     "forming": false,
+     "refining": true,
+     "added": 27,
+     "queue": 1,
+     "ghost": 0
+    },
+    {
+     "t": 11966,
+     "forming": false,
+     "refining": true,
+     "added": 28,
+     "queue": 0,
+     "ghost": 0
+    },
+    {
+     "t": 12190,
+     "forming": false,
+     "refining": false,
+     "added": 0,
+     "queue": 0,
+     "ghost": null
+    }
+   ]
+  }
+ ]
+}

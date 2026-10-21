@@ -283,6 +283,8 @@ async function runPrompt(browser, p) {
     }
     if (Date.now() > deadline) break
   }
+  // Gen loop 9: the final still waits (up to 2 s) for a landing camera move to finish, so it shows the framing, not a frame mid-dolly.
+  await page.waitForFunction(() => !window.__voiceWorld.renderer()?.camMove, null, { timeout: 2000 }).catch(() => {})
   await still('3_final')
   const tl = await gg()
   const rec = await page.evaluate(k => (window.__forge?.log ?? []).find(r => r.kind === k) ?? null, tl.kind)
@@ -292,6 +294,13 @@ async function runPrompt(browser, p) {
     const span = (f[f.length - 1][0] - f[0][0]) / 1000
     return { avg: Math.round(f.length / span), worstGapMs: Math.round(Math.max(...f.map(x => x[1]))) }
   }, t0)
+  // Gen loop 9: the final design's parts, so look and framing fixes can be replayed for free (upgradeKind).
+  const finalKind = await page.evaluate((k) => {
+    const s = window.__voiceWorld.state()
+    const e = s.entities.find(x => x.kind === k)
+    return s.kinds[k]?.parts ? { kind: k, quality: s.kinds[k].quality, basis: s.kinds[k].basis, parts: s.kinds[k].parts, pos: e?.pos, rotY: e?.rotY, props: e?.props } : null
+  }, tl.kind)
+  if (finalKind) writeFileSync(resolve(outDir, 'stills', `${p.id}_parts.json`), JSON.stringify(finalKind))
   const census = await page.evaluate(() => {
     const s = window.__voiceWorld.state()
     return s.entities.map(e => `${e.kind}${s.kinds[e.kind]?.quality ? `(${s.kinds[e.kind].quality})` : ''}`).slice(0, 12)

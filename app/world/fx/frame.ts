@@ -223,7 +223,9 @@ export function fitFrame(cam: THREE.PerspectiveCamera, cur: View, boxes: FrameBo
     else a = m
   }
   place(cam, cur, eye)
-  if (Math.abs(b - d0) < 1 && worst(pts) <= (opts.margin ?? MARGIN)) return null
+  // Gen loop 9: "close enough" is relative (10% of the distance, at least 0.35 m): a fixed metre left a
+  // small prop landed 4 m away at two-thirds of the fill it asked for.
+  if (Math.abs(b - d0) < Math.max(0.35, d0 * 0.1) && worst(pts) <= (opts.margin ?? MARGIN)) return null
   return at(b).view
 }
 

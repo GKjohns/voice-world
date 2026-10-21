@@ -7,6 +7,7 @@ import { WorldRenderer } from '~/world/renderer'
 import { EXAMPLES } from '~/world/examples'
 import { useDirector } from '~/composables/useDirector'
 import { VIEW_KEY } from '~/composables/useWorld'
+import type { Part } from '#shared/world/ops'
 
 const hostEl = useTemplateRef<HTMLDivElement>('host')
 const world = useWorld()
@@ -64,7 +65,9 @@ onMounted(async () => {
     lastEntry: () => world.history.value[world.history.value.length - 1],
     // Teleport mode: the Director's current/last run (status, timings, op count).
     director: () => useDirector().current.value,
-    renderer: () => renderer
+    renderer: () => renderer,
+    // Gen loop 9: replay a saved forged design (gauntlet `<id>_parts.json`) as an upgrade, for free look/framing checks.
+    upgrade: (kind: string, parts: Part[], basis: string, quality: 'good' | 'hero' = 'good') => world.upgradeKind(kind, parts, { basis, quality })
   }
   window.addEventListener('keydown', onKey)
   window.addEventListener('pagehide', saveView)

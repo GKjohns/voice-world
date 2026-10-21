@@ -46,6 +46,13 @@ There were no new program variants (60) and no new lights, and 60 fps held.
 
 No new lights and no new material programs (the harness logged 60), 60 fps held.
 
+## What loop 9 implemented
+
+| Piece | Where | How (cost) |
+|---|---|---|
+| Slate iron, not khaki | `shared/world/palette.ts` `darkFloor` | A dark olive or green lifted by the lightness floor leans toward slate (h 235, near-greys) or blue-green (h 178), with calmer chroma; mid greens untouched. CPU only |
+| Classic forms scoped | `server/utils/forge.ts`, `intent.ts` | `roof()` for buildings only, `shell()` frills for creatures and plants, anything else follows its own form (a teapot lid is a dome) |
+
 ## Next (loops 9+), in impact order
 
 1. **Distance hue over the meadow.** Far grass (15–24 m) still reads warm-yellow under `golden`, from the warm fog plus the shadow-lift grade. Cool the far field toward the sky colour (see item 5) rather than adding more warmth.

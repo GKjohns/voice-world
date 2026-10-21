@@ -54,6 +54,16 @@ test('gen loop 7: big near-black masses become a deep, light-catching slate', ()
   assert.equal(stylize('#c03020', 'surface', 0.4), stylize('#c03020'), 'mid values are untouched')
 })
 
+test('gen loop 9: a big dark olive or green iron mass reads slate or blue-green, never khaki', () => {
+  for (const hex of ['#3b3b2e', '#2a3a2a', '#1b3a1b']) {
+    const out = labToLch(lab(stylize(hex, 'surface', 0.4, true)))
+    assert.ok(out.h > 160 && out.h < 260, `${hex} hue ${out.h}`)
+  }
+  assert.equal(stylize('#5f8f4e', 'surface', 0.4, true), stylize('#5f8f4e', 'surface', 0.4, true), 'stable')
+  const mid = labToLch(lab(stylize('#5f8f4e', 'surface', 0.4)))
+  assert.ok(mid.h > 120 && mid.h < 150, 'a mid green stays green')
+})
+
 function labToLch(l: [number, number, number]) {
   return { l: l[0], c: Math.hypot(l[1], l[2]), h: ((Math.atan2(l[2], l[1]) * 180) / Math.PI + 360) % 360 }
 }

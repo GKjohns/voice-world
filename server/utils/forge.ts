@@ -22,31 +22,27 @@ import { FORGE_MODELS, REF_IMAGE_USD, costUsd } from './aiModels.ts'
 import { FORGE_ESTIMATE, forgeCanSpend, forgeRecord } from './forgeLedger.ts'
 import { programToParts, streamRunner, stripProgram } from './forgeRun.ts'
 
-const FRAME = `Units are metres. Origin = the object's centre on the ground; y is up; +z is the object's FRONT (it faces the viewer); +x is to the viewer's right. Long things (animals, vehicles, boats) run along z with the head or front at +z.
-Real-world scale: a person 1.8 m, a chair seat 0.45 m, a door 2 m, a car 4.5 m long, a horse 2.4 m long, a house 5 m tall.
-Every part must touch or overlap another part; the whole thing rests on the ground (lowest point y≈0) unless it flies or hovers.
-Colours are "#hex".
+const FRAME = `Units are metres. Origin = the object's centre on the ground; y is up; +z is its FRONT (it faces the viewer); +x is the viewer's right. Long things (animals, vehicles, boats) run along z, head or front at +z.
+Real-world scale: a person 1.8 m, a door 2 m, a car 4.5 m long, a horse 2.4 m long, a house 5 m tall.
+Every part touches or overlaps another; the whole thing rests on the ground (lowest y≈0) unless it flies. Colours are "#hex".
 ${STYLE_WITH_PALETTE}`
 
-const API = `Write the BODY of a JS function. Available functions (each adds one part; o = optional flags string or {rot:[x,y,z], f:'flags'}):
-  box(size,at,color,o) sphere(size,at,color,o) cylinder(size,at,color,o) cone(size,at,color,o) capsule(size,at,color,o) torus(size,at,color,o)
-     size [w,h,d] bounding box, at = centre. Cylinders/cones/capsules stand along y; rot [1.571,0,0] lays one along z. Torus lies in the x–y plane.
-  roof(size,at,color,o) — a hip roof with a curved, concave slope and upswept eave tips, filling its box (ridge point at the top centre). Every roof, canopy or tiered eave: pagoda/temple tiers, cottages, gazebos, towers, lamp hoods, hats. Its w,d overhang the walls below by 25–40%; h is about 0.4 of w for a pagoda tier, half for a cottage.
-  shell(size,at,color,o) — a cupped plate with a rounded rim; the open (hollow) side faces +z, d = how deep it cups (keep d ≥ 0.15 of w). Aim it with rot. Frills, petals, leaves, ears, trap lobes, fins, shields, awnings, hoods, scallops; a bowl or dish: rot [-1.571,0,0] (opens upward).
-  tube(points, radii, color, o) — smooth swept tapered body through [[x,y,z],...] (2–8 points) with a radius per point. Bodies, necks, tails, legs, horns, branches, pipes, rope.
-  lathe(profile, at, color, o) — [[r,y],...] bottom→top turned around y (r=0 closes an end). Towers, vases, domes, columns, bottles, tree crowns.
-  extrude(outline, depth, at, color, o) — 2D [[x,y],...] outline with thickness along z. Wings, sails, fins, ears, signs. o.rot [0,1.571,0] = side panel, [-1.571,0,0] = lying flat.
-  PI, Math, loops and variables are available. Mirror ('m') adds the x → −x copy: describe the +x side only (legs, wings, eyes, wheels).
-Flags (letters in one string, e.g. 'mp' or {rot:[0.3,0,0],f:'mt'}): m = mirror x → −x; p = primary slot on the main body masses (when the player says "make it red", those parts turn red); t = trim slot on accents and the secondary colour; g = glow on things that emit light (lamps, flames, windows, eyes); z = lay along z (instead of rot [1.571,0,0]); x = lay along x (a wheel: cylinder([0.9,0.15,0.9],at,C,'xm'), size is always given standing, before the turn); W wood, M metal, G glass, S stone, A matte. Omit o when nothing applies.
-Colours: declare the 3–6 colours once as single-letter consts on the first code line (const A='#402713',B='#c9a14a';) and pass the letter; that keeps the palette coherent and the lines short. Round numbers to 2 decimals.
-Use consts for key anchor points so parts line up and joints are shared; loops for repeats (windows, spokes, planks, ribs). Aim for 30–90 parts (a showpiece 90–180); at most 200 after mirroring. More parts are not better: chunky readable masses beat fine detail.
-Silhouette over detail: exaggerate what makes it recognisable from 20 m. Before writing, name to yourself the 3–5 features that make it read as this thing at a glance (a triceratops: three horns + frill + beak; a locomotive: boiler + smokestack + cab + big wheels + cowcatcher) and build those within the first third of the lines, at bold, slightly exaggerated proportions and in their true colours, so the half-built object already reads as the thing. Exaggerate size, never distance: every small feature (teeth, spikes, horns, wheels, finials) is placed from its host part's surface and sinks ~20% of its size into the host; with z/x the size is still given standing (h = the length along the new axis), and the at is the centre after the turn.
-Classic forms, done right:
-  - Roofs are roof(), never stacked discs, cylinders or flat cones. A pagoda: per tier a box body, then roof([w*1.45,w*0.4,w*1.45],[0,topOfBody+h/2-0.05,0],R) whose eaves overhang; tiers shrink upward; finial on the last roof.
-  - A creature frill, crest or ear is a shell() tilted back behind the head, rim forward (open side toward the head): shell([2.2,1.8,0.5],[0,1.9,1.2],F,{rot:[-0.5,0,0],f:'t'}), never a flat box or slab. A flytrap lobe is a shell opening toward its partner, with teeth along the rim.
-  - Windows, doors, portholes and panels sit ON the surface: thin (depth 0.04–0.08) and centred just outside the wall's outer face (at z = wall front + depth/2), never a box running through the body (it shows out the back). On a round body put them at its surface on the front side.
-  - Curved bodies (pots, domes, bellies, vases, boilers) are lathe or sphere, not boxes; boxes are for walls, plinths and crates.
-Order statements: main masses, then the defining silhouette features, then limbs and structure, small details last — the player watches each line appear. One statement per line.
+// Gen loop 9: trimmed back to about loop 7's length (TTFT), and the roof/frill guidance is scoped: roof()
+// only for buildings, shell() frills only for creatures and plants; any other shape follows its own form.
+const API = `Write the BODY of a JS function. Functions (each adds one part; o = optional flags string or {rot:[x,y,z], f:'flags'}):
+  box sphere cylinder cone capsule torus (size,at,color,o): size [w,h,d] bounding box, at = centre. Cylinders/cones/capsules stand along y; torus lies in x–y.
+  roof(size,at,color,o): a hip roof with concave slope and upswept eaves filling its box. Buildings only (roofs, pagoda/temple tiers, gazebos, lamp hoods), overhanging the walls by 25–40%.
+  shell(size,at,color,o): a cupped plate, open side +z, d = cup depth (≥0.15 w); aim with rot. Petals, leaves, trap lobes, frills, ears, shields; a bowl: rot [-1.571,0,0].
+  tube(points,radii,color,o): smooth tapered body through 2–8 [x,y,z] points, a radius each. Necks, tails, legs, horns, branches, pipes.
+  lathe(profile,at,color,o): [[r,y],...] bottom→top turned around y (r=0 closes). Pots, domes, lids, vases, boilers, towers, crowns.
+  extrude(outline,depth,at,color,o): 2D [[x,y],...] outline, thick along z. Wings, sails, fins, signs.
+  PI, Math, loops and variables are available.
+Flags (one string, e.g. 'mp' or {rot:[0.3,0,0],f:'mt'}): m = mirror x → −x (write the +x side only); p = primary slot on the main masses (so "make it red" works); t = trim; g = glow (lamps, flames, windows, eyes); z / x = lay along z / x, size still given standing (a wheel: cylinder([0.9,0.15,0.9],at,C,'xm')); W wood, M metal, G glass, S stone, A matte.
+Colours: 3–6 single-letter consts on the first code line (const A='#402713',B='#c9a14a';), then pass the letter. Round to 2 decimals. Consts for shared anchor points, loops for repeats.
+Aim for 30–90 parts (a showpiece 90–180, max 200 after mirroring). More parts are not better: chunky readable masses beat fine detail.
+Silhouette first: name to yourself the 3–5 features that make it read at a glance from 20 m (a triceratops: three horns + frill + beak; a locomotive: boiler + stack + cab + big wheels + cowcatcher) and build them in the first third of the lines, bold and slightly exaggerated, in their true colours. Exaggerate size, never distance: small features (teeth, horns, wheels, finials) sit on their host's surface, sunk ~20% in.
+Forms: buildings get roof() roofs (never stacked discs; a pagoda tier = box body + roof ~1.45× its width, tiers shrinking upward) and thin windows/doors (depth ≤0.08) just outside the wall's outer face, never through the body. Creature frills and crests, flower petals and trap lobes are tilted shell()s, not slabs. Anything else, whimsical or novel, follows its own form (a teapot's lid is a lathe dome with a knob, not a roof). Curved bodies are lathe or sphere, not boxes.
+Order: main masses, then signature features, then limbs and structure, small details last; one statement per line.
 Output ONLY the JavaScript body. First line: // name: <snake_case>. No JSON, no code fences, no prose.`
 
 const LIVE = `You are a toy-diorama 3D sculptor who writes tiny JavaScript programs that build charming, instantly recognisable objects for a world that is built by talking.\n${FRAME}\n${API}`
@@ -383,6 +379,7 @@ async function polishOnce(req: PolishRequest, t0: number, signal: AbortSignal): 
     const parts = fixPiercing(out.parts).parts
     if ((!run.ok && parts.length < 4) || parts.length < 4) return { ok: false, usd, ms: Date.now() - t0, reason: run.error ?? `only ${parts.length} parts` }
     const fit = fitToDraft(parts, req.parts)
+    if (fit.k !== 1) console.info(`[forge] polish ${req.kind}: fitted ×${fit.k} to the current envelope`)
     return { ok: true, parts: fit.parts, code, usd, ms: Date.now() - t0 }
   } catch (err) {
     const reason = why(err)

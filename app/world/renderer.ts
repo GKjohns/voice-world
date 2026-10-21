@@ -75,6 +75,10 @@ const CROSSFADE_MS = 350
 const LANDED_MARGIN = 0.8
 /** Gen loop 4: a newly landed design is dollied to fill about this much of the view (worst |NDC|). */
 const LANDED_FILL = 0.74
+/** Gen loop 9: big landed designs (the flytrap's top, the triceratops' head were clipping) get more air. */
+const LANDED_FILL_BIG = 0.68
+/** Gen loop 9: how long a wandering creature stands still after its refine lands (it then ambles off, blended in). */
+const WANDER_HOLD_MS = 3000
 /** How many instances of a kind show its draft streaming in (the rest get it when the define lands). */
 const DRAFT_STREAM_MAX = 12
 
@@ -242,6 +246,8 @@ export class WorldRenderer {
   private weather = new WeatherFx()
   private atmosBase: AtmospherePreset = { ...ATMOSPHERES.dusk }
   private motionStart = new Map<string, { key: string, t0: number }>()
+  /** Gen loop 9: a wandering kind stays home while it's being designed and for a moment after it lands, so it isn't framed and then walks out of shot. */
+  private wanderHold = new Map<string, number>()
   private playerScale = 1
   private playerScaleTo = 1
   private forming = new Placeholder()
@@ -621,8 +627,10 @@ export class WorldRenderer {
       const crouch = top < 2.2 ? -(EYE - Math.max(0.8, Math.min(EYE, top * 0.72))) : 0
       fitCur = { ...cur, lift: crouch }
     }
+    // Gen loop 9: a big landed design (over ~2.4 m tall or ~3.5 m across) gets more air, so its top and ends stay in shot.
+    const big = fit && (boxes[0]!.h > 2.4 || boxes[0]!.r > 1.75)
     const to = fit
-      ? fitFrame(this.camera, fitCur, boxes, this.eyeAt(cur.x, cur.z), { free, maxBack: OUTDOOR_BACK, margin, fill: LANDED_FILL, minDist: boxes[0]!.r + 1.5 }) ?? (fitCur.lift !== cur.lift ? fitCur : null)
+      ? fitFrame(this.camera, fitCur, boxes, this.eyeAt(cur.x, cur.z), { free, maxBack: OUTDOOR_BACK, margin, fill: big ? LANDED_FILL_BIG : LANDED_FILL, minDist: boxes[0]!.r + 1.5 }) ?? (fitCur.lift !== cur.lift ? fitCur : null)
       : (preferLift && !indoors ? this.godView(boxes, cur) : solveFrame(this.camera, cur, boxes, this.eyeAt(cur.x, cur.z), { free, maxBack: indoors ? 0 : OUTDOOR_BACK, margin })) ?? base ?? (indoors || preferLift ? null : this.approach(boxes, cur))
     if (!to) return
     if (base) {
@@ -1451,6 +1459,7 @@ export class WorldRenderer {
     const job = this.refining.get(kind)
     if (!job) return
     this.refining.delete(kind)
+    this.wanderHold.set(kind, performance.now() + WANDER_HOLD_MS)
     if (accepted && !job.overlay.parent) return
     const now = performance.now()
     const overlay = job.overlay
@@ -2228,6 +2237,7 @@ export class WorldRenderer {
           clock = { key, t0: now }
           this.motionStart.set(e.id, clock)
         }
+        if (m === 'wander' && (this.refining.has(e.kind) || this.drafting.has(e.kind) || now < (this.wanderHold.get(e.kind) ?? 0))) clock.t0 = now
         t = (now - clock.t0) / 1000
         pose = blendedPose(e, t, h, style)
       } else {

@@ -285,7 +285,10 @@ async function polish(job: Job, text: string, current: Part[], code: string | un
   if (islands(p.parts).floating > islands(current).floating) return finish('refined; polish kept out (more floating parts)')
   const focus2 = r.focusOf(kind)
   if (!focus2) return finish('polish skipped')
-  const candidate = r.candidate(p.parts, focus2)
+  // Gen loop 9: the polish is held to the kind's target size like the refine (one came back a quarter size).
+  const pk = r.refineFinalK(kind, p.parts)
+  const polished = pk !== 1 ? p.parts.map(q => transformPart(q, pk, [0, 0, 0])) : p.parts
+  const candidate = r.candidate(polished, focus2)
   await sleep(200) // its programs compile in the background meanwhile
   const [a, b] = [await r.studioShot(focus2), await r.studioShot(focus2, candidate)]
   if (!a || !b) return finish('refined; polish not judged (no renders)')
@@ -296,8 +299,8 @@ async function polish(job: Job, text: string, current: Part[], code: string | un
   rec.polishMs = since()
   if (job.ctrl.signal.aborted) return
   if (!j?.polishWins) return finish(`refined; polish lost the judge (${j?.why ?? '?'})`)
-  const ok = world.upgradeKind(kind, p.parts, { basis, quality: 'hero' })
-  if (ok && !job.fresh) void fetch('/api/forge/lib', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ kind, text, quality: 'hero', parts: p.parts, usd: rec.usd }) }).catch(() => {})
+  const ok = world.upgradeKind(kind, polished, { basis, quality: 'hero' })
+  if (ok && !job.fresh) void fetch('/api/forge/lib', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ kind, text, quality: 'hero', parts: polished, usd: rec.usd }) }).catch(() => {})
   rec.parts = p.parts.length
   return finish(ok ? `polished (${j.why})` : 'polished, but the kind changed')
 

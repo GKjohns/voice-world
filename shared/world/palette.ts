@@ -126,10 +126,19 @@ function darkFloor(out: [number, number, number], src: Lch, mass: number, metal:
   const floor = (0.27 + 0.15 * t * t * (3 - 2 * t)) * k
   const lch = labToLch(out)
   if (lch.l >= Math.max(0.5, floor)) return
+  const lift = floor - lch.l
   lch.l = Math.max(lch.l, floor)
   if (lch.c < 0.035) {
     lch.h = src.c < 0.02 ? 252 : src.h
     lch.c = Math.max(lch.c, 0.03 * (1 - Math.max(0, lch.l / k - 0.42) / 0.08))
+  }
+  // Gen loop 9: a dark olive or green lifted a long way (an iron boiler) went khaki, then gold under the warm
+  // sun. Lean those toward a cool slate (near-greys) or a blue-green (real greens), and calm their chroma.
+  if (lift > 0.04 && lch.h > 75 && lch.h < 170) {
+    const w = Math.min(1, (lift - 0.04) / 0.12)
+    const to = src.c < 0.05 ? 235 : 178
+    lch.h += (to - lch.h) * w * 0.8
+    lch.c = Math.min(lch.c, 0.075 - 0.025 * w)
   }
   const lab = lchToLab(lch)
   out[0] = lab[0]
