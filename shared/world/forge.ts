@@ -169,6 +169,60 @@ export function partBounds(p: Part): Box {
   return { min: min3, max: max3 }
 }
 
+/**
+ * Gen loop 6: points on the object's real silhouette, in object space, for camera framing. The one box
+ * round the whole object overshoots anything that isn't box-shaped (a tapered pagoda, a telescope on a
+ * splayed tripod), so the camera stopped short and thin things landed small. Per part: a box gives its 8
+ * corners, a round shape (sphere, cylinder, cone, capsule, torus) points on its rims, a tube its path
+ * points pushed out by their radius. The `max` biggest parts (by box volume) are used.
+ */
+export function silhouettePoints(parts: Part[], max = 64): Vec3[] {
+  const list = parts.length > max
+    ? [...parts].sort((a, b) => vol(b) - vol(a)).slice(0, max)
+    : parts
+  const out: Vec3[] = []
+  const put = (p: Part, v: Vec3) => {
+    const q = rotateXYZ(v, p.rot)
+    out.push([q[0] + p.at[0], q[1] + p.at[1], q[2] + p.at[2]])
+  }
+  for (const p of list) {
+    if (p.shape === 'tube' && p.points?.length) {
+      p.points.forEach((q, i) => {
+        const r = Math.abs(p.radii?.[i] ?? p.radii?.[p.radii.length - 1] ?? 0.2)
+        for (const d of [[r, 0, 0], [-r, 0, 0], [0, r, 0], [0, -r, 0], [0, 0, r], [0, 0, -r]] as Vec3[]) put(p, [q[0] + d[0], q[1] + d[1], q[2] + d[2]])
+      })
+      continue
+    }
+    const b = localBox(p)
+    const round = p.shape === 'sphere' || p.shape === 'cylinder' || p.shape === 'cone' || p.shape === 'capsule' || p.shape === 'torus'
+    if (!round) {
+      for (const x of [b.min[0], b.max[0]]) for (const y of [b.min[1], b.max[1]]) for (const z of [b.min[2], b.max[2]]) put(p, [x, y, z])
+      continue
+    }
+    const c: Vec3 = [(b.min[0] + b.max[0]) / 2, (b.min[1] + b.max[1]) / 2, (b.min[2] + b.max[2]) / 2]
+    const h: Vec3 = [(b.max[0] - b.min[0]) / 2, (b.max[1] - b.min[1]) / 2, (b.max[2] - b.min[2]) / 2]
+    // Rims round the local y axis (a torus lies in x–y, so round z): at the ends and, for a sphere, the middle.
+    const ys = p.shape === 'sphere' ? [-0.7, 0, 0.7] : p.shape === 'cone' ? [-1] : [-1, 1]
+    for (let k = 0; k < 8; k++) {
+      const a = (k / 8) * Math.PI * 2
+      for (const t of ys) {
+        const w = p.shape === 'sphere' ? Math.sqrt(1 - t * t) : 1
+        put(p, p.shape === 'torus'
+          ? [c[0] + Math.cos(a) * h[0], c[1] + Math.sin(a) * h[1], c[2] + t * h[2]]
+          : [c[0] + Math.cos(a) * h[0] * w, c[1] + t * h[1], c[2] + Math.sin(a) * h[2] * w])
+      }
+    }
+    if (p.shape === 'sphere' || p.shape === 'cone') put(p, [c[0], b.max[1], c[2]])
+    if (p.shape === 'sphere') put(p, [c[0], b.min[1], c[2]])
+  }
+  return out
+}
+
+function vol(p: Part): number {
+  const b = partBounds(p)
+  return (b.max[0] - b.min[0]) * (b.max[1] - b.min[1]) * (b.max[2] - b.min[2])
+}
+
 export function boundsOf(parts: Part[]): Box | null {
   if (!parts.length) return null
   const min: Vec3 = [Infinity, Infinity, Infinity]

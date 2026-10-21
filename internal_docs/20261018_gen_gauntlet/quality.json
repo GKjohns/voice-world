@@ -46,5 +46,13 @@
   "triceratops": 6,
   "telescope": 5,
   "teapot_house": 7
+ },
+ "loop6": {
+  "flytrap": 7,
+  "locomotive": 7,
+  "pagoda": 7,
+  "triceratops": 6,
+  "telescope": 6,
+  "teapot_house": 8
  }
 }

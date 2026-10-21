@@ -5,7 +5,7 @@
  */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { HQ_MAX_PARTS, boundsOf, chooseTier, cleanPart, expandMirror, fitToDraft, hashParts, isBudgetError, islands, libKey, partBounds, partsToProgram, programParts, snapFloating, spendDecision } from '../shared/world/forge.ts'
+import { HQ_MAX_PARTS, boundsOf, chooseTier, cleanPart, expandMirror, fitToDraft, hashParts, isBudgetError, islands, libKey, partBounds, partsToProgram, programParts, silhouettePoints, snapFloating, spendDecision } from '../shared/world/forge.ts'
 import type { Part } from '../shared/world/ops.ts'
 import { applyBatch, createWorld, exportWorld, importWorld, upgradeKind } from '../shared/world/state.ts'
 import type { OpContext } from '../shared/world/types.ts'
@@ -165,4 +165,25 @@ test('snapFloating (Gen loop 5): small floating parts snap on or drop; a floatin
   assert.equal(islands(r.parts).floating, 0)
   const core = snapFloating([body, { ...body, at: [0, 5, 0] }, tooth])
   assert.equal(core.core, false)
+})
+
+test('silhouettePoints (Gen loop 6): framing points hug the parts, not one box round everything', () => {
+  // A thin mast with a wide, low disc: the overall box's top corners sit far out in thin air.
+  const parts: Part[] = [
+    { shape: 'cylinder', size: [4, 0.2, 4], at: [0, 0.1, 0], color: '#888' },
+    { shape: 'box', size: [0.2, 6, 0.2], at: [0, 3.2, 0], color: '#888' },
+    { shape: 'sphere', size: [1, 1, 1], at: [0, 6.5, 0], color: '#888' },
+    { shape: 'tube', size: [1, 1, 1], at: [0, 0, 0], points: [[0, 0, 0], [1, 1, 0]], radii: [0.1, 0.1], color: '#888' }
+  ]
+  const pts = silhouettePoints(parts)
+  const b = boundsOf(parts)!
+  // Nothing outside the real bounds (a little slack for the tube radius).
+  for (const p of pts) for (let i = 0; i < 3; i++) assert.ok(p[i]! >= b.min[i]! - 1e-6 && p[i]! <= b.max[i]! + 1e-6)
+  // Above the disc, every point is near the mast's axis: no wide corner up at the top.
+  const high = pts.filter(p => p[1] > 1.5)
+  assert.ok(high.length > 0 && high.every(p => Math.hypot(p[0], p[2]) <= 0.51))
+  // The sphere's top is a sample (the true top of the object is framed).
+  assert.ok(pts.some(p => Math.abs(p[1] - 7) < 1e-6))
+  // Capped to the biggest parts.
+  assert.equal(silhouettePoints(parts, 1).length, 16)
 })

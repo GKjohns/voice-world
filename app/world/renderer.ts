@@ -17,7 +17,7 @@ import type { AtmospherePreset } from './atmosphere'
 import { BUILD_READS_COLOR, KIT_BUILDERS, blob } from './kit'
 import { applyMaterialProps, gazeNdc, lookTargets } from './look'
 import { buildFromParts, buildFromPartsMerged, partMesh } from './parts'
-import { boundsOf, maxDim, sizeK, transformPart } from '#shared/world/forge'
+import { boundsOf, maxDim, silhouettePoints, sizeK, transformPart } from '#shared/world/forge'
 import { crossfade, ghost, growIn, meshesOf } from './fx/refine'
 import { Ambience } from './sound'
 import { Gathering } from './fx/anticipate'
@@ -37,7 +37,7 @@ import { WeatherFx } from './fx/weather'
 import { softDot } from './fx/common'
 import { LightPool } from './perf/lights'
 import { precompile, setCompileTarget, warmKit } from './perf/precompile'
-import { STYLE_UNIFORMS } from './style/toon'
+import { STYLE_UNIFORMS, setHue } from './style/toon'
 import { Post } from './style/post'
 import { skyDome, skyUniforms } from './style/sky'
 import type { SkyUniforms } from './style/sky'
@@ -624,26 +624,20 @@ export class WorldRenderer {
   }
 
   /**
-   * Gen loop 4: a learned thing's world-space box as 8 corners: its parts' bounds, scaled, turned by its yaw
-   * (three's rotation.y) and moved to where it stands. Undefined for kit kinds (no parts).
+   * Gen loop 4: a learned thing's world-space framing points (loop 6: on each part's silhouette, see
+   * silhouettePoints), scaled, turned by its yaw (three's rotation.y) and moved to where it stands.
+   * Undefined for kit kinds (no parts).
    */
   private corners(e: Entity): [number, number, number][] | undefined {
     const parts = this.state?.kinds[e.kind]?.parts
-    const b = parts?.length ? boundsOf(parts) : null
-    if (!b) return undefined
+    if (!parts?.length) return undefined
+    // Gen loop 6: points on the parts' own silhouettes, not the 8 corners of one box round everything.
+    const pts = silhouettePoints(parts)
     const s = e.props.scale ?? 1
     const sy = s * (e.props.height ?? 1)
     const c = Math.cos(e.rotY)
     const sn = Math.sin(e.rotY)
-    const out: [number, number, number][] = []
-    for (const x of [b.min[0], b.max[0]]) {
-      for (const y of [b.min[1], b.max[1]]) {
-        for (const z of [b.min[2], b.max[2]]) {
-          out.push([e.pos[0] + (x * c + z * sn) * s, e.pos[1] + y * sy, e.pos[2] + (-x * sn + z * c) * s])
-        }
-      }
-    }
-    return out
+    return pts.map(([x, y, z]) => [e.pos[0] + (x * c + z * sn) * s, e.pos[1] + y * sy, e.pos[2] + (-x * sn + z * c) * s] as [number, number, number])
   }
 
   /**
@@ -1788,6 +1782,10 @@ export class WorldRenderer {
     STYLE_UNIFORMS.uCjRimColor.value.set(a.skyHorizon)
     STYLE_UNIFORMS.uCjFogWarm.value.set(a.fogWarm)
     STYLE_UNIFORMS.uCjFogHeight.value = a.fogHeight
+    setHue(STYLE_UNIFORMS.uCjLitHue.value, a.litHue)
+    setHue(STYLE_UNIFORMS.uCjShadeHue.value, a.shadeHue)
+    STYLE_UNIFORMS.uCjTerm.value = a.term
+    STYLE_UNIFORMS.uCjBrush.value = a.brush
     GROUND_UNIFORMS.uGroundAlt.value.set(a.groundAlt)
     GROUND_UNIFORMS.uGroundPatch.value = a.groundPatch
     this.grass.setColor(a.ground)

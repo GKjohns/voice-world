@@ -74,6 +74,7 @@ uniform float uGroundPatch;
 uniform float uCjTime;
 varying float vGrassTip;
 varying float vGrassPatch;
+varying float vGrassGust;
 float grHash( vec2 p ) { p = fract( p * vec2( 127.1, 311.7 ) ); p += dot( p, p + 34.5 ); return fract( p.x * p.y ); }
 float grNoise( vec2 p ) {
   vec2 i = floor( p ); vec2 f = fract( p ); vec2 u = f * f * ( 3.0 - 2.0 * f );
@@ -104,13 +105,16 @@ float grNoise( vec2 p ) {
     // A gust wave rolling across the field, plus a little flutter per tuft.
     float gust = sin( dot( world, vec2( 0.21, 0.13 ) ) - uCjTime * 1.6 ) * 0.5 + 0.5;
     float sway = ( 0.06 + 0.11 * gust ) * aTip * size;
+    // Gen loop 6: wind-swept, the whole field leans downwind a little, and the gust bands show as a sheen.
+    transformed.x += 0.05 * aTip * size;
+    vGrassGust = gust * gust;
     transformed.x += sway * ( 0.8 + 0.25 * sin( uCjTime * 3.1 + h1 * 9.0 ) );
     transformed.z += sway * 0.35 * sin( uCjTime * 2.3 + h2 * 7.0 );
     transformed.xz += world - root.xz;
     vGrassTip = aTip;
   }`)
       sh.fragmentShader = sh.fragmentShader
-        .replace('#include <common>', '#include <common>\nuniform vec3 uGrassBase;\nuniform vec3 uGroundAlt;\nvarying float vGrassTip;\nvarying float vGrassPatch;')
+        .replace('#include <common>', '#include <common>\nuniform vec3 uGrassBase;\nuniform vec3 uGroundAlt;\nvarying float vGrassTip;\nvarying float vGrassPatch;\nvarying float vGrassGust;')
         // Both faces of a blade keep the upward normal (a flipped back face would catch the ground's
         // brown fill and the rim): grass lights like the meadow it grows from.
         .replace('#include <normal_fragment_begin>', '#include <normal_fragment_begin>\nnormal = normalize( vNormal );\nnonPerturbedNormal = normal;')
@@ -119,6 +123,8 @@ float grNoise( vec2 p ) {
     vec3 base = mix( uGrassBase, uGroundAlt, vGrassPatch );
     // Tips lean cool (blue-green), so a warm low sun lands on them as green-gold, not straw.
     diffuseColor.rgb = base * mix( vec3( 0.82 ), vec3( 0.88, 1.08, 1.2 ), vGrassTip );
+    // A passing gust bends the tips over and they catch the light: a pale, warm sheen rolling across.
+    diffuseColor.rgb *= 1.0 + vGrassGust * vGrassTip * vec3( 0.08, 0.16, 0.1 );
   }`)
     }
     material.customProgramCacheKey = () => 'voice-world-grass'

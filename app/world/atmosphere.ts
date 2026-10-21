@@ -41,6 +41,11 @@ export interface AtmospherePreset {
   gradeShadow: string // post: darks lift toward this
   gradeHighlight: string // post: lights multiply toward this
   gradeSat: number // post: saturation
+  // ---- Gen loop 6: painterly (art_direction_botw.md) ----
+  litHue: string // direct light is tinted toward this (normalised to luminance 1): warm gold
+  shadeHue: string // the sky fill / ambient in shade is tinted toward this (normalised): blue-violet
+  term: number // warm glow on the light/shade terminator
+  brush: number // 0..1 world-space brush breakup of the band edges
 }
 
 export const ATMOSPHERES: Record<TimeOfDay, AtmospherePreset> = {
@@ -48,43 +53,48 @@ export const ATMOSPHERES: Record<TimeOfDay, AtmospherePreset> = {
     skyTop: '#6c80c4', skyHorizon: '#ffc9b4', fog: '#e6c0c0', fogNear: 30, fogFar: 190,
     sun: '#ffd0ae', sunIntensity: 2.0, sunPos: [40, 14, -30], hemiSky: '#b9c2f0', hemiGround: '#6a5650', hemiIntensity: 1.05,
     ground: '#668f62', grid: 0, env: 0.25, exposure: 1, stars: 0.1, moon: 0, sunGlow: 0.7, glowColor: '#ffb48e',
-    groundAlt: '#789a66', groundPatch: 0.55, rim: 0.45, fogWarm: '#f3cdb2', fogHeight: 0.04, sunDisc: 0.9,
+    groundAlt: '#789a66', groundPatch: 0.55, rim: 0.53, fogWarm: '#f3cdb2', fogHeight: 0.04, sunDisc: 0.9,
     cloudLit: '#ffe2d4', cloudShade: '#a99ac4', cloudCover: 0.5, toon: 1,
-    gradeShadow: '#4a3a72', gradeHighlight: '#fff0e6', gradeSat: 1.06
+    gradeShadow: '#4a3a72', gradeHighlight: '#fff0e6', gradeSat: 1.06,
+    litHue: '#fff0e0', shadeHue: '#ece8ff', term: 0.28, brush: 1
   },
   day: {
     skyTop: '#3f86df', skyHorizon: '#cfe6f6', fog: '#c4def2', fogNear: 50, fogFar: 260,
     sun: '#fff4e0', sunIntensity: 2.35, sunPos: [28, 52, 22], hemiSky: '#b4cdf5', hemiGround: '#7a6a4c', hemiIntensity: 1.15,
     ground: '#5f874e', grid: 0, env: 0.35, exposure: 1, stars: 0, moon: 0, sunGlow: 0.15, glowColor: '#fff2d8',
-    groundAlt: '#729552', groundPatch: 0.6, rim: 0.3, fogWarm: '#e9ecdc', fogHeight: 0.03, sunDisc: 0.8,
+    groundAlt: '#729552', groundPatch: 0.6, rim: 0.38, fogWarm: '#e9ecdc', fogHeight: 0.03, sunDisc: 0.8,
     cloudLit: '#ffffff', cloudShade: '#b2c3e0', cloudCover: 0.48, toon: 1,
-    gradeShadow: '#2f3f78', gradeHighlight: '#fff8ec', gradeSat: 1.08
+    gradeShadow: '#2f3f78', gradeHighlight: '#fff8ec', gradeSat: 1.08,
+    litHue: '#fff6e6', shadeHue: '#eceeff', term: 0.22, brush: 1
   },
   golden: {
     skyTop: '#5876bf', skyHorizon: '#ffc583', fog: '#f2c79a', fogNear: 24, fogFar: 170,
     sun: '#ffb463', sunIntensity: 2.6, sunPos: [-45, 14, -40], hemiSky: '#c9b6e0', hemiGround: '#6a4c34', hemiIntensity: 0.95,
     ground: '#5c8650', grid: 0, env: 0.3, exposure: 1.02, stars: 0, moon: 0, sunGlow: 1, glowColor: '#ffaa5e',
-    groundAlt: '#6e8c4e', groundPatch: 0.55, rim: 0.6, fogWarm: '#ffcf96', fogHeight: 0.04, sunDisc: 1,
+    groundAlt: '#6e8c4e', groundPatch: 0.55, rim: 0.68, fogWarm: '#ffcf96', fogHeight: 0.04, sunDisc: 1,
     cloudLit: '#ffd7a4', cloudShade: '#b48a9e', cloudCover: 0.5, toon: 1,
-    gradeShadow: '#4a3070', gradeHighlight: '#ffe8cc', gradeSat: 1.1
+    gradeShadow: '#4a3070', gradeHighlight: '#ffe8cc', gradeSat: 1.1,
+    litHue: '#ffeccf', shadeHue: '#ebe4ff', term: 0.34, brush: 1
   },
   dusk: {
     // The starting world: a soft sunset, the sun just down on the left, a rose horizon under deep blue.
     skyTop: '#2f3f7e', skyHorizon: '#f4a98a', fog: '#d39a98', fogNear: 26, fogFar: 170,
-    sun: '#ffc6a0', sunIntensity: 1.95, sunPos: [-40, 12, -18], hemiSky: '#a3a6e6', hemiGround: '#5a5048', hemiIntensity: 1.2,
-    ground: '#5f8560', grid: 0.1, env: 0.22, exposure: 1.02, stars: 0.2, moon: 0, sunGlow: 0.85, glowColor: '#ff9c78',
-    groundAlt: '#708d62', groundPatch: 0.55, rim: 0.55, fogWarm: '#e8a99c', fogHeight: 0.045, sunDisc: 0.7,
+    sun: '#ffc6a0', sunIntensity: 1.75, sunPos: [-40, 12, -18], hemiSky: '#a3a6e6', hemiGround: '#5a5048', hemiIntensity: 1.2,
+    ground: '#528a54', grid: 0.1, env: 0.22, exposure: 1.02, stars: 0.2, moon: 0, sunGlow: 0.85, glowColor: '#ff9c78',
+    groundAlt: '#6a955a', groundPatch: 0.55, rim: 0.63, fogWarm: '#e8a99c', fogHeight: 0.045, sunDisc: 0.7,
     cloudLit: '#ffbfa2', cloudShade: '#7f74ac', cloudCover: 0.45, toon: 1,
-    gradeShadow: '#3c2f6a', gradeHighlight: '#ffe2cc', gradeSat: 1.08
+    gradeShadow: '#3c2f6a', gradeHighlight: '#ffe2cc', gradeSat: 1.08,
+    litHue: '#fff0dc', shadeHue: '#ece6ff', term: 0.3, brush: 1
   },
   night: {
     // Moonlight from ahead-right and above (the moon sits where sunPos points): indigo and readable, never black.
     skyTop: '#0a1029', skyHorizon: '#2b3a6c', fog: '#1d274c', fogNear: 18, fogFar: 130,
     sun: '#a9bcff', sunIntensity: 0.9, sunPos: [30, 38, -45], hemiSky: '#6474c8', hemiGround: '#2a3050', hemiIntensity: 0.9,
     ground: '#2f3f4d', grid: 0, env: 0.12, exposure: 1.1, stars: 1, moon: 1, sunGlow: 0.15, glowColor: '#9fb2ff',
-    groundAlt: '#36495a', groundPatch: 0.45, rim: 0.32, fogWarm: '#2e3564', fogHeight: 0.035, sunDisc: 0,
+    groundAlt: '#36495a', groundPatch: 0.45, rim: 0.4, fogWarm: '#2e3564', fogHeight: 0.035, sunDisc: 0,
     cloudLit: '#56679e', cloudShade: '#232a52', cloudCover: 0.28, toon: 1,
-    gradeShadow: '#1e2a6a', gradeHighlight: '#e6ecff', gradeSat: 0.98
+    gradeShadow: '#1e2a6a', gradeHighlight: '#e6ecff', gradeSat: 0.98,
+    litHue: '#f2f4ff', shadeHue: '#e8ecff', term: 0.1, brush: 0.8
   },
   interior: {
     // Warm and dim: a low amber fill (the "room" light) and almost no sun; the lamps do the real work.
@@ -93,7 +103,8 @@ export const ATMOSPHERES: Record<TimeOfDay, AtmospherePreset> = {
     ground: '#4a3626', grid: 0, env: 0.3, exposure: 1.15, stars: 0, moon: 0, sunGlow: 0, glowColor: '#ffc890',
     groundAlt: '#54402e', groundPatch: 0.2, rim: 0.2, fogWarm: '#3e2c1e', fogHeight: 0, sunDisc: 0,
     cloudLit: '#3d2a1e', cloudShade: '#2a1d16', cloudCover: 0, toon: 0.85,
-    gradeShadow: '#3a2418', gradeHighlight: '#fff0dc', gradeSat: 1.05
+    gradeShadow: '#3a2418', gradeHighlight: '#fff0dc', gradeSat: 1.05,
+    litHue: '#fff2e2', shadeHue: '#f2ecf6', term: 0.16, brush: 0.7
   }
 }
 
