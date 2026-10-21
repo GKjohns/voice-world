@@ -16,7 +16,7 @@ import { ATMOSPHERES, lerpPreset } from './atmosphere'
 import type { AtmospherePreset } from './atmosphere'
 import { BUILD_READS_COLOR, KIT_BUILDERS, blob } from './kit'
 import { applyMaterialProps, gazeNdc, lookTargets } from './look'
-import { buildFromParts, buildFromPartsMerged, partMesh } from './parts'
+import { buildFromParts, buildFromPartsMerged, massShare, partMesh } from './parts'
 import { boundsOf, maxDim, silhouettePoints, sizeK, transformPart } from '#shared/world/forge'
 import { crossfade, ghost, growIn, meshesOf } from './fx/refine'
 import { Ambience } from './sound'
@@ -44,7 +44,7 @@ import type { SkyUniforms } from './style/sky'
 import { GROUND_UNIFORMS, groundMaterial } from './style/ground'
 import { Grass, grassCircles, nearMasks } from './style/grass'
 import { Studio } from './studio'
-import { boxHeight, contactShadow, disposeObject, entityReach, glowSprite, hashParts, radialTexture, ring, round2, safeHits, skyDir, slotMeshes, starfield, v3, wrapAngle } from './sceneHelpers'
+import { boxHeight, contactShadow, disposeObject, entityReach, glowSprite, hashParts, radialTexture, ring, round2, safeHits, skyDir, slotMeshes, softRing, starfield, v3, wrapAngle } from './sceneHelpers'
 
 const EYE = 1.6
 const WALK = 6
@@ -199,6 +199,9 @@ export class WorldRenderer {
   private grassMaskAt = 0
   private reticle: THREE.Mesh
   private highlight: THREE.Mesh
+  private hoverId: string | null = null // gen loop 7: who the highlight is on, and since when (it fades)
+  private hoverSince = 0
+  private hoverSeen = 0
   private ghost: THREE.Mesh
   private ghostUntil = 0
   private atmos: AtmospherePreset = { ...ATMOSPHERES.dusk }
@@ -354,8 +357,9 @@ export class WorldRenderer {
     this.patch.visible = false
     this.scene.add(this.patch)
 
-    this.reticle = ring(0.32, 0.42, 0xffffff, 0.6)
-    this.highlight = ring(0.94, 1, 0xffffff, 0.45) // unit ring scaled to the hovered entity's footprint
+    // Gen loop 7: soft, sky-tinted glows instead of flat white decals (the highlight fades once you've looked).
+    this.reticle = softRing(0.3, 0.44, 0.5)
+    this.highlight = softRing(0.9, 1.02, 0.5) // unit ring scaled to the hovered entity's footprint
     this.ghost = ring(1.5, 1.8, 0x7dd3a8, 0)
     this.scene.add(this.reticle, this.highlight, this.ghost)
     this.scene.add(this.vortex.obj, this.gathering.obj, this.forming.obj, this.refineMotes.obj)
@@ -609,8 +613,16 @@ export class WorldRenderer {
     const indoors = !!ceilingOver(this.state, cur.x, cur.z)
     // Gen loop 4: one newly landed design outdoors is dollied to fill the view (closer or back) from its real box.
     const fit = margin !== undefined && !indoors && !preferLift && boxes.length === 1 && boxes[0]!.pts
+    // Gen loop 7: a small prop (under ~2.2 m) is framed from a crouch, eye near 70% of its height, so it's
+    // seen side-on like a product shot, not from above. Walking stands you back up (frame()).
+    let fitCur = cur
+    if (fit && cur.lift <= 0.05 && this.playerScale === 1) {
+      const top = boxes[0]!.h - this.groundAt(boxes[0]!.x, boxes[0]!.z)
+      const crouch = top < 2.2 ? -(EYE - Math.max(0.8, Math.min(EYE, top * 0.72))) : 0
+      fitCur = { ...cur, lift: crouch }
+    }
     const to = fit
-      ? fitFrame(this.camera, cur, boxes, this.eyeAt(cur.x, cur.z), { free, maxBack: OUTDOOR_BACK, margin, fill: LANDED_FILL, minDist: boxes[0]!.r + 1.5 })
+      ? fitFrame(this.camera, fitCur, boxes, this.eyeAt(cur.x, cur.z), { free, maxBack: OUTDOOR_BACK, margin, fill: LANDED_FILL, minDist: boxes[0]!.r + 1.5 }) ?? (fitCur.lift !== cur.lift ? fitCur : null)
       : (preferLift && !indoors ? this.godView(boxes, cur) : solveFrame(this.camera, cur, boxes, this.eyeAt(cur.x, cur.z), { free, maxBack: indoors ? 0 : OUTDOOR_BACK, margin })) ?? base ?? (indoors || preferLift ? null : this.approach(boxes, cur))
     if (!to) return
     if (base) {
@@ -1357,7 +1369,7 @@ export class WorldRenderer {
         d.overlays.set(it.entity.id, g)
         it.body.visible = false
       }
-      const m = partMesh(part)
+      const m = partMesh(part, part.slot ?? null, massShare(part, d.parts))
       if (!m) continue
       this.tintPart(m, it.entity)
       g.add(m)
@@ -1481,7 +1493,7 @@ export class WorldRenderer {
       let n = 0
       while (job.queue.length && n < PARTS_PER_FRAME) {
         const p = job.queue.shift()!
-        const m = partMesh(p)
+        const m = partMesh(p, p.slot ?? null, massShare(p, job.streamed))
         n++
         if (!m) continue
         this.tintPart(m, item.entity)
@@ -1789,6 +1801,10 @@ export class WorldRenderer {
     GROUND_UNIFORMS.uGroundAlt.value.set(a.groundAlt)
     GROUND_UNIFORMS.uGroundPatch.value = a.groundPatch
     this.grass.setColor(a.ground)
+    // Gen loop 7: the gaze rings take the sky's colour (pale), so they glow like part of the painted world.
+    const ringTint = new THREE.Color(a.hemiSky).lerp(new THREE.Color(a.skyHorizon), 0.35).lerp(new THREE.Color(0xffffff), 0.45)
+    ;(this.highlight.material as THREE.MeshBasicMaterial).color.copy(ringTint)
+    ;(this.reticle.material as THREE.MeshBasicMaterial).color.copy(ringTint)
     // Grass on meadows only: not indoors, not on snow (the weather whitens the ground).
     const gc = new THREE.Color(a.ground)
     this.grass.setWanted(this.state?.atmosphere.time !== 'interior' && this.weather.snowCover() < 0.15 && gc.g >= gc.r * 0.9)
@@ -1983,7 +1999,11 @@ export class WorldRenderer {
     if (k.s || k.arrowdown) move.addScaledVector(f, -sp)
     if (k.a || k.arrowleft) move.addScaledVector(r, -sp)
     if (k.d || k.arrowright) move.addScaledVector(r, sp)
-    if (move.lengthSq() > 0) this.walk(move)
+    if (move.lengthSq() > 0) {
+      this.walk(move)
+      // Gen loop 7: a framing crouch (a small prop) stands back up once you walk.
+      if (this.lift < 0 && !this.camMove) this.lift = Math.min(0, this.lift + dt * 1.6)
+    }
     this.camera.rotation.set(this.pitch, this.yaw, 0, 'YXZ')
     // Weight: a decaying, slightly irregular shake after something big lands.
     const sh = this.shake
@@ -2014,7 +2034,18 @@ export class WorldRenderer {
     const hovered = g.info.kind === 'entity' && g.entity ? this.items.get(g.entity) : undefined
     this.highlight.visible = !!hovered
     this.reticle.visible = !hovered
+    // A gaze that flickers off the thing (its edge, a gap between tripod legs) doesn't restart the fade.
+    const hid = hovered?.entity.id ?? null
+    if (hid) {
+      if (hid !== this.hoverId || now - this.hoverSeen > 4000) this.hoverSince = now
+      this.hoverId = hid
+      this.hoverSeen = now
+    }
     if (hovered) {
+      // Gen loop 7: in quickly, then once you've looked for a second it settles to a faint glow.
+      const held = (now - this.hoverSince) / 1000
+      const fade = Math.min(1, held / 0.2) * (0.22 + 0.78 * (1 - smoothstep01((held - 1.0) / 0.9)))
+      ;(this.highlight.material as THREE.MeshBasicMaterial).opacity = 0.5 * fade
       const rr = Math.max(0.5, this.desc(hovered.entity).footprint * (hovered.entity.props.scale ?? 1) + 0.25)
       // Where it really is now (a walking person, a wandering horse), not where it was spawned.
       const wp = hovered.stretch.getWorldPosition(this.tmpV)
@@ -2694,4 +2725,9 @@ export class WorldRenderer {
     this.renderer.dispose()
     this.renderer.domElement.remove()
   }
+}
+
+function smoothstep01(t: number): number {
+  const x = Math.min(1, Math.max(0, t))
+  return x * x * (3 - 2 * x)
 }

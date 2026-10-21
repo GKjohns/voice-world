@@ -11,6 +11,7 @@ CHANGED = {
     'loop3': 'Refine prompt caching, hero reference image in parallel, Opus polish with a 28 s budget, looser landed framing.',
     'loop4': 'Placement by real height, dolly framing from the 8-corner world box, compact refine flags and palette letters, silhouette-first guidance.',
     'loop5': 'Small floating parts snap onto the body (or drop) instead of rejecting the refine; hard 28 s polish deadline (raced timer) and client fetch timeouts.',
+    'loop7': 'Painterly darks and meadow: big near-black masses snap to deep slate (lightness floor by volume share, higher for metal), painted ground swaths shared by the grass, sun warmth taken partly off the meadow (green-gold, not straw), soft sky-tinted gaze rings that fade, small props framed from a crouch.',
     'loop6': 'Painterly look (BotW / Ghibli): toon bands actually on, brush-broken band edges, warm light / cool shade, warm terminator, layered clouds, gust sheen; framing on per-part silhouette points; painterly STYLE prompt.',
 }
 # Scores from each loop's stills review (baseline.md / changes.md).

@@ -13,6 +13,38 @@ export function ring(inner: number, outer: number, color: number, opacity: numbe
   return m
 }
 
+/**
+ * Gen loop 7: a soft ground ring for the gaze (reticle, hover highlight). An additive quad whose map is a
+ * ring that peaks mid-band and falls to nothing at both edges, so it reads as a faint painted glow on the
+ * meadow rather than a flat white decal. Same program as the arrival glow discs (basic + map, additive).
+ * The material colour is the tint (the renderer sets it from the sky).
+ */
+export function softRing(inner: number, outer: number, opacity: number): THREE.Mesh {
+  const c = document.createElement('canvas')
+  c.width = c.height = 128
+  const g = c.getContext('2d')!
+  const grad = g.createRadialGradient(64, 64, 0, 64, 64, 64)
+  const i = inner / outer
+  const mid = (i + 1) / 2
+  grad.addColorStop(0, 'rgba(255,255,255,0)')
+  grad.addColorStop(i, 'rgba(255,255,255,0)')
+  grad.addColorStop(i + (mid - i) * 0.5, 'rgba(255,255,255,0.45)')
+  grad.addColorStop(mid, 'rgba(255,255,255,1)')
+  grad.addColorStop(mid + (1 - mid) * 0.5, 'rgba(255,255,255,0.45)')
+  grad.addColorStop(0.999, 'rgba(255,255,255,0)')
+  g.fillStyle = grad
+  g.fillRect(0, 0, 128, 128)
+  const map = new THREE.CanvasTexture(c)
+  map.colorSpace = THREE.SRGBColorSpace
+  const m = new THREE.Mesh(
+    new THREE.PlaneGeometry(outer * 2, outer * 2).rotateX(-Math.PI / 2),
+    new THREE.MeshBasicMaterial({ color: 0xffffff, map, transparent: true, opacity, depthWrite: false, blending: THREE.AdditiveBlending, fog: false })
+  )
+  m.renderOrder = 2
+  m.raycast = () => {}
+  return m
+}
+
 export function slotMeshes(root: THREE.Object3D, slot: string): THREE.Mesh[] {
   const out: THREE.Mesh[] = []
   root.traverse(o => (o as THREE.Mesh).isMesh && o.userData.slot === slot && out.push(o as THREE.Mesh))

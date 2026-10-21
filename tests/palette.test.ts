@@ -42,3 +42,18 @@ test('stylize is idempotent-ish: snapping twice barely moves', () => {
     assert.ok(Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]) < 0.03, hex)
   }
 })
+
+test('gen loop 7: big near-black masses become a deep, light-catching slate', () => {
+  const small = lab(stylize('#111111'))
+  const big = lab(stylize('#111111', 'surface', 0.4))
+  assert.ok(small[0] >= 0.26, `trim floor ${small[0]}`)
+  assert.ok(big[0] >= 0.41, `main-mass floor ${big[0]}`)
+  assert.ok(big[2] < -0.01, 'achromatic dark leans blue-slate')
+  const warm = labToLch(lab(stylize('#3a2418', 'surface', 0.4)))
+  assert.ok(warm.h > 20 && warm.h < 100, 'a warm dark keeps its hue')
+  assert.equal(stylize('#c03020', 'surface', 0.4), stylize('#c03020'), 'mid values are untouched')
+})
+
+function labToLch(l: [number, number, number]) {
+  return { l: l[0], c: Math.hypot(l[1], l[2]), h: ((Math.atan2(l[2], l[1]) * 180) / Math.PI + 360) % 360 }
+}

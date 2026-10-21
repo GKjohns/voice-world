@@ -72,8 +72,12 @@ const cache = new Map<string, string>()
  * is 15% calmer so the ground never out-shouts props; 'skin' blends only halfway (people keep their range).
  * Accepts #rgb / #rrggbb / palette names; anything unparseable comes back unchanged.
  */
-export function stylize(color: string, role: PaletteRole = 'surface'): string {
-  const key = `${role}|${color}`
+export function stylize(color: string, role: PaletteRole = 'surface', mass = 0, metal = false): string {
+  // Gen loop 7: `mass` (0..1) is the part's share of the object's volume. Big masses get a higher
+  // lightness floor, so a "black" boiler or roof stays a deep, light-catching slate instead of a hole.
+  // `metal`: the material preset darkens diffuse (metalness 0.55), so a dark metal gets a higher floor still.
+  const mb = Math.round(Math.min(1, Math.max(0, mass)) * 20) / 20
+  const key = `${role}|${color}|${mb}|${metal ? 1 : 0}`
   const hit = cache.get(key)
   if (hit) return hit
   const named = swatch(color)
@@ -103,10 +107,34 @@ export function stylize(color: string, role: PaletteRole = 'surface'): string {
     out[1] *= 0.85
     out[2] *= 0.85
   }
+  if (role !== 'glow') darkFloor(out, lch, mb, metal)
   const hex = rgbToHex(oklabToRgb(out))
   if (cache.size > 4000) cache.clear()
   cache.set(key, hex)
   return hex
+}
+
+/**
+ * Gen loop 7 (BotW / Ghibli darks): painted "black" iron is a deep slate that still takes light. Lift
+ * lightness to a floor that rises with the part's volume share (0.27 for trim, up to 0.42 for the main
+ * mass), and give near-greys a little chroma: achromatic darks lean blue-slate (they pick up the sky),
+ * tinted ones keep their own hue (a warm charcoal stays warm).
+ */
+function darkFloor(out: [number, number, number], src: Lch, mass: number, metal: boolean): void {
+  const t = Math.min(1, Math.max(0, (mass - 0.04) / 0.21))
+  const k = metal ? 1.3 : 1
+  const floor = (0.27 + 0.15 * t * t * (3 - 2 * t)) * k
+  const lch = labToLch(out)
+  if (lch.l >= Math.max(0.5, floor)) return
+  lch.l = Math.max(lch.l, floor)
+  if (lch.c < 0.035) {
+    lch.h = src.c < 0.02 ? 252 : src.h
+    lch.c = Math.max(lch.c, 0.03 * (1 - Math.max(0, lch.l / k - 0.42) / 0.08))
+  }
+  const lab = lchToLab(lch)
+  out[0] = lab[0]
+  out[1] = lab[1]
+  out[2] = lab[2]
 }
 
 // ---------- colour math (sRGB ↔ OKLab, Björn Ottosson) ----------

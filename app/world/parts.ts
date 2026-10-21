@@ -15,6 +15,7 @@ import * as THREE from 'three'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
 import type { Part, Shape, Slot } from '#shared/world/ops'
 import { hashParts } from '#shared/world/forge'
+import { stylize } from '#shared/world/palette'
 import { glowMat, group, mat, mesh } from './kit/helpers'
 import { materialLook } from './look'
 import { bevelBox } from './style/bevel'
@@ -144,18 +145,29 @@ function slotsOf(parts: Part[]): (Slot | null)[] {
   return parts.map((p, i) => p.slot ?? (!hasPrimary && i === biggest ? 'primary' : null))
 }
 
-function partMaterial(p: Part, slot: Slot | null): THREE.MeshStandardMaterial {
+function partMaterial(p: Part, slot: Slot | null, mass = 0): THREE.MeshStandardMaterial {
   const material = slot === 'glow' ? glowMat(p.color, 1.4) : mat(p.color)
-  if (slot !== 'glow') Object.assign(material, materialLook(p.material))
+  if (slot !== 'glow') {
+    Object.assign(material, materialLook(p.material))
+    // Gen loop 7: the palette's lightness floor rises with the part's volume share (no near-black masses).
+    material.color.set(stylize('#' + new THREE.Color(p.color).getHexString(), 'surface', mass, p.material === 'metal'))
+  }
   return material
 }
 
-/** One part as a mesh (null if its shape data can't build). */
-export function partMesh(p: Part, slot: Slot | null = p.slot ?? null): THREE.Mesh | null {
+/** A part's share of the summed volume of `all` (the gen loop 7 lightness floor's input). */
+export function massShare(p: Part, all: Part[]): number {
+  const total = all.reduce((a, q) => a + volume(q), 0)
+  return total > 0 ? volume(p) / total : 0
+}
+
+/** One part as a mesh (null if its shape data can't build). `mass`: its volume share of the object. */
+export function partMesh(p: Part, slot: Slot | null = p.slot ?? null, mass = 0): THREE.Mesh | null {
   const primitive = p.shape in GEOMETRY
   const geo = primitive ? geometry(p.shape as Shape) : builtGeometry(p)
   if (!geo) return null
-  const m = mesh(geo, partMaterial(p, slot), slot, p.at[0], p.at[1], p.at[2])
+  const m = mesh(geo, partMaterial(p, slot, mass), slot, p.at[0], p.at[1], p.at[2])
+  m.userData.mass = mass
   if (primitive) m.scale.set(p.size[0], p.size[1], p.size[2])
   if (p.rot) m.rotation.set(p.rot[0], p.rot[1], p.rot[2])
   // Explicit-colour parts remember theirs, so a later trim/primary recolour only touches slotted parts.
@@ -166,8 +178,9 @@ export function partMesh(p: Part, slot: Slot | null = p.slot ?? null): THREE.Mes
 export function buildFromParts(parts: Part[]): THREE.Group {
   const g = group()
   const slots = slotsOf(parts)
+  const total = parts.reduce((a, p) => a + volume(p), 0) || 1
   parts.forEach((p, i) => {
-    const m = partMesh(p, slots[i]!)
+    const m = partMesh(p, slots[i]!, volume(p) / total)
     if (m) g.add(m)
   })
   return g
@@ -177,6 +190,7 @@ interface MergedPiece {
   geo: THREE.BufferGeometry
   part: Part // a representative (colour, material)
   slot: Slot | null
+  mass: number // share of the object's summed part volume
 }
 const merged = new Map<string, MergedPiece[]>()
 
@@ -190,7 +204,8 @@ export function buildFromPartsMerged(parts: Part[]): THREE.Group {
   if (!pieces) {
     pieces = []
     const slots = slotsOf(parts)
-    const groups = new Map<string, { part: Part, slot: Slot | null, geos: THREE.BufferGeometry[] }>()
+    const groups = new Map<string, { part: Part, slot: Slot | null, geos: THREE.BufferGeometry[], vol: number }>()
+    const total = parts.reduce((a, p) => a + volume(p), 0) || 1
     const m4 = new THREE.Matrix4()
     const q = new THREE.Quaternion()
     const e = new THREE.Euler()
@@ -208,25 +223,27 @@ export function buildFromPartsMerged(parts: Part[]): THREE.Group {
       m4.compose(new THREE.Vector3(...p.at), q, primitive ? new THREE.Vector3(...p.size) : new THREE.Vector3(1, 1, 1))
       g.applyMatrix4(m4)
       const k = `${slot ?? '-'}|${p.color.toLowerCase()}|${p.material ?? '-'}`
-      const entry = groups.get(k) ?? { part: p, slot, geos: [] }
+      const entry = groups.get(k) ?? { part: p, slot, geos: [], vol: 0 }
       entry.geos.push(g)
+      entry.vol += volume(p)
       groups.set(k, entry)
     })
-    for (const { part, slot, geos } of groups.values()) {
+    for (const { part, slot, geos, vol } of groups.values()) {
       const geo = mergeGeometries(geos, false)
       for (const g of geos) g.dispose()
       if (!geo) continue
       geo.computeBoundingBox()
       geo.computeBoundingSphere()
       geo.userData.shared = true
-      pieces.push({ geo, part, slot })
+      pieces.push({ geo, part, slot, mass: vol / total })
     }
     merged.set(key, pieces)
   }
   const root = group()
-  for (const { geo, part, slot } of pieces) {
-    const m = mesh(geo, partMaterial(part, slot), slot)
+  for (const { geo, part, slot, mass } of pieces) {
+    const m = mesh(geo, partMaterial(part, slot, mass), slot)
     m.userData.baseColor = part.color
+    m.userData.mass = mass
     root.add(m)
   }
   return root

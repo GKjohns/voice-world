@@ -10,7 +10,7 @@
  */
 import * as THREE from 'three'
 import { styleShader, STYLE_UNIFORMS } from './toon'
-import { GROUND_UNIFORMS } from './ground'
+import { GROUND_UNIFORMS, MEADOW_GLSL, sunFixGlsl } from './ground'
 
 const STEP = 0.34
 const RADIUS = 24
@@ -30,7 +30,7 @@ function tuftGeometry(): THREE.BufferGeometry {
     const ox = -dz * w
     const oz = dx * w
     pos.push(-ox, 0, -oz, ox, 0, oz, dx * lean, h, dz * lean)
-    for (let i = 0; i < 3; i++) nor.push(dx * 0.25, 1, dz * 0.25)
+    for (let i = 0; i < 3; i++) nor.push(dx * 0.18, 1, dz * 0.18) // gen loop 7: 0.25 → 0.18, fewer blades blow out to straw in the top band
     tip.push(0, 0, 1)
   }
   const g = new THREE.BufferGeometry()
@@ -75,11 +75,15 @@ uniform float uCjTime;
 varying float vGrassTip;
 varying float vGrassPatch;
 varying float vGrassGust;
+varying vec3 vGrassMeadow;
 float grHash( vec2 p ) { p = fract( p * vec2( 127.1, 311.7 ) ); p += dot( p, p + 34.5 ); return fract( p.x * p.y ); }
 float grNoise( vec2 p ) {
   vec2 i = floor( p ); vec2 f = fract( p ); vec2 u = f * f * ( 3.0 - 2.0 * f );
   return mix( mix( grHash( i ), grHash( i + vec2( 1, 0 ) ), u.x ), mix( grHash( i + vec2( 0, 1 ) ), grHash( i + vec2( 1, 1 ) ), u.x ), u.y );
-}`)
+}
+float gHash( vec2 p ) { return grHash( p ); }
+float gNoise( vec2 p ) { return grNoise( p ); }
+${MEADOW_GLSL}`)
         .replace('#include <begin_vertex>', /* glsl */`#include <begin_vertex>
   {
     vec3 root = ( modelMatrix * instanceMatrix * vec4( 0.0, 0.0, 0.0, 1.0 ) ).xyz;
@@ -93,6 +97,8 @@ float grNoise( vec2 p ) {
     // The ground's own patches (same noise as style/ground.ts): taller, lusher grass in the alt patches.
     float big = grNoise( world * 0.035 ) * 0.65 + grNoise( world * 0.09 + 7.0 ) * 0.35;
     vGrassPatch = smoothstep( 0.46, 0.6, big ) * uGroundPatch;
+    // Gen loop 7: the ground's painted swaths, a little calmer on the blades.
+    vGrassMeadow = cjMeadow( world, min( 1.0, uGroundPatch * 1.1 ) );
     float clump = grNoise( world * 0.45 );
     float size = ( 0.6 + 0.55 * clump + 0.25 * h2 ) * ( 0.9 + 0.35 * vGrassPatch ) * uGrassHeight;
     float d = distance( world, cameraPosition.xz );
@@ -114,15 +120,19 @@ float grNoise( vec2 p ) {
     vGrassTip = aTip;
   }`)
       sh.fragmentShader = sh.fragmentShader
-        .replace('#include <common>', '#include <common>\nuniform vec3 uGrassBase;\nuniform vec3 uGroundAlt;\nvarying float vGrassTip;\nvarying float vGrassPatch;\nvarying float vGrassGust;')
+        .replace('#include <common>', '#include <common>\nuniform vec3 uGrassBase;\nuniform vec3 uGroundAlt;\nvarying float vGrassTip;\nvarying float vGrassPatch;\nvarying float vGrassGust;\nvarying vec3 vGrassMeadow;')
         // Both faces of a blade keep the upward normal (a flipped back face would catch the ground's
         // brown fill and the rim): grass lights like the meadow it grows from.
         .replace('#include <normal_fragment_begin>', '#include <normal_fragment_begin>\nnormal = normalize( vNormal );\nnonPerturbedNormal = normal;')
+        // Gen loop 7: part of the low sun's warmth comes back off the blades (more at the tips): green-gold, not straw.
+        .replace('#include <lights_fragment_end>', sunFixGlsl('0.4 + 0.25 * vGrassTip'))
         .replace('#include <color_fragment>', /* glsl */`#include <color_fragment>
   {
-    vec3 base = mix( uGrassBase, uGroundAlt, vGrassPatch );
-    // Tips lean cool (blue-green), so a warm low sun lands on them as green-gold, not straw.
-    diffuseColor.rgb = base * mix( vec3( 0.82 ), vec3( 0.88, 1.08, 1.2 ), vGrassTip );
+    vec3 base = mix( uGrassBase, uGroundAlt, vGrassPatch ) * vGrassMeadow;
+    // Tips lean cool (blue-green), so a warm low sun lands on them as green-gold, not straw (gen loop 7:
+    // cooler still, and the sun's own warmth is partly taken back off the blades above).
+    vec3 tipK = vec3( 0.92, 1.16, 0.98 );
+    diffuseColor.rgb = base * mix( vec3( 0.82 ), tipK, vGrassTip );
     // A passing gust bends the tips over and they catch the light: a pale, warm sheen rolling across.
     diffuseColor.rgb *= 1.0 + vGrassGust * vGrassTip * vec3( 0.08, 0.16, 0.1 );
   }`)

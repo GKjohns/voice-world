@@ -37,7 +37,9 @@ export function lookTargets(root: THREE.Object3D, props: Props, hue = 0): LookTa
     if (slot === 'trim' && props.trim) hex = props.trim
     // Snapped onto the palette (a model's "#ff0000" becomes the palette's red), then jittered.
     const color = safeColor(hex, m.userData.baseColor as string)
-    color.set(stylize('#' + color.getHexString(), slot === 'glow' ? 'glow' : 'surface'))
+    // Gen loop 7: big masses (by volume share) get a higher lightness floor: no near-black boilers or roofs.
+    const metal = ((m.material as THREE.MeshStandardMaterial).metalness ?? 0) > 0.3
+    color.set(stylize('#' + color.getHexString(), slot === 'glow' ? 'glow' : 'surface', (m.userData.mass as number | undefined) ?? 0, metal))
     // Jitter only touches the primary slot (a cluster of pines varies its needles, not its trunks), and
     // mostly in lightness, so a cluster varies without leaving the palette.
     if (hue && slot === 'primary') {

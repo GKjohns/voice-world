@@ -21,11 +21,23 @@ Forms are lit like a gouache painting. There are two or three soft value bands w
 
 Every change is a global chunk patch or a uniform. There are no new program variants and no new lights (programs: 60 before and after in the harness, 60 fps).
 
-## Next (loops 7–8), in impact order
+## What loop 7 implemented
 
-1. **Primary-slot lightness floor.** Snap primary-slot parts to L ≥ ~0.28 (OKLCH) in `palette.ts` `stylize`, so near-black boilers and roofs carry light and shade. The prompt alone didn't fix it in loop 6.
-2. **Grass under low sun.** Stop the tips reading straw: give the grass blades their own `litHue` weight (or a cooler tip) and check at dusk and golden from the gauntlet's own camera.
-3. **Painted ground.** Large brush-stroke patches in world space (stretched noise along one wind direction) instead of round blobs, plus a soft darker band at object contact (the contact shadows exist; tint them `shadeHue`).
+| Piece | Where | How (cost) |
+|---|---|---|
+| Slate darks, not black | `shared/world/palette.ts` `darkFloor`, `parts.ts` `massShare`, `look.ts` | After the snap, the L floor rises with the part's volume share: 0.27 for trim up to 0.42 for the main mass, ×1.3 for metal (whose diffuse the metalness halves). Achromatic darks lean blue-slate (h 252); tinted darks keep their hue. CPU only, cached |
+| Painted meadow | `style/ground.ts` `MEADOW_GLSL` (also used by `grass.ts`) | Warm ochre swaths, cool hollows and wind-stretched strokes as one world-space multiplier on the ground and the blades: about 6 value-noise lookups (per fragment on the ground, per vertex on the grass) |
+| Green-gold meadow light | `ground.ts` `sunFixGlsl` | The ground and grass programs divide part of the sun's hue out of `directDiffuse` (0.4 ground, 0.4–0.65 base to tip on the blades). Props keep the full warm sun. Blade normal tilt 0.18; cooler tips |
+| Gaze rings | `sceneHelpers.ts` `softRing` | Additive soft-ring map on a quad, sky-tinted; the hover highlight settles to 22% after about 2 s. Same program as the glow discs |
+| Product-shot framing | `renderer.ts` `frameWish` | A single landed design under 2.2 m is framed from a crouch (eye at 0.72 × its height, via a negative lift); walking stands you up |
+
+There were no new program variants (60) and no new lights, and 60 fps held.
+
+## Next (loops 8+), in impact order
+
+1. **Distance hue over the meadow.** Far grass (15–24 m) still reads warm-yellow under `golden`, from the warm fog plus the shadow-lift grade. Cool the far field toward the sky colour (see item 5) rather than adding more warmth.
+2. **Grass under low sun.** Loop 7 fixed the near and mid field (see above). Check `dusk` and `day` from the gauntlet camera too; the probes used `golden`.
+3. **Painted ground.** Loop 7 added the swaths and strokes. What's left: a soft darker band at object contact (the contact shadows exist; tint them `shadeHue`), and more value contrast in the strokes, which tufts mostly cover from eye height.
 4. **Bounce light.** Warm ground bounce on down-facing surfaces (mix `hemiGround` toward the ground colour × the sun's strength), so undersides glow like BotW's warm bounces instead of reading flat violet.
 5. **Distance hue.** Push far fog more toward blue-violet by day (BotW's blue mountains). This is one colour per preset (`fog` vs `fogWarm`), already plumbed.
 6. **Post.** A faint paper/canvas grain and a 2–3% saturation lift in the mids (`post.ts`, the same pass). No bloom.
